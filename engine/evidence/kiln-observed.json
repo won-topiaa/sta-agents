@@ -1,0 +1,90 @@
+{
+  "schema": "sta.kiln-observed/v1",
+  "provenance": "Historical actual Kiln test call; extracted allowlist, not freshly replayed.",
+  "createdAt": "2026-09-29T17:04:55.309Z",
+  "intakeTrace": {
+    "model": "qwen3-32b",
+    "promptHash": "d5baf0066498854584fecadba64e2c84301f2c0a03af19f4f359f1e43c0e1c2f",
+    "responseHash": "72391af460dea80997631d414e15bb95ae127342526dbfcc3d57e60edbdf9c6d",
+    "inputTokens": 388,
+    "outputTokens": 126,
+    "latencyMs": 3376
+  },
+  "runs": [
+    {
+      "label": "result",
+      "decision": "REVIEW",
+      "model": {
+        "provider": "Bricksum Kiln",
+        "model": "qwen3-32b",
+        "promptHash": "d4a5df6cb0b4d1d2a937e1280289952779c89540d2c18d5f0d237e671a4d5f71",
+        "responseHash": "a2f117b22e78fe81bdaa7123ec3885aee5a6f7e668c9c3d3b746196243cc0f88",
+        "inputTokens": 244,
+        "outputTokens": 72,
+        "latencyMs": 2050
+      },
+      "datasetId": "affc63ef168d96c4d15261a7d1b44596dbeb7af4e84fa82750410defbfbe1876",
+      "candidates": [
+        {
+          "id": "equal_weight",
+          "verdict": "DECLINED",
+          "reasons": [
+            "DRAWDOWN_LIMIT_EXCEEDED"
+          ],
+          "horizonMedianBps": 2335,
+          "holdoutDrawdownBps": 2051,
+          "windowCount": 3
+        },
+        {
+          "id": "low_vol",
+          "verdict": "ELIGIBLE",
+          "reasons": [],
+          "horizonMedianBps": 2286,
+          "holdoutDrawdownBps": 1901,
+          "windowCount": 3
+        },
+        {
+          "id": "momentum",
+          "verdict": "DECLINED",
+          "reasons": [
+            "DRAWDOWN_LIMIT_EXCEEDED"
+          ],
+          "horizonMedianBps": 990,
+          "holdoutDrawdownBps": 2601,
+          "windowCount": 3
+        }
+      ]
+    },
+    {
+      "label": "refusal",
+      "decision": "DECLINED",
+      "model": null,
+      "datasetId": null,
+      "candidates": [
+        {
+          "id": "equal_weight",
+          "verdict": "DECLINED",
+          "reasons": [
+            "TARGET_NOT_SUPPORTED",
+            "DRAWDOWN_LIMIT_EXCEEDED"
+          ]
+        },
+        {
+          "id": "low_vol",
+          "verdict": "DECLINED",
+          "reasons": [
+            "TARGET_NOT_SUPPORTED"
+          ]
+        },
+        {
+          "id": "momentum",
+          "verdict": "DECLINED",
+          "reasons": [
+            "TARGET_NOT_SUPPORTED",
+            "DRAWDOWN_LIMIT_EXCEEDED"
+          ]
+        }
+      ]
+    }
+  ]
+}

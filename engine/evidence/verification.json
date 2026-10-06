@@ -1,0 +1,1027 @@
+{
+  "schema": "sta.publication-verification/v1",
+  "recordedAt": "2026-09-29T21:24:52.960309+00:00",
+  "environment": {
+    "os": "Linux",
+    "node": "22.23.2",
+    "python": "3.12",
+    "execution": "isolated workspace; JavaScript/Python/Rust commands run with unshare -n; cached dependencies installed separately"
+  },
+  "javascript": {
+    "passed": 96,
+    "failed": 0,
+    "skipped": 0,
+    "cases": [
+      "28800 state/request combinations agree with an independent arithmetic oracle",
+      "integer allocation conserves every atom across 10000 portfolios",
+      "stopping a policy cannot bypass the cross-policy unresolved-wallet fence",
+      "approval digest is key-order independent but each economic term changes it",
+      "exact integer budget; no overspend or duplicate instrument",
+      "owner isolation, idempotent queue and cancellation fences late worker",
+      "expired worker lease is recoverable and stale worker cannot commit",
+      "approval bound to report, brief, eligibility, universe and concentration",
+      "invalid result cannot create approval {\"verdict\":\"DECLINED\"}",
+      "invalid result cannot create approval {\"weights\":[{\"instrument\":\"FAKE\",\"weightBps\":4500}]}",
+      "invalid result cannot create approval {\"weights\":[{\"instrument\":\"NVDA\",\"weightBps\":6000}]}",
+      "preparation matches real StockMesh quote shape; failed unsigned preparation can retry",
+      "UNKNOWN is not success; revoke cannot erase existing chain outcome",
+      "durable plans survive DB reopening and do not resubmit",
+      "model budget reserves uncertain usage and blocks excess",
+      "wallet login is never a trading mandate",
+      "agent-wallet claim excludes simultaneous manual execution and replacement policies",
+      "manual reservation prevents claiming the same allocation for an agent wallet",
+      "revoking a plan cannot unlock a second allocation while UNKNOWN",
+      "revoking a plan cannot unlock a second allocation while SUBMITTED",
+      "revoking a plan cannot unlock a second allocation while FINALIZED",
+      "revocation during quote prevents late prepared transaction from entering a plan",
+      "holdings review draft binds owner, report, exact sell mint and idempotent allocation",
+      "Kiln rejects absent models, tool/code proposals and never leaks raw responses",
+      "canonicalization is stable, NFC, rejects fractional values",
+      "memo wire is owner signed, exact message and no substituted instructions",
+      "RPC rejects mainnet and arbitrary methods",
+      "prepare idempotency, ownership and restart persistence",
+      "timeout persists exact signature; UNKNOWN is not replaced even after expiry",
+      "unsigned expiry requires fresh explicit preparation, no transaction sent",
+      "exact confirmed/finalized receipt, failed and mismatched wire rejected",
+      "revoked plan cannot submit, existing receipt still inspectable",
+      "exact plan version, owner, amounts and universe are required",
+      "draft binds exact mints/budget; repeated requests return the same policy and do not sign",
+      "another owner cannot read/start/stop a policy",
+      "mints follow real quotes and mismatched/overslipped responses cannot create approval",
+      "signed owner approval is saved before transport and cannot be replaced",
+      "unsigned or modified approvals are rejected without a transport entry",
+      "stopping while funding is being checked wins over Start",
+      "agent funds are checked on the bound wallet, not personal holdings",
+      "reservation idempotency never signs a changed or duplicate request",
+      "ambiguous transport persists same wire across adapter restart and receipt reconciliation",
+      "wrong actor, untyped call and missing mainnet receipt are rejected",
+      "oversized send response is stopped during streaming",
+      "verified enrollment is pending, token-free and bound to the entire approved configuration",
+      "wrong app, issuer, expired token and foreign SIWS owner are denied",
+      "ownership, imported wallet, disconnected consent and additional authorities are denied",
+      "REST wallet entity uses a raw user ID; JWT/User DID stays exactly bound",
+      "provider rule widening and changed quorum fail before signing",
+      "provider display metadata can change, permissions cannot",
+      "changed local budget, wallet owner or local authorization key invalidates binding",
+      "pinned SDK uses snake_case wire, verifies signature and does not submit",
+      "provider failure never returns a cached binding and client disables automatic retries",
+      "policy approval serializes user parameters, not demo steps",
+      "2+1 is a scenario; third is rejected because actual limits exhausted",
+      "asset, order, pending and revoked limits independently reject",
+      "configuration rejects unsafe integer and invalid time/universe",
+      "devnet finalized account binds limits and exact wallet",
+      "no implicit one-hour cap; explicit expiry still works",
+      "wire verifier rejects extra transfers and amount or mint changes",
+      "signed exact wire accepts only the approved message and valid signature",
+      "journal persists before signing, survives restart, never retries uncertain signing",
+      "duplicate relay uses same wire; revoke and devnet reset block",
+      "unsigned expiry is evidence only before any signing attempt, never a refund",
+      "ambiguous signing cannot be relabeled as unsigned expiry",
+      "finalized mainnet receipt proves actual debit and delivery, not just a hash",
+      "Privy signing requires exact additional signer and configured policy",
+      "real StockMesh exposure schema is converted without token/UI scaling confusion",
+      "approval is immutable and a parallel policy cannot bypass the wallet lock",
+      "runtime contract: devnet reservation precedes signing and exact mainnet delivery precedes result evidence",
+      "starter research only uses manifest-backed history for the required horizon",
+      "explicit user stock choices are not silently removed for data coverage",
+      "empty, short, rejected or malformed histories do not imply ready",
+      "theme request selects supported semiconductor stocks without clicks; asks only missing budget",
+      "change in plain language keeps prior goal, removes excluded stock and changes budget",
+      "does not invent budget, convert KRW, accept ungrounded values or grant a trading authority",
+      "unrealistic goal is retained for evaluator refusal, not promised or silently lowered",
+      "catalog boundary and ambiguous request remain visible",
+      "model cannot append unmentioned stocks or themes; percentage substrings are not numeric evidence",
+      "validated model call records usage without wallet balance or raw history",
+      "one missing budget can be supplied in a second chat turn without choosing stocks again",
+      "explicit picker stocks combine with a language theme and exclusions still win",
+      "incomplete follow-up does not silently invent missing target or horizon",
+      "budget and target alone work with a disclosed starter universe, no stock clicks",
+      "ungrounded model theme does not suppress the budget-only starter path",
+      "existing selected holdings are netted; sells before buys; other stock/cash untouched",
+      "precise atoms, positive funds, stale/unsupported holdings rejected",
+      "held mint / amount / quote output substitution rejected",
+      "first trade rejects changed snapshot; later buy cannot consume other cash",
+      "nonlinear sell output reduces buy budget; never assumes gross sale proceeds",
+      "durable owner-bound workspace, idempotency, revision conflict and recovery",
+      "input bounds and integer portfolio allocation",
+      "connect is durable, token-free, owner-bound and cannot activate or sign",
+      "foreign owner, undelegated wallet, wrong policy and missing login never connect",
+      "repeat connect is idempotent and disconnect stays off across restart",
+      "provider failure cannot overwrite the last verified connection"
+    ]
+  },
+  "python": {
+    "passed": 159,
+    "skipped": 15,
+    "failed": 0,
+    "cases": [
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_first_message_compiles_conditions",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_typed_edit_is_applied_by_code_and_reported_with_code_numbers",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_an_edit_that_breaks_the_rules_is_repaired_or_refused",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_question_answers_use_placeholders_and_digits_are_rejected",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_proceed_never_approves_and_edits_wait_while_orders_are_pending",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_prompt_is_a_stage_summary_not_the_whole_conversation",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_limits_on_message_and_stage",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_an_edit_that_leaves_the_stocks_unchanged_is_sent_back",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_repeated_units_after_placeholders_are_removed",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_brief_names_cover_excluded_tickers",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_chat",
+        "name": "test_restating_the_current_conditions_is_answered_without_a_retry",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_ledger_chain_detects_tampering",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_day_root_changes_when_history_changes",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_merkle_root_odd_and_empty",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_explanations_reject_digits_outside_placeholders",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_brief_validator_rejects_untradable_tickers_and_bad_ranges",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_extract_json_handles_fences",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_kiln_repairs_then_caches_and_accounts",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_kiln_cache_hits_when_validator_reshapes_the_answer",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_kiln_gives_up_after_bounded_repairs",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_claims_two_sided_and_one_sided",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_market_hours_and_holidays",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_core",
+        "name": "test_money_conversions",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_demo",
+        "name": "test_visitors_get_separate_demo_wallets_and_cannot_use_each_other",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_demo",
+        "name": "test_model_calls_are_rate_limited_per_visitor_ip",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_demo",
+        "name": "test_demo_health_explains_the_market_simulator_and_restore_needs_a_session",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_demo",
+        "name": "test_session_summary_rebuilds_where_the_visitor_was",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_a_first_message_asking_how_much_a_stock_moves_is_a_forecast_and_the_agent_asks_the_period",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_the_period_answer_is_read_in_one_call_and_an_invalid_period_is_repaired",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_without_stocks_the_agent_asks_which_ones_first",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_during_other_steps_a_forecast_uses_the_stocks_of_the_conditions",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_cancel_other_and_new_while_the_agent_waits_for_the_period",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_the_conditions_endpoint_refuses_a_forecast_question",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_forecast_chat",
+        "name": "test_forecast_request_rules",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_every_message_exists_in_all_three_languages_with_the_same_params",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_money_is_won_in_korean_and_dollars_otherwise",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_default_language_is_english_and_unknown_values_fall_back",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_plan_text_follows_the_language_and_tickers_stay_as_they_are[en-Buy ]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_plan_text_follows_the_language_and_tickers_stay_as_they_are[zh-\\u4e70\\u5165]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_plan_text_follows_the_language_and_tickers_stay_as_they_are[ko-\\uc885\\ubaa9\\uc744]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_conversation_in_english_understands_dollars_and_replies_in_english",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_the_x_lang_header_sets_the_language_of_each_request",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_a_dollar_budget_alone_is_enough",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_i18n",
+        "name": "test_repeated_words_around_placeholders_are_tidied",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_plan_buys_and_ignores_other_strategies_holdings",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_large_premium_blocks_the_plan",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_tampered_signature_is_rejected_and_nothing_is_sent",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_failed_group_stops_later_groups",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_presigned_order_expires_and_releases_nonce",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_stop_drops_stored_signatures",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_thin_pool_is_sliced_and_slices_wait_for_price_recovery",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_slices_all_land_when_price_recovers",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_thin_pool_can_be_bought_at_once_after_the_extra_cost_is_acknowledged",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_buying_at_once_is_refused_when_it_would_cost_too_much",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_slice_interval_can_be_shortened",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_demo_fast_forward_makes_the_next_slice_due_and_is_recorded",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_demo_mode_offers_a_one_minute_slice_interval",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_orders_signed_for_a_restarted_chain_expire_and_never_block_others",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_one_broken_order_does_not_stop_the_watcher",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_orders_exec",
+        "name": "test_seal_is_verified_on_devnet_when_the_local_chain_was_restarted",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_paper",
+        "name": "test_paper_runs_are_valued_on_sessions_after_the_release",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_strategy_design",
+        "name": "test_candidates_must_be_blocks_with_wordy_names",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_strategy_design",
+        "name": "test_describe_puts_every_rule_into_words",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_strategy_design",
+        "name": "test_choose_prefers_return_per_risk_then_simplicity",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_strategy_design",
+        "name": "test_design_checks_flag_luck_and_fragility",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.core.test_strategy_design",
+        "name": "test_the_runner_designs_isolates_and_records",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_limiter_spaces_calls_and_pauses_after_429",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_retry_after_429_only_when_asked",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_bars_page_back_until_the_start_and_upsert",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_quote_set_records_buys_and_sells_and_keeps_errors",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_only_one_recorder_holds_the_tape",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_the_api_standby_yields_while_the_service_is_alive",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_exectape",
+        "name": "test_merge_adds_a_backfill_made_elsewhere_and_keeps_existing_rows",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_metrics_known_answers_constant_growth",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_metrics_known_answers_drawdown_vol_sharpe",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_backtest_known_answer_single_asset[0.0]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_backtest_known_answer_single_asset[5.0]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_backtest_known_answer_single_asset[100.0]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_execution_is_next_close_not_signal_close",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_cost_monotonicity_synthetic",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_cost_monotonicity_real_data",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_result_shape_and_invariants",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_cost_model_validation",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_golden_tolerance_does_not_hide_an_economic_change",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_zero_reproduces_pre_band_results_synthetic[equal_weight_weekly_100bps]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_zero_reproduces_pre_band_results_synthetic[low_vol_monthly_5bps]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_zero_reproduces_pre_band_results_synthetic[momentum_weekly_20bps]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_zero_reproduces_pre_band_results_real",
+        "status": "skipped",
+        "reason": "golden snapshot not present"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_lowers_turnover_and_keeps_caps_synthetic[0.005]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_lowers_turnover_and_keeps_caps_synthetic[0.02]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_lowers_turnover_and_keeps_caps_synthetic[0.05]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_lowers_turnover_real_data",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_backtest",
+        "name": "test_band_cash_floor_guard_trims_overweights",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_no_lookahead_perturbation_on_real_data[momentum]",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_no_lookahead_perturbation_on_real_data[low_vol]",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_no_lookahead_perturbation_on_real_data[equal_weight]",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_no_lookahead_perturbation_on_real_data[custom]",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_leakage_test_catches_a_leaky_strategy",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_evaluate_shape_and_verdict",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_zero_cost_fails",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_evaluator",
+        "name": "test_holdout_warns_when_benchmark_wins",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_missing_quotes_default_conservative",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_premium_from_smallest_and_cost_at_order_size",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_order_larger_than_quotes_is_flagged",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_scaling_mismatch_is_flagged_not_adjusted",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_ui_multiplier_is_applied_when_given",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_cost_model_from_and_xtxc_model",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_execution_costs",
+        "name": "test_uses_snapshot_close_by_default",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_yahoo_symbol",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_parse_drops_partial_session_null_and_duplicates",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_snapshot_id_is_deterministic_and_immutable",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_incremental_refresh_and_full_refetch_on_adjustment",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_failed_ticker_is_reported_not_dropped",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_object_integrity_is_checked",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_real_snapshot_covers_all_50_tickers",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_marketdata",
+        "name": "test_quality_report_flags_large_moves_without_changing_data",
+        "status": "skipped",
+        "reason": "no full-universe snapshot yet (run python -m xtxc_agent.research.marketdata)"
+      },
+      {
+        "class": "agent.tests.research.test_research_quantstore",
+        "name": "test_generated_rows_are_quarantined_and_real_rows_verified",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_quantstore",
+        "name": "test_research_snapshots_read_the_release_without_network",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_cap_weights_water_filling_known_answer",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_cap_weights_float_sum_never_exceeds_budget",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_momentum_top_n_uses_exact_decimal",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_weights_respect_caps_and_cash[momentum]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_weights_respect_caps_and_cash[low_vol]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_weights_respect_caps_and_cash[equal_weight]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_weights_respect_caps_and_cash[custom]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_momentum_picks_top_n_equal_weight_and_skips_short_history",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_low_vol_prefers_calm_names",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_exclude_leveraged_uses_universe_kind",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_target_weights_ignores_the_future_on_synthetic_data",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_spec_hash_is_canonical",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_rebalance_positions",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_strategies",
+        "name": "test_band_param_is_normalized_and_hashed",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_universe_has_50_unique_tickers_from_catalog",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_products_carry_catalog_fields",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_names_sectors_kinds_are_curated_and_valid",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_kind_matches_yahoo_rule_or_is_explained",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_derive_kind_rules",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_universe_version_is_stable_hash",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_instrument_dict_is_json_ready",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_research_universe",
+        "name": "test_universe_objects_are_not_shared",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_job_catalog_is_hash_bound_without_inheriting_secrets",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_isolated_backtest_matches_the_engine_and_says_how_it_ran",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_the_parent_rejects_results_that_break_the_rules",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_a_job_over_its_time_limit_is_killed",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_the_audit_hook_blocks_network_processes_and_files",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_sandbox",
+        "name": "test_service_mode_runs_jobs_from_the_spool",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_stockmesh_journal",
+        "name": "test_parse_and_fold_keep_trade_facts_only",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_stockmesh_journal",
+        "name": "test_sync_imports_copies_and_measures_real_fills",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_strategy_lang",
+        "name": "test_designs_are_checked_and_canonical",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_strategy_lang",
+        "name": "test_custom_weights_keep_the_caps_and_never_look_ahead",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_strategy_lang",
+        "name": "test_risk_off_halves_the_invested_budget_when_the_market_is_below_trend",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_strategy_lang",
+        "name": "test_filters_and_weightings",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_strategy_lang",
+        "name": "test_scaled_changes_only_the_periods",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_horizons",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_price_model_is_calibrated_out_of_sample_and_picks_a_method[1]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_price_model_is_calibrated_out_of_sample_and_picks_a_method[21]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_price_model_is_calibrated_out_of_sample_and_picks_a_method[126]",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_training_windows_end_before_each_test_year",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_a_recent_listing_still_gets_a_forecast",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_offhours_model_uses_the_token_move_since_the_close",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_token_model_backtests_hourly_ranges",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_cost_profile_interpolates_by_size_and_flags_beyond_the_largest_quote",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_premium_is_hidden_when_the_token_unit_is_not_one_share",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_the_daily_history_continues_with_the_tokens_closing_trades",
+        "status": "passed"
+      },
+      {
+        "class": "agent.tests.research.test_volforecast",
+        "name": "test_forecasts_are_scored_when_their_horizon_is_over",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_corrupt_object_fails_closed",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_extreme_return_target_refused",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_future_and_duplicate_sessions",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_missing_is_not_synthetic_history",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_short_holdout_rejected",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_evaluate.DataChecks",
+        "name": "test_unverified_source_is_not_usable",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_publication_boundaries.ReleaseBoundaryChecks",
+        "name": "test_future_or_timezone_free_manifest_is_rejected",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_publication_boundaries.ReleaseBoundaryChecks",
+        "name": "test_malformed_price_never_silently_shortens_the_sample",
+        "status": "passed"
+      },
+      {
+        "class": "compute.test_publication_boundaries.ReleaseBoundaryChecks",
+        "name": "test_manifest_size_is_bounded",
+        "status": "passed"
+      }
+    ]
+  },
+  "rustNative": {
+    "passed": 6,
+    "ignored": 0,
+    "failed": 0
+  },
+  "finitePropertyDomains": {
+    "policyCombinations": 28800,
+    "largeIntegerAllocations": 10000,
+    "scope": "Deterministic fixture/property checks, not all possible states, not a benchmark"
+  },
+  "rawOutputHashes": {
+    "node.tap": "c631555df8194e42005d729f711aa5772ee3bbd1d8c21871d6966fb077358af0",
+    "python.xml": "d6c5f18d927119f8dab944d95c2dfaa8f0e83934e6129d4d55856fb04b018402",
+    "rust.log": "dafb66e78248d850573333130660c87e65ebe39bfe4a87e8c75668dac9e794e5"
+  },
+  "mainnetTransactions": 0,
+  "providerCalls": 0,
+  "svm": {
+    "passed": 26,
+    "elfSha256": "4971dd8675894577ecb086dab0addc54d8784d4326ae69abe7428a0f5aaec600",
+    "scope": "Mollusk fixture run against retained deployment ELF, not a fresh SBF build or network deployment"
+  }
+}

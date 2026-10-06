@@ -1,0 +1,68 @@
+{
+  "schema": "sta.devnet-observed/v1",
+  "provenance": "Extracted from recorded deployment/live-policy evidence; not a new deployment or live check.",
+  "cluster": "devnet",
+  "programId": "3i5oG6xw28CTDHf4q49MRxkr6z3uzvMwhtf9FK5qH4pr",
+  "deploymentSignature": "5aL9QzPnm8qSqzRQja6EFmPZ5V5vGw5ApGMRyU7a3G842mHfGtWM3zePAU5xuQP5fAHg22iqiiiJFJV7dA8F2i3d",
+  "lastDeploySlot": 505599806,
+  "elfSha256": "4971dd8675894577ecb086dab0addc54d8784d4326ae69abe7428a0f5aaec600",
+  "executableBytes": 82768,
+  "deployedElfMatches": true,
+  "records": [
+    {
+      "label": "owner creates generic policy",
+      "signature": "4R1PKYYHSUhLhoXefWj2AjCyDPgWhvKstQWaxQyNhzpyh2gcvTgsKaiF93mWVLsziUMWip9hHRsfuyE28hrbFEkE",
+      "phase": "FINALIZED",
+      "slot": 505601700
+    },
+    {
+      "label": "per-order overflow",
+      "simulationOnly": true,
+      "error": {
+        "InstructionError": [
+          0,
+          {
+            "Custom": 8104
+          }
+        ]
+      }
+    },
+    {
+      "label": "verifier reserves exact message",
+      "signature": "399isJXt85E7Ad4UD1Cp2Tb4N8SzabTfBNhu1S8kDuJ4BbuarMmi6afacrzv8uKSVgCumLgZsjdNY87Crqo7s3BK",
+      "phase": "FINALIZED",
+      "slot": 505601705
+    },
+    {
+      "label": "pending blocks another reservation",
+      "simulationOnly": true,
+      "error": {
+        "InstructionError": [
+          0,
+          {
+            "Custom": 8105
+          }
+        ]
+      }
+    },
+    {
+      "label": "owner revokes",
+      "signature": "3d5V6VbhhU4fLYb1x8jvQSDsib1qGNKLDsvvcWdf9yfxDnT2rT1imWsDreEeHJA4BfouvPnEvGqDbf2XkWY3DvVY",
+      "phase": "FINALIZED",
+      "slot": 505601710
+    },
+    {
+      "label": "revoked policy stops new reservation",
+      "simulationOnly": true,
+      "error": {
+        "InstructionError": [
+          0,
+          {
+            "Custom": 8103
+          }
+        ]
+      }
+    }
+  ],
+  "mainnetTradesProvenByThisFile": 0
+}

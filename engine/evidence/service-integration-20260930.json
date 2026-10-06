@@ -1,0 +1,26 @@
+{
+  "schema": "sta.execution-service-integration/v1",
+  "observedAt": "2026-09-29T22:26:06Z",
+  "devnetDeploymentSignature": "3xEBZyGwxLuNSoQMe2yHzVpuCQBR7wHLHYxeXGGNhGgPEttDYGyGqsDTibWcZDtCcS7zJyAxUhqBZ4dCAc3owK8a",
+  "webBuildId": "FBS-YMkoZYYUq-XME4fRJ",
+  "researchHttpStatus": 200,
+  "isolatedSignerHealth": {
+    "ok": true,
+    "authority": "OWNER_APPROVAL_AND_EXPLICIT_START",
+    "running": 0
+  },
+  "productionResearchBridge": "sta-pr07-dsl-bridge/1",
+  "policyVersion": 2,
+  "publicStaticAssets": {
+    "newAndPreviousBuildAssetsRetained": true,
+    "newExchangeChunkHttpStatus": 200
+  },
+  "chromeObservation": {
+    "existingWalletSessionRestored": true,
+    "savedResearchPreserved": true,
+    "actualPr07ResultVisible": "DECLINED",
+    "candidateCount": 3
+  },
+  "mainnetOrdersSubmittedByPromotion": 0,
+  "scope": "Deployed service health and devnet upgrade, not funded mainnet acceptance"
+}

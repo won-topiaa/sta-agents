@@ -1,0 +1,9 @@
+import type {AgentStore} from './research-agent-core.mjs';
+export type AgenticRun={plan_id:string;owner:string;address:string;status:string;reason:string|null;created_at:number;updated_at:number};
+export function decimal18(atoms:string):string;
+export function agenticBinding(store:AgentStore):{owner:string;address:string;bound_at:number}|null;
+export function bindAgentic(store:AgentStore,address:string,wallet:unknown):{owner:string;address:string;bound_at:number}|null;
+export function agenticRun(store:AgentStore,planId:string):AgenticRun|null;
+export function startAgentic(store:AgentStore,address:string,planId:string,quotaLeftUsd:number):AgenticRun|null;
+export function stopAgentic(store:AgentStore,address:string,planId:string):AgenticRun|null;
+export function agenticTick(store:AgentStore,gw:(method:string,path:string,body?:unknown)=>Promise<unknown>):Promise<void>;

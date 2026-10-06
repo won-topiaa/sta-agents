@@ -1,0 +1,15 @@
+{
+  "name": "sta-stock-token-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Research, approve, reserve, execute and reconcile stock-token allocations.",
+  "engines": { "node": ">=22.13.0 <23" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:adversarial": "node --test tests/publication-adversarial.test.mjs",
+    "verify:bundle": "node tools/verify-bundle.mjs",
+    "worker:once": "node scripts/research-agent-worker.mjs --once"
+  },
+  "dependencies": { "@solana/kit": "5.4.0", "@privy-io/node": "0.35.0" }
+}

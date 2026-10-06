@@ -1,0 +1,190 @@
+{
+ "synthetic": {
+  "momentum_weekly_20bps": {
+   "spec": {
+    "template": "momentum",
+    "universe": [
+     "AAA",
+     "BBB",
+     "CCC",
+     "DDD",
+     "EEE",
+     "FFF"
+    ],
+    "max_weight": "0.25",
+    "min_cash": "0.2",
+    "rebalance": "weekly",
+    "period": {
+     "years": 2
+    }
+   },
+   "cost_model": {
+    "default_bps": 20.0
+   },
+   "equity_sha256": "54c90d236d4b6c65528e2e1096a0abc4e71cf861b814166db4495c81827e9dc6",
+   "final": 159.544384,
+   "metrics": {
+    "total_return": 0.595443844917352,
+    "cagr": 0.25351863367285143,
+    "max_drawdown": -0.06209734608940831,
+    "volatility": 0.13143828933769017,
+    "sharpe": 1.7854360205225441,
+    "turnover": 2.9659507686041584,
+    "exposure": 0.7988828071237585,
+    "trades": 443
+   },
+   "turnover": 2.9659507686041584,
+   "costs_paid": 3.144456959713251,
+   "trades": 443
+  },
+  "low_vol_monthly_5bps": {
+   "spec": {
+    "template": "low_vol",
+    "universe": [
+     "AAA",
+     "BBB",
+     "CCC",
+     "DDD",
+     "EEE",
+     "FFF"
+    ],
+    "max_weight": "0.3",
+    "min_cash": "0.1",
+    "rebalance": "monthly",
+    "period": {
+     "years": 2
+    }
+   },
+   "cost_model": {
+    "default_bps": 5.0
+   },
+   "equity_sha256": "bff216e764fea17bdcce44ec100ea916bfcbc554865621fd7d50f5f085dae4b6",
+   "final": 127.276256,
+   "metrics": {
+    "total_return": 0.27276256368601537,
+    "cagr": 0.12373722035215784,
+    "max_drawdown": -0.08430033820699534,
+    "volatility": 0.12261788272076092,
+    "sharpe": 1.0127674357496974,
+    "turnover": 0.6858473805182324,
+    "exposure": 0.8989004653992442,
+    "trades": 150
+   },
+   "turnover": 0.6858473805182324,
+   "costs_paid": 0.15033290936668564,
+   "trades": 150
+  },
+  "equal_weight_weekly_100bps": {
+   "spec": {
+    "template": "equal_weight",
+    "universe": [
+     "AAA",
+     "BBB",
+     "CCC",
+     "DDD",
+     "EEE",
+     "FFF"
+    ],
+    "max_weight": "0.2",
+    "min_cash": "0.0",
+    "rebalance": "weekly",
+    "period": {
+     "years": 2
+    }
+   },
+   "cost_model": {
+    "default_bps": 100.0
+   },
+   "equity_sha256": "7de0239779f822e4798d36064531941f5175655e784d58fb2e7c88e56527f164",
+   "final": 122.697969,
+   "metrics": {
+    "total_return": 0.226979690665843,
+    "cagr": 0.10400063948642635,
+    "max_drawdown": -0.09803322000837145,
+    "volatility": 0.1362545348204948,
+    "sharpe": 0.794227505274274,
+    "turnover": 1.0325079744884507,
+    "exposure": 0.9980842911837532,
+    "trades": 630
+   },
+   "turnover": 1.0325079744884507,
+   "costs_paid": 4.4628444542340455,
+   "trades": 630
+  }
+ },
+ "real": {
+  "semis_momentum_5bps": {
+   "spec": {
+    "template": "momentum",
+    "universe": [
+     "NVDA",
+     "AMD",
+     "AVGO",
+     "TSM",
+     "MU",
+     "MRVL",
+     "INTC"
+    ],
+    "max_weight": "0.25",
+    "min_cash": "0.20",
+    "rebalance": "weekly"
+   },
+   "cost_model": {
+    "default_bps": 5.0,
+    "per_ticker_bps": {}
+   },
+   "equity_sha256": "681de4a984c32cdfdf2c9c418ff66b7101f08cb2519211ab51482d4f9ed64af9",
+   "final": 709.370859,
+   "metrics": {
+    "total_return": 6.093708589117478,
+    "cagr": 0.4824801998150241,
+    "max_drawdown": -0.4808731393481228,
+    "volatility": 0.367930769406791,
+    "sharpe": 1.2542927371046317,
+    "turnover": 5.435276738298603,
+    "exposure": 0.7999949537714174,
+    "trades": 1164
+   },
+   "turnover": 5.435276738298603,
+   "costs_paid": 5.313541871781109,
+   "trades": 1164
+  },
+  "semis_momentum_100bps": {
+   "spec": {
+    "template": "momentum",
+    "universe": [
+     "NVDA",
+     "AMD",
+     "AVGO",
+     "TSM",
+     "MU",
+     "MRVL",
+     "INTC"
+    ],
+    "max_weight": "0.25",
+    "min_cash": "0.20",
+    "rebalance": "weekly"
+   },
+   "cost_model": {
+    "default_bps": 100.0,
+    "per_ticker_bps": {}
+   },
+   "equity_sha256": "75c4a6f47d842c87633bc3c66e705b209d75c0a4198b8554f3bdd8f96347fcb7",
+   "final": 424.096146,
+   "metrics": {
+    "total_return": 3.240961455910374,
+    "cagr": 0.33688271875292886,
+    "max_drawdown": -0.5358642203197843,
+    "volatility": 0.36868708486425267,
+    "sharpe": 0.9717346782957413,
+    "turnover": 5.428736266489384,
+    "exposure": 0.7999949537714174,
+    "trades": 1164
+   },
+   "turnover": 5.428736266489384,
+   "costs_paid": 76.77992069106152,
+   "trades": 1164
+  }
+ },
+ "real_snapshot_id": "7ebfc090932a5e90744495f3080732876f81375c1bf89afdd236358d99421b90"
+}

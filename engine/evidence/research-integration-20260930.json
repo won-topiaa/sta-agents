@@ -1,0 +1,59 @@
+{
+  "schema": "sta.research-integration-observation/v1",
+  "observedAt": "2026-09-29T22:13:05.159124+00:00",
+  "data": {
+    "releaseId": "1f80aff85d3745a75fe35fe1ac2233b696bb48e84ab413adc327476c44ac135b",
+    "entries": 61,
+    "asmlSessions": 4209
+  },
+  "actualProviderResearch": {
+    "status": "DECLINED",
+    "reportHash": "afb3452efb90c81740fe2aaac9296028d379754185bbf028902015a916a15440",
+    "engineVersion": "sta-pr07-dsl-bridge/1",
+    "computedAt": "2026-09-29T21:54:45.967297+00:00",
+    "model": {
+      "provider": "Bricksum Kiln",
+      "model": "qwen3-32b",
+      "promptHash": "a31e80c8499eca6d231e94b2744b9d2ea45cfff9cc7e11a3818cc4c3b4a995f3",
+      "responseHash": "9ae7f429a76844d8e5ac38551444505bccd9eb035a67d19d64fa0e47615da5d0",
+      "inputTokens": 778,
+      "outputTokens": 671,
+      "latencyMs": 9869
+    },
+    "candidates": [
+      {
+        "name": "MomentumFocus",
+        "verdict": "DECLINED",
+        "reasons": [
+          "DRAWDOWN_LIMIT_EXCEEDED",
+          "COST_STRESS_FAILED"
+        ],
+        "specHash": "5af58ff1b6cd471db3f389ca265b572ae5565e2051d91bc58e5e31229975a50a",
+        "holdoutDrawdownBps": 4437
+      },
+      {
+        "name": "TrendAndSharpe",
+        "verdict": "DECLINED",
+        "reasons": [
+          "DRAWDOWN_LIMIT_EXCEEDED",
+          "COST_STRESS_FAILED"
+        ],
+        "specHash": "bc483b0c4088f53a60fe8679fc7f609a70e15990aa0701cdf4b0d0c87ec08672",
+        "holdoutDrawdownBps": 3460
+      },
+      {
+        "name": "ConsistentGrowth",
+        "verdict": "DECLINED",
+        "reasons": [
+          "DRAWDOWN_LIMIT_EXCEEDED",
+          "COST_STRESS_FAILED"
+        ],
+        "specHash": "08a93c09474b67c44f357e5b561154dc704fe400f903595b7cbd07c8ecb7e4c7",
+        "holdoutDrawdownBps": 3474
+      }
+    ]
+  },
+  "mainnetOrdersExecutedByThisCheck": 0,
+  "rawPricesExported": false,
+  "userIdentityExported": false
+}

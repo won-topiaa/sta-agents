@@ -1,0 +1,568 @@
+{
+ "_provenance": {
+  "purpose": "issuer/symbol per matched mint; report.json lacks them. Built by xtxc_agent.research.universe.extract_token_products().",
+  "catalog_report": {
+   "path": "/srv/skew/stockmesh-direct-node-20260920/evidence/secondary-execution-20260928/catalog/report.json",
+   "sha256": "e3fde3713f8e491bb8102701d8d11e298f2b5ec8ff112cb6b44a5c02c911b42b"
+  },
+  "stock_catalog": {
+   "path": "/srv/skew/stockmesh-direct-node-20260920/source/secondary-execution-20260928/web/data/stock-catalog/catalog-v2.json",
+   "sha256": "9e22692c9ee946826cc2649b18a87f95905459d5d2237104dd871cbb90f66050"
+  },
+  "issuer_price_bindings": {
+   "path": "/srv/skew/stockmesh-direct-node-20260920/source/secondary-execution-20260928/web/data/stock-catalog/issuer-price-bindings.json",
+   "sha256": "757bfad5e9e382f3fd51eccd40d0efb2409fa2b8d9c5eb12f3f2a4976b994fb8"
+  },
+  "quote_manifest": {
+   "path": "/srv/skew/stockmesh-direct-node-20260920/source/secondary-execution-20260928/web/data/stock-catalog/quote-manifest.json",
+   "sha256": "4ecbf8f80590c7a2698ca62321f9f6e0b26718585bc8d777b9f9e42557561bde"
+  },
+  "presentation": {
+   "path": "/srv/skew/stockmesh-direct-node-20260920/source/secondary-execution-20260928/web/data/stock-catalog/presentation-v1.json",
+   "sha256": "e3d9bc8f63a9f3b642ab8d1a300cfccf2f802f44fc3744cd11d87ca81bdfe01d"
+  },
+  "issuer_rule": "brand from catalog productId prefix: catalog:xstocks: -> xStocks, catalog:ondo: -> Ondo"
+ },
+ "products": {
+  "123mYEnRLM2LLYsJW3K6oyYh8uP1fngj732iG638ondo": {
+   "ticker": "AAPL",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "Apple (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:45b941e7b301affad863c5b2d0cb083a",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "AAPLon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp": {
+   "ticker": "AAPL",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Apple xStock",
+   "catalog_product_id": "catalog:xstocks:dc571de3896757df39c34a0f40b18bc2",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "AAPLx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsaQTCgebC2KPbf27KUhdv5JFvHhQ4GDAPURwrEhAzb": {
+   "ticker": "AMBR",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Amber xStock",
+   "catalog_product_id": "catalog:xstocks:fe6675e33767ee09c5ba395b016f0b71",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "AMBRx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "14diAn5z8kjrKwSC8WLqvBqqe5YmihJhjxRxd8Z6ondo": {
+   "ticker": "AMD",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "AMD (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:a7014cfa6ce230e411bab4adfb9ee66c",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "AMDon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "XsXcJ6GZ9kVnjqGsjBnktRcuwMBmvKWh8S93RefZ1rF": {
+   "ticker": "AMD",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "AMD xStock",
+   "catalog_product_id": "catalog:xstocks:a5074ce2378d6a1c542f0a1c60937df5",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "AMDx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg": {
+   "ticker": "AMZN",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Amazon.com xStock",
+   "catalog_product_id": "catalog:xstocks:aa36053e3ab7cc2cabfdc91de526e6c9",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "AMZNx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo": {
+   "ticker": "AVGO",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Broadcom xStock",
+   "catalog_product_id": "catalog:xstocks:b81d625bb2459eb186d13be07e877879",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "AVGOx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsrBCwaH8c46xiqXBChzobgufRKxQxAWUWbndgBNzFn": {
+   "ticker": "BMNR",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Bitmine xStock",
+   "catalog_product_id": "catalog:xstocks:ba9ab17f4ca2a2ed9d97f87bb140d46f",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "BMNRx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs6B6zawENwAbWVi7w92rjazLuAr5Az59qgWKcNb45x": {
+   "ticker": "BRK.B",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Berkshire Hathaway xStock",
+   "catalog_product_id": "catalog:xstocks:7ad0c9a2e6c8ec0271234f72301a3fd6",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "BRK.Bx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsvKCaNsxg2GN8jjUmq71qukMJr7Q1c5R2Mk9P8kcS8": {
+   "ticker": "CMCSA",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Comcast xStock",
+   "catalog_product_id": "catalog:xstocks:cd4dc0cd8e061e071d987d758b3bb44c",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "CMCSAx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu": {
+   "ticker": "COIN",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Coinbase xStock",
+   "catalog_product_id": "catalog:xstocks:4722ee065bf160712cdf8dbe6c6ec2bc",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "COINx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1": {
+   "ticker": "CRCL",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Circle xStock",
+   "catalog_product_id": "catalog:xstocks:0d2beee08c007926a48c99c41c0f2f2e",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "CRCLx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsNNMt7WTNA2sV3jrb1NNfNgapxRF5i4i6GcnTRRHts": {
+   "ticker": "CVX",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Chevron xStock",
+   "catalog_product_id": "catalog:xstocks:76204827b7a9e8d9c02135478563c957",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "CVXx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs2yquAgsHByNzx68WJC55WHjHBvG9JsMB7CWjTLyPy": {
+   "ticker": "DFDV",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "DFDV xStock",
+   "catalog_product_id": "catalog:xstocks:a6c707418694fdc44f14377fa53f73e0",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "DFDVx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsBNJXGu68cBH5hgFxdqZkeh8cMQv32jeEtZtYTYvfS": {
+   "ticker": "F",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Ford Motor xStock",
+   "catalog_product_id": "catalog:xstocks:455d52b568dd07ca460caefa1c271bcd",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "Fx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re": {
+   "ticker": "GLD",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Gold xStock",
+   "catalog_product_id": "catalog:xstocks:548f56f1815ebc2c10f12df8f6485539",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "GLDx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc": {
+   "ticker": "GME",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Gamestop xStock",
+   "catalog_product_id": "catalog:xstocks:e5775c280694377642c12b65a2232c83",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "GMEx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN": {
+   "ticker": "GOOGL",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Alphabet xStock",
+   "catalog_product_id": "catalog:xstocks:6de3d2c4fcd500cbd029ac4ad4bc0e48",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "GOOGLx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "bbahNA5vT9WJeYft8tALrH1LXWffjwqVoUbqYa1ondo": {
+   "ticker": "GOOGL",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "Alphabet Class A (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:94ed201cd05ea18afc35ce459badee81",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "GOOGLon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg": {
+   "ticker": "HOOD",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Robinhood xStock",
+   "catalog_product_id": "catalog:xstocks:eae381163f60aebcb76010958f4fa9e8",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "HOODx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XspwhyYPdWVM8XBHZnpS9hgyag9MKjLRyE3tVfmCbSr": {
+   "ticker": "IBM",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "International Business Machines xStock",
+   "catalog_product_id": "catalog:xstocks:7b276bbbbe9d0342b1de31813a82ddbf",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "IBMx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM": {
+   "ticker": "INTC",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Intel xStock",
+   "catalog_product_id": "catalog:xstocks:6e0381af0dd9629fcc05bc5fc8cc4234",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "INTCx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsMAqkcKsUewDrzVkait4e5u4y8REgtyS7jWgCpLV2C": {
+   "ticker": "JPM",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "JPMorgan Chase xStock",
+   "catalog_product_id": "catalog:xstocks:81aac17d8ef90eb74501cbf2850892e2",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "JPMx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ": {
+   "ticker": "KO",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Coca-Cola xStock",
+   "catalog_product_id": "catalog:xstocks:2ad5bc46792ded45c178c4a26d3267a0",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "KOx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsnuv4omNoHozR6EEW5mXkw8Nrny5rB3jVfLqi6gKMH": {
+   "ticker": "LLY",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Eli Lilly xStock",
+   "catalog_product_id": "catalog:xstocks:1e7ca873ca375bdea5e98cec892a9120",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "LLYx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2": {
+   "ticker": "MCD",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "McDonald's xStock",
+   "catalog_product_id": "catalog:xstocks:a2376b83efbf17555a890b1d10076d05",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "MCDx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu": {
+   "ticker": "META",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Meta xStock",
+   "catalog_product_id": "catalog:xstocks:b06491c8410528883c30df7777d5cc19",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "METAx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "14VP7DvCAdBCc5XGNZkPt6zhtPzJrWWS64Koxtxyondo": {
+   "ticker": "MRNA",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "Moderna (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:3fb45c0584042912dcbe3a8445a62cec",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "MRNAon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "XsuxRGDzbLjnJ72v74b7p9VY6N66uYgTCyfwwRjVCJA": {
+   "ticker": "MRVL",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Marvell xStock",
+   "catalog_product_id": "catalog:xstocks:4f6ef422b7f463ae216970f5275ef2f4",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "MRVLx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX": {
+   "ticker": "MSFT",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Microsoft xStock",
+   "catalog_product_id": "catalog:xstocks:12296c8e38d65d431dbe06d8dbf5fdca",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "MSFTx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ": {
+   "ticker": "MSTR",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "MicroStrategy xStock",
+   "catalog_product_id": "catalog:xstocks:be5e81c830c510c614b8dbe2f8305cc7",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "MSTRx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Fz9edBpaURPPzpKVRR1A8PENYDEgHqwx5D5th28ondo": {
+   "ticker": "MU",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "Micron Technology (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:7b1fe514c4c7b927e4e9b18a7c3747c0",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "MUon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "XsEH7wWfJJu2ZT3UCFeVfALnVA6CP5ur7Ee11KmzVpL": {
+   "ticker": "NFLX",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Netflix xStock",
+   "catalog_product_id": "catalog:xstocks:d84e2e7b985abe0c11cd152b3406607e",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "NFLXx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh": {
+   "ticker": "NVDA",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "NVIDIA xStock",
+   "catalog_product_id": "catalog:xstocks:0a538397567e4397ed8cac1fed7b8a0a",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "NVDAx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsfAzPzYrYjd4Dpa9BU3cusBsvWfVB9gBcyGC87S57n": {
+   "ticker": "NVO",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Novo Nordisk xStock",
+   "catalog_product_id": "catalog:xstocks:348f7065ef91af33b6beda59f4598748",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "NVOx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsjFwUPiLofddX5cWFHW35GCbXcSu1BCUGfxoQAQjeL": {
+   "ticker": "ORCL",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Oracle xStock",
+   "catalog_product_id": "catalog:xstocks:1b6f1bdf8ab0e64da1c7727d44ed0435",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "ORCLx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xsv99frTRUeornyvCfvhnDesQDWuvns1M852Pez91vF": {
+   "ticker": "PEP",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "PepsiCo xStock",
+   "catalog_product_id": "catalog:xstocks:1443deb7b0d70869e05cac179abfafa0",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "PEPx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsYdjDjNUygZ7yGKfQaB6TxLh2gC6RRjzLtLAGJrhzV": {
+   "ticker": "PG",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Procter & Gamble xStock",
+   "catalog_product_id": "catalog:xstocks:77a16687055ca6582f358e3543041c07",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "PGx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4": {
+   "ticker": "PLTR",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Palantir xStock",
+   "catalog_product_id": "catalog:xstocks:825745e0aaa76a51c84095e47e8d6b16",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "PLTRx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ": {
+   "ticker": "QQQ",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Nasdaq xStock",
+   "catalog_product_id": "catalog:xstocks:b6c3d5f0e5962d8ed7dfc1a08fa5f0a8",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "QQQx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "iy11ytbSGcUnrjE6Lfv78TFqxKyUESfku1FugS9ondo": {
+   "ticker": "SLV",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "iShares Silver Trust (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:260a85391473ea62f58cea054271401c",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "SLVon",
+   "symbol_source": "presentation-v1 alias (issuer Ondo)"
+  },
+  "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8": {
+   "ticker": "SPCX",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "SpaceX xStock",
+   "catalog_product_id": "catalog:xstocks:3a67f6befb7ebcdf69e6f1fbdd9b06e4",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "SPCXx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W": {
+   "ticker": "SPY",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "SP500 xStock",
+   "catalog_product_id": "catalog:xstocks:3dc28a802314f1255d7b58677928fb2b",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "SPYx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "k18WJUULWheRkSpSquYGdNNmtuE2Vbw1hpuUi92ondo": {
+   "ticker": "SPY",
+   "issuer": "Ondo",
+   "issuer_legal": "Ondo Global Markets (BVI) Limited",
+   "catalog_name": "SPDR S&P 500 ETF (Ondo Tokenized)",
+   "catalog_product_id": "catalog:ondo:22331d5f494eba6de3620b2b79101e65",
+   "catalog_source_url": "https://raw.githubusercontent.com/ondoprotocol/gm-solana-simulator/main/constants.rs",
+   "symbol": "SPYon",
+   "symbol_source": "quote-manifest"
+  },
+  "Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH": {
+   "ticker": "STRC",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Strategy PP Variable xStock",
+   "catalog_product_id": "catalog:xstocks:efbfea0011c7a16075847084781d2fc2",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "STRCx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc": {
+   "ticker": "TQQQ",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "TQQQ xStock",
+   "catalog_product_id": "catalog:xstocks:a489e12dfc86b64eacd417471d711e28",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "TQQQx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB": {
+   "ticker": "TSLA",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Tesla xStock",
+   "catalog_product_id": "catalog:xstocks:4edfaff0f06dc4c8b3c7218ab219cf2e",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "TSLAx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsafvsGtzFqqHgTnA3aPC83EAMkacU5mcGtcSayhpVV": {
+   "ticker": "TSM",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "TSMC xStock",
+   "catalog_product_id": "catalog:xstocks:e3fd85969cd439cca31b3ae901908a15",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "TSMx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsAsZLF4MmsvS1sDxRMrUz7REjHfwbC9UAMXSRBqgEB": {
+   "ticker": "UBER",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Uber xStock",
+   "catalog_product_id": "catalog:xstocks:ce298b6380e48dd1ef2840bc95e45676",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "UBERx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XszvaiXGPwvk2nwb3o9C1CX4K6zH8sez11E6uyup6fe": {
+   "ticker": "UNH",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "UnitedHealth xStock",
+   "catalog_product_id": "catalog:xstocks:5b4e3cc5b83170a100a3e1bf2f76ad02",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "UNHx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsqgsbXwWogGJsNcVZ3TyVouy2MbTkfCFhCGGGcQZ2p": {
+   "ticker": "V",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Visa xStock",
+   "catalog_product_id": "catalog:xstocks:8d18aca9038c3bae0d4ffea824a79a8d",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "Vx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsfCC9VL4DamVGNgdJpfLXB3sBVa158Gbx8sh7NzmTk": {
+   "ticker": "VIDA",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Vida Global xStock",
+   "catalog_product_id": "catalog:xstocks:19f186af8a61ef19bc200e54941edff1",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "VIDAx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "Xs151QeqTCiuKtinzfRATnUESM2xTU6V9Wy8Vy538ci": {
+   "ticker": "WMT",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Walmart xStock",
+   "catalog_product_id": "catalog:xstocks:bf09bc57457c95013f1d9e0cdd983222",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "WMTx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  },
+  "XsaHND8sHyfMfsWPj6kSdd5VwvCayZvjYgKmmcNL5qh": {
+   "ticker": "XOM",
+   "issuer": "xStocks",
+   "issuer_legal": "Backed Assets (JE) Limited",
+   "catalog_name": "Exxon Mobil xStock",
+   "catalog_product_id": "catalog:xstocks:2358085d91e89c19ad5b29c59411ffe8",
+   "catalog_source_url": "https://api.backed.fi/api/v1/token",
+   "symbol": "XOMx",
+   "symbol_source": "issuer-price-bindings (api.xstocks.fi)"
+  }
+ }
+}

@@ -1,0 +1,559 @@
+{
+  "schema": "xtxc.agent-rules/v1",
+  "_about": "Rules a user can give their own agent. Each rule becomes a filter, a market guard or a holdings cap that code adds to EVERY strategy the agent designs; the model never removes or edits them. The web app (validation, editor) and the research engine (enforcement) read this same file. Parameter values are in the strategy language's units; 'display' only tells the UI how to show them.",
+  "styles": {
+    "technical": {
+      "label": "Technical",
+      "help": "Decides from price behaviour: trends, momentum, oversold levels, bands and averages.",
+      "available": true,
+      "presets": {
+        "trend": {
+          "label": "Trend follower",
+          "help": "Rides stocks in established uptrends and steps aside when the market weakens.",
+          "rebalance": "monthly",
+          "rules": [
+            {
+              "id": "uptrend_only",
+              "params": {
+                "days": 200
+              }
+            },
+            {
+              "id": "strong_momentum",
+              "params": {
+                "keep": 0.5
+              }
+            },
+            {
+              "id": "market_guard",
+              "params": {
+                "exposure": 0.5
+              }
+            }
+          ]
+        },
+        "dip": {
+          "label": "Dip buyer",
+          "help": "Buys pullbacks in stocks that are still in a long-term uptrend.",
+          "rebalance": "weekly",
+          "rules": [
+            {
+              "id": "uptrend_only",
+              "params": {
+                "days": 200
+              }
+            },
+            {
+              "id": "oversold_only",
+              "params": {
+                "rsi_max": 40
+              }
+            }
+          ]
+        },
+        "breakout": {
+          "label": "Breakout",
+          "help": "Buys stocks pushing toward new highs with short-term averages on top.",
+          "rebalance": "weekly",
+          "rules": [
+            {
+              "id": "near_high",
+              "params": {
+                "within": 0.05
+              }
+            },
+            {
+              "id": "golden_cross",
+              "params": {
+                "fast": 50,
+                "slow": 200
+              }
+            }
+          ]
+        },
+        "custom": {
+          "label": "Custom",
+          "help": "Start from no rules and add your own.",
+          "rebalance": "monthly",
+          "rules": []
+        }
+      }
+    },
+    "value": {
+      "label": "Value",
+      "help": "Looks for undervalued, sound companies using their reported financials (SEC filings, as of each date).",
+      "available": true,
+      "presets": {
+        "deep_value": {
+          "label": "Deep value",
+          "help": "The cheapest companies by earnings that still generate cash and are not over-borrowed.",
+          "rebalance": "monthly",
+          "rules": [
+            {
+              "id": "cheap_earnings",
+              "params": {
+                "keep": 0.4
+              }
+            },
+            {
+              "id": "cash_generating",
+              "params": {}
+            },
+            {
+              "id": "low_debt",
+              "params": {
+                "max": 1.5
+              }
+            }
+          ]
+        },
+        "quality_value": {
+          "label": "Quality at a fair price",
+          "help": "Highly profitable companies, bought when they are not expensive.",
+          "rebalance": "monthly",
+          "rules": [
+            {
+              "id": "high_roe",
+              "params": {
+                "min": 0.15
+              }
+            },
+            {
+              "id": "cheap_earnings",
+              "params": {
+                "keep": 0.6
+              }
+            },
+            {
+              "id": "low_debt",
+              "params": {
+                "max": 2.0
+              }
+            }
+          ]
+        },
+        "garp": {
+          "label": "Growth at a reasonable price",
+          "help": "Growing sales, positive earnings, and a price that is not stretched.",
+          "rebalance": "monthly",
+          "rules": [
+            {
+              "id": "growing_sales",
+              "params": {
+                "min": 0.1
+              }
+            },
+            {
+              "id": "profitable",
+              "params": {}
+            },
+            {
+              "id": "cheap_earnings",
+              "params": {
+                "keep": 0.6
+              }
+            }
+          ]
+        },
+        "custom": {
+          "label": "Custom",
+          "help": "Start from no rules and add your own.",
+          "rebalance": "monthly",
+          "rules": []
+        }
+      }
+    }
+  },
+  "rules": {
+    "uptrend_only": {
+      "label": "Uptrend only",
+      "help": "Holds only stocks trading above their {days}-day average price.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "days": {
+          "options": [
+            50,
+            100,
+            200
+          ],
+          "default": 200,
+          "display": "days"
+        }
+      },
+      "filter": {
+        "signal": "trend",
+        "lookback": "$days",
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "golden_cross": {
+      "label": "Golden cross",
+      "help": "Holds only stocks whose {fast}-day average is above their {slow}-day average.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "fast": {
+          "options": [
+            5,
+            10,
+            20,
+            50
+          ],
+          "default": 50,
+          "display": "days"
+        },
+        "slow": {
+          "options": [
+            20,
+            60,
+            120,
+            200
+          ],
+          "default": 200,
+          "display": "days"
+        }
+      },
+      "requires": [
+        [
+          "fast",
+          "<",
+          "slow"
+        ]
+      ],
+      "filter": {
+        "signal": "ma_cross",
+        "fast": "$fast",
+        "lookback": "$slow",
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "not_overbought": {
+      "label": "Skip overbought",
+      "help": "Skips stocks whose 14-day RSI is {rsi_max} or higher.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "rsi_max": {
+          "min": 60,
+          "max": 85,
+          "step": 5,
+          "default": 70,
+          "display": "number"
+        }
+      },
+      "filter": {
+        "signal": "rsi",
+        "lookback": 14,
+        "rule": "below",
+        "value": "$rsi_max"
+      }
+    },
+    "oversold_only": {
+      "label": "Buy the dip",
+      "help": "Holds only stocks whose 14-day RSI is below {rsi_max} (recently sold off).",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "rsi_max": {
+          "min": 20,
+          "max": 50,
+          "step": 5,
+          "default": 40,
+          "display": "number"
+        }
+      },
+      "filter": {
+        "signal": "rsi",
+        "lookback": 14,
+        "rule": "below",
+        "value": "$rsi_max"
+      }
+    },
+    "near_high": {
+      "label": "Near the high",
+      "help": "Holds only stocks within {within} of their one-year high.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "within": {
+          "min": 0.01,
+          "max": 0.2,
+          "step": 0.01,
+          "default": 0.05,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "drawdown",
+        "lookback": 252,
+        "rule": "above",
+        "value": {
+          "neg": "$within"
+        }
+      }
+    },
+    "lower_band": {
+      "label": "Lower Bollinger band",
+      "help": "Holds only stocks trading below {z_max} standard deviations of their 20-day average.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "z_max": {
+          "min": -3,
+          "max": -0.5,
+          "step": 0.25,
+          "default": -1.5,
+          "display": "number"
+        }
+      },
+      "filter": {
+        "signal": "zscore",
+        "lookback": 20,
+        "rule": "below",
+        "value": "$z_max"
+      }
+    },
+    "strong_momentum": {
+      "label": "Strongest momentum",
+      "help": "Keeps the top {keep} of stocks by six-month return (skipping the last month).",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "keep": {
+          "min": 0.2,
+          "max": 0.8,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "momentum",
+        "lookback": 126,
+        "skip": 21,
+        "rule": "top_fraction",
+        "value": "$keep"
+      }
+    },
+    "calm_only": {
+      "label": "Calmer stocks",
+      "help": "Keeps the calmest {keep} of stocks by three-month price swings.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "keep": {
+          "min": 0.3,
+          "max": 0.9,
+          "step": 0.1,
+          "default": 0.7,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "volatility",
+        "lookback": 63,
+        "rule": "bottom_fraction",
+        "value": "$keep"
+      }
+    },
+    "market_guard": {
+      "label": "Market guard",
+      "help": "When the Nasdaq-100 (QQQ) is below its 200-day average, invests only {exposure} of the usual amount.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "exposure": {
+          "min": 0,
+          "max": 0.9,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        }
+      },
+      "risk_off": {
+        "ticker": "QQQ",
+        "signal": "trend",
+        "lookback": 200,
+        "below": 0,
+        "exposure": "$exposure"
+      }
+    },
+    "max_holdings": {
+      "label": "Max holdings",
+      "help": "Holds at most {n} stocks.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "n": {
+          "min": 1,
+          "max": 20,
+          "step": 1,
+          "default": 5,
+          "display": "count"
+        }
+      },
+      "top_n_cap": "$n"
+    },
+    "cheap_earnings": {
+      "label": "Cheap on earnings",
+      "help": "Keeps the {keep} of companies with the highest earnings yield (lowest P/E).",
+      "styles": [
+        "value"
+      ],
+      "params": {
+        "keep": {
+          "min": 0.2,
+          "max": 0.8,
+          "step": 0.1,
+          "default": 0.4,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "earnings_yield",
+        "lookback": 5,
+        "rule": "top_fraction",
+        "value": "$keep"
+      }
+    },
+    "cheap_book": {
+      "label": "Cheap on book value",
+      "help": "Keeps the {keep} of companies with the highest book-to-price (lowest P/B).",
+      "styles": [
+        "value"
+      ],
+      "params": {
+        "keep": {
+          "min": 0.2,
+          "max": 0.8,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "book_to_price",
+        "lookback": 5,
+        "rule": "top_fraction",
+        "value": "$keep"
+      }
+    },
+    "profitable": {
+      "label": "Profitable",
+      "help": "Holds only companies with positive trailing-twelve-month earnings.",
+      "styles": [
+        "value"
+      ],
+      "params": {},
+      "filter": {
+        "signal": "earnings_yield",
+        "lookback": 5,
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "cash_generating": {
+      "label": "Generates cash",
+      "help": "Holds only companies with positive free cash flow over the last twelve months.",
+      "styles": [
+        "value"
+      ],
+      "params": {},
+      "filter": {
+        "signal": "fcf_yield",
+        "lookback": 5,
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "high_roe": {
+      "label": "High return on equity",
+      "help": "Holds only companies earning at least {min} on shareholders' equity.",
+      "styles": [
+        "value"
+      ],
+      "params": {
+        "min": {
+          "min": 0.05,
+          "max": 0.4,
+          "step": 0.05,
+          "default": 0.15,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "roe",
+        "lookback": 5,
+        "rule": "above",
+        "value": "$min"
+      }
+    },
+    "low_debt": {
+      "label": "Low debt",
+      "help": "Holds only companies whose long-term debt is below {max}x their equity.",
+      "styles": [
+        "value"
+      ],
+      "params": {
+        "max": {
+          "min": 0.25,
+          "max": 3,
+          "step": 0.25,
+          "default": 1.0,
+          "display": "number"
+        }
+      },
+      "filter": {
+        "signal": "debt_to_equity",
+        "lookback": 5,
+        "rule": "below",
+        "value": "$max"
+      }
+    },
+    "growing_sales": {
+      "label": "Growing sales",
+      "help": "Holds only companies whose twelve-month sales grew at least {min} on the year before.",
+      "styles": [
+        "value"
+      ],
+      "params": {
+        "min": {
+          "min": 0,
+          "max": 0.5,
+          "step": 0.05,
+          "default": 0.1,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "revenue_growth",
+        "lookback": 5,
+        "rule": "above",
+        "value": "$min"
+      }
+    }
+  },
+  "limits": {
+    "rules": 8,
+    "filters": 6,
+    "philosophy_chars": 1000,
+    "name_chars": 40
+  }
+}

@@ -1,0 +1,1598 @@
+{
+  "devnetDeployment": false,
+  "elfSha256": "06bddfd62810eb89fec0cc58137209ed56aff911aac361a446a319c4501108dd",
+  "fixtureProgram": "DuWTLWwwwxjGeHmwK4JVaCQhdLBSe98ciwJL8bZRhdc2",
+  "mainnetTrades": 0,
+  "rows": [
+    {
+      "case": "owner initializes configurable policy",
+      "cu": 6814,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "PDA cannot be reinitialized to reset budget",
+      "cu": 888,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "wrong verifier",
+      "cu": 5773,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8102))"
+    },
+    {
+      "case": "missing verifier signature",
+      "cu": 613,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8102))"
+    },
+    {
+      "case": "order limit checked from config",
+      "cu": 5802,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "unapproved mint",
+      "cu": 5856,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "reserve actual first request",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "pending exposure blocks next order",
+      "cu": 5792,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "unrelated receipt rejected",
+      "cu": 5784,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8106))"
+    },
+    {
+      "case": "receipt attestation releases pending lock",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "reserve actual second request",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "second receipt",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "third request rejected by exhausted limits",
+      "cu": 5797,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "restart preserves spent state",
+      "cu": 5797,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "owner revokes while pending",
+      "cu": 7407,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "receipt remains recordable after revoke",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "revoke prevents new reserve",
+      "cu": 5785,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8103))"
+    },
+    {
+      "case": "different user-approved budget and count",
+      "cu": 6814,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 0",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 0",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 1",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 1",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 2",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 2",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 3",
+      "cu": 7552,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 3",
+      "cu": 7443,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 JS approval commits 58 distinct stocks",
+      "cu": 6742,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 approval cannot reset",
+      "cu": 879,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v1 reserve cannot bypass v2 commitment",
+      "cu": 5665,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 1",
+      "cu": 5718,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8106))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 9",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 17",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 49",
+      "cu": 5706,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 81",
+      "cu": 5741,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 82",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 90",
+      "cu": 5696,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 0 rejects tamper at 91",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 exact step 0",
+      "cu": 8746,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 0",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 0",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 1",
+      "cu": 8745,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 1",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 1",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 2",
+      "cu": 8745,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 2",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 2",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 3",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 3",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 3",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 4",
+      "cu": 8745,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 4",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 4",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 5",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 5",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 5",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 6",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 6",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 6",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 7",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 7",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 7",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 8",
+      "cu": 8745,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 8",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 8",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 9",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 9",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 9",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 10",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 10",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 10",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 11",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 11",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 11",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 12",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 12",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 12",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 13",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 13",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 13",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 14",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 14",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 14",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 15",
+      "cu": 8742,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 15",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 15",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 16",
+      "cu": 8745,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 16",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 16",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 17",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 17",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 17",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 18",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 18",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 18",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 19",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 19",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 19",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 20",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 20",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 20",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 21",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 21",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 21",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 22",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 22",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 22",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 23",
+      "cu": 8742,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 23",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 23",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 24",
+      "cu": 8744,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 24",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 24",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 25",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 25",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 25",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 26",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 26",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 26",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 27",
+      "cu": 8742,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 27",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 27",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 28",
+      "cu": 8743,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 28",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 28",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 1",
+      "cu": 5718,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8106))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 9",
+      "cu": 5745,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 17",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 49",
+      "cu": 5706,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 81",
+      "cu": 5742,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 82",
+      "cu": 5741,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 90",
+      "cu": 5696,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 29 rejects tamper at 91",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 exact step 29",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 29",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 29",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 30",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 30",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 30",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 31",
+      "cu": 8746,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 31",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 31",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 32",
+      "cu": 8750,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 32",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 32",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 33",
+      "cu": 8749,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 33",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 33",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 34",
+      "cu": 8749,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 34",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 34",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 35",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 35",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 35",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 36",
+      "cu": 8749,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 36",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 36",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 37",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 37",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 37",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 38",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 38",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 38",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 39",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 39",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 39",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 40",
+      "cu": 8749,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 40",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 40",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 41",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 41",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 41",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 42",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 42",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 42",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 43",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 43",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 43",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 44",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 44",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 44",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 45",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 45",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 45",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 46",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 46",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 46",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 47",
+      "cu": 8746,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 47",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 47",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 48",
+      "cu": 8749,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 48",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 48",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 49",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 49",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 49",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 50",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 50",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 50",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 51",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 51",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 51",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 52",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 52",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 52",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 53",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 53",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 53",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 54",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 54",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 54",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 55",
+      "cu": 8746,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 55",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 55",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 exact step 56",
+      "cu": 8748,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 56",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 56",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 1",
+      "cu": 5718,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8106))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 9",
+      "cu": 5745,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 17",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 49",
+      "cu": 5706,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 81",
+      "cu": 5742,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 82",
+      "cu": 5741,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 90",
+      "cu": 5696,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 step 57 rejects tamper at 91",
+      "cu": 7096,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "v2 exact step 57",
+      "cu": 8747,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "v2 pending prevents replay 57",
+      "cu": 5714,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "v2 result 57",
+      "cu": 7308,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    }
+  ],
+  "schema": "xtxc.autonomy-svm-evidence/v2"
+}

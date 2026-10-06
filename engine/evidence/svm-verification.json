@@ -1,0 +1,191 @@
+{
+  "devnetDeployment": false,
+  "elfSha256": "4971dd8675894577ecb086dab0addc54d8784d4326ae69abe7428a0f5aaec600",
+  "fixtureProgram": "DuWTLWwwwxjGeHmwK4JVaCQhdLBSe98ciwJL8bZRhdc2",
+  "mainnetTrades": 0,
+  "rows": [
+    {
+      "case": "owner initializes configurable policy",
+      "cu": 6776,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "PDA cannot be reinitialized to reset budget",
+      "cu": 886,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "wrong verifier",
+      "cu": 5704,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8102))"
+    },
+    {
+      "case": "missing verifier signature",
+      "cu": 613,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8102))"
+    },
+    {
+      "case": "order limit checked from config",
+      "cu": 5733,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "unapproved mint",
+      "cu": 5788,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8101))"
+    },
+    {
+      "case": "reserve actual first request",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "pending exposure blocks next order",
+      "cu": 5723,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8105))"
+    },
+    {
+      "case": "unrelated receipt rejected",
+      "cu": 5720,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8106))"
+    },
+    {
+      "case": "receipt attestation releases pending lock",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "reserve actual second request",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "second receipt",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "third request rejected by exhausted limits",
+      "cu": 5728,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "restart preserves spent state",
+      "cu": 5728,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8104))"
+    },
+    {
+      "case": "owner revokes while pending",
+      "cu": 7322,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "receipt remains recordable after revoke",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "revoke prevents new reserve",
+      "cu": 5716,
+      "expectedSuccess": false,
+      "passed": true,
+      "programResult": "Failure(0, Custom(8103))"
+    },
+    {
+      "case": "different user-approved budget and count",
+      "cu": 6776,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 0",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 0",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 1",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 1",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 2",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 2",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic request 3",
+      "cu": 7455,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    },
+    {
+      "case": "generic receipt 3",
+      "cu": 7354,
+      "expectedSuccess": true,
+      "passed": true,
+      "programResult": "Success"
+    }
+  ],
+  "schema": "xtxc.autonomy-svm-evidence/v1"
+}

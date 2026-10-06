@@ -1,0 +1,16 @@
+{
+  "schema": "sta.devnet-policy-v2-deployment/v1",
+  "observedAt": "2026-09-29T22:23:46.776953+00:00",
+  "cluster": "devnet",
+  "program": "3i5oG6xw28CTDHf4q49MRxkr6z3uzvMwhtf9FK5qH4pr",
+  "authority": "4Kb7uUPS251itCtJc7AvEJpCJCf5MkVmB32V22BqS1oP",
+  "signature": "3xEBZyGwxLuNSoQMe2yHzVpuCQBR7wHLHYxeXGGNhGgPEttDYGyGqsDTibWcZDtCcS7zJyAxUhqBZ4dCAc3owK8a",
+  "slot": 505683774,
+  "confirmationStatus": "finalized",
+  "elfSha256": "06bddfd62810eb89fec0cc58137209ed56aff911aac361a446a319c4501108dd",
+  "elfBytes": 86672,
+  "accountProgramBytes": 93008,
+  "exactElfPrefixAndZeroPadding": true,
+  "mainnetDeployment": false,
+  "automaticTradingStarted": false
+}

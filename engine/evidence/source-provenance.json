@@ -1,0 +1,1038 @@
+{
+  "schema": "sta.source-provenance/v1",
+  "scope": "Source snapshot and server mtimes, not historical Git authorship proof. No commit timestamps were backdated.",
+  "eventCodeStart": "2026-09-28T19:00:00+09:00",
+  "preexistingRouter": "https://github.com/xtxctrade/xtxc",
+  "rows": [
+    {
+      "path": "agent/scripts/build_quant_release.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T11:56:05+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "3e76832a5c3c1c4ead5da19466ec290412b72343e4ef243dee5c39773c2204c7",
+      "publicationSha256": "5a77275dec8e41d9750422208c08b60394066c2162734a71f0e1b67b830819e5",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "3e76832a5c3c1c4ead5da19466ec290412b72343e4ef243dee5c39773c2204c7",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "agent/tests/core/conftest.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:19:26+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "5213b4673e97d2c388d2e4e834fc8811211f47e3f8102c51a4da661b3212a4f9",
+      "publicationSha256": "5213b4673e97d2c388d2e4e834fc8811211f47e3f8102c51a4da661b3212a4f9",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_chat.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:20:34+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "be43e259fc7b280a1beb93f6ff07730ec32e758099d643d02fcbaad1726e85cc",
+      "publicationSha256": "be43e259fc7b280a1beb93f6ff07730ec32e758099d643d02fcbaad1726e85cc",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_core.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T19:11:49+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "2f191f10bd616395311f6682ec4a141fa18240c1fcd76f849039bcdf8fbb905d",
+      "publicationSha256": "2f191f10bd616395311f6682ec4a141fa18240c1fcd76f849039bcdf8fbb905d",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_demo.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:19:26+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "2af7a4ecb604773c6905a284f6a9b0f6f4e11c4d5d38e37a125f9d0ea5e26f82",
+      "publicationSha256": "2af7a4ecb604773c6905a284f6a9b0f6f4e11c4d5d38e37a125f9d0ea5e26f82",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_forecast_chat.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T13:13:32+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "ae7517a59972318fcc29223646bc0f82074720b81928f8a5226d7cfd16c8f47f",
+      "publicationSha256": "ae7517a59972318fcc29223646bc0f82074720b81928f8a5226d7cfd16c8f47f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_i18n.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:24+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "b35d5bda3fa8bd8829e0f7d076ba7a82821325d1c0237f4b684c3da5eb339667",
+      "publicationSha256": "b35d5bda3fa8bd8829e0f7d076ba7a82821325d1c0237f4b684c3da5eb339667",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_orders_exec.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T08:23:52+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0ee5bce42c2d5123fad86e498efac53edb1b60bc873a1ad353937cf48d6aa4f4",
+      "publicationSha256": "0ee5bce42c2d5123fad86e498efac53edb1b60bc873a1ad353937cf48d6aa4f4",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_paper.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:52+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "740d93dd05bdf2dd1e2f5bafa66ae927f480459599a6f4b40bcd580efd89c970",
+      "publicationSha256": "740d93dd05bdf2dd1e2f5bafa66ae927f480459599a6f4b40bcd580efd89c970",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/core/test_strategy_design.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:20:34+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "b10dda3412ab3ae8053a282919a543a97cfe8c80d00b98214aa34de340722405",
+      "publicationSha256": "b10dda3412ab3ae8053a282919a543a97cfe8c80d00b98214aa34de340722405",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/conftest.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:19:26+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "74d8c01b421d77b45f29dd0b7ed52783cd801f99afbb3edf7cef71e77f50fcb9",
+      "publicationSha256": "74d8c01b421d77b45f29dd0b7ed52783cd801f99afbb3edf7cef71e77f50fcb9",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/golden_pre_band.json",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:35:37+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1a1acd069805452b7587a3d292c4ae1eb8dcc54faef85d0e71dae1733c02b44f",
+      "publicationSha256": "1a1acd069805452b7587a3d292c4ae1eb8dcc54faef85d0e71dae1733c02b44f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/research_testlib.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:31:31+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "7be0079a6d368900cdf72272c29037f841ab3bf23ab0eae5edea8a91f411696d",
+      "publicationSha256": "7be0079a6d368900cdf72272c29037f841ab3bf23ab0eae5edea8a91f411696d",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_exectape.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T13:50:51+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "8b3220c29d3565637426102b18cbcf1c4151aa580235a3b3e3e6349d7e7f7009",
+      "publicationSha256": "8b3220c29d3565637426102b18cbcf1c4151aa580235a3b3e3e6349d7e7f7009",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_backtest.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:37:45+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "a39e0d158efc87f4bad631dd2652fa92f9dde075ff98a1e97e3bf7e22cc19730",
+      "publicationSha256": "757953a5ce6be378faecf8030e1718e68d56bb8934bde4975073b292e7836c7c",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "agent/tests/research/test_research_evaluator.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:33:35+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "c07e7892d1d0ffea91619a6e31ed085f703c462a8126e98e9fbaabc4942e9067",
+      "publicationSha256": "c07e7892d1d0ffea91619a6e31ed085f703c462a8126e98e9fbaabc4942e9067",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_execution_costs.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:27:16+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "96ed31576d1b22f00fb584863332eb99ae72bbce1ee650e789d8ce1639cdd68b",
+      "publicationSha256": "96ed31576d1b22f00fb584863332eb99ae72bbce1ee650e789d8ce1639cdd68b",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_marketdata.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T05:00:40+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "cd49b4c46e2b5fe91dfbd9949b56cbc9cb7977ab304309232c107d027e87bead",
+      "publicationSha256": "cd49b4c46e2b5fe91dfbd9949b56cbc9cb7977ab304309232c107d027e87bead",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_quantstore.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T11:56:32+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6ffcf0ca4319b12c82b68dde6d2ef87ca6e14811e57c84dfa78feda8b80e8b47",
+      "publicationSha256": "6ffcf0ca4319b12c82b68dde6d2ef87ca6e14811e57c84dfa78feda8b80e8b47",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_strategies.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:09:21+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1fc7b8fbddfbe94f073b226e3c696083aec2083c59142d2c603f76effbc6051f",
+      "publicationSha256": "1fc7b8fbddfbe94f073b226e3c696083aec2083c59142d2c603f76effbc6051f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_research_universe.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:31:31+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "16ecaba63dbd6d6c01eabcb73bad684553ca950060543da71b84443f5a5e3462",
+      "publicationSha256": "16ecaba63dbd6d6c01eabcb73bad684553ca950060543da71b84443f5a5e3462",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_sandbox.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:08:38+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "df77f8da55f59d038f587b07e016fbb14f5855afa9699b45f26ab06934698df4",
+      "publicationSha256": "46eea5988085d3e6d4427e6984880b21c367a38639c7148283472f3d8334910f",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "agent/tests/research/test_stockmesh_journal.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:52+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "02ccfdbd15d9fb6d1d67cabf46ac64b98cd544eb119b2a66c9a8c7a679ab0e88",
+      "publicationSha256": "02ccfdbd15d9fb6d1d67cabf46ac64b98cd544eb119b2a66c9a8c7a679ab0e88",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_strategy_lang.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:07:28+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "8c3a8e1bd53e6cbe9b21ecd7de6c0c48e4fd4cd8f309cf9ffd7d576713bf2005",
+      "publicationSha256": "8c3a8e1bd53e6cbe9b21ecd7de6c0c48e4fd4cd8f309cf9ffd7d576713bf2005",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/tests/research/test_volforecast.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T13:47:55+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "4d31136c7d2496b8eab5f447595f0bf17bca33aef8fd7348a3ec7525b1e220ba",
+      "publicationSha256": "4d31136c7d2496b8eab5f447595f0bf17bca33aef8fd7348a3ec7525b1e220ba",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/__init__.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:07:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1469bdc3472987a352bd6df202303765d3223e3ece6d0f54df077c51b948e8b9",
+      "publicationSha256": "1469bdc3472987a352bd6df202303765d3223e3ece6d0f54df077c51b948e8b9",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/chain/__init__.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:18:16+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publicationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/chain/client.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T08:22:14+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "f5f960216af628ecf786e6c76261052d9e5b48756bfad6fd7fbb62dcdc2e6205",
+      "publicationSha256": "f5f960216af628ecf786e6c76261052d9e5b48756bfad6fd7fbb62dcdc2e6205",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/__init__.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:07:48+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "publicationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/app.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:46:16+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "a0d8683e15b7b40f75e8fefe5ecc2406e7a4cf65c7e8219beeebdd014423c03e",
+      "publicationSha256": "a0d8683e15b7b40f75e8fefe5ecc2406e7a4cf65c7e8219beeebdd014423c03e",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/ask.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T08:27:18+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "47fe7aab9e39ae5412240f2b894e2e178603522a12f49316f0cdfc8737c8b232",
+      "publicationSha256": "47fe7aab9e39ae5412240f2b894e2e178603522a12f49316f0cdfc8737c8b232",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/briefs.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T13:03:23+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6cd586e961ef0e75f9163477609778754e3c6e27ebadbfaea844232802a99379",
+      "publicationSha256": "6cd586e961ef0e75f9163477609778754e3c6e27ebadbfaea844232802a99379",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/chat.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:20:34+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "bcdf9c40d3291936971ea0d76a8fc3c2cfc18e26f1b78b031701fa8cdaaad1f3",
+      "publicationSha256": "bcdf9c40d3291936971ea0d76a8fc3c2cfc18e26f1b78b031701fa8cdaaad1f3",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/claims.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:19:56+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6bbae78a28f9a89ed20803c7b91b15fc3924e03d0524fd9267afc5dbbbe55ee6",
+      "publicationSha256": "6bbae78a28f9a89ed20803c7b91b15fc3924e03d0524fd9267afc5dbbbe55ee6",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/config.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T04:18:12+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "085a172dee62ecaf903304da0155254be9664b5853d41093b682b98939a281a0",
+      "publicationSha256": "ce1ef91e908767a8a41635b53da68fe512c8205fbaa334e5cef820caf4790354",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "agent/xtxc_agent/core/db.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T13:04:36+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "bb05c57ab6f0d0ad99305d59f906c986e5b3688681f7b2cda9361459a7c9e758",
+      "publicationSha256": "bb05c57ab6f0d0ad99305d59f906c986e5b3688681f7b2cda9361459a7c9e758",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/demo.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:11:05+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "137b2784b18e5653c22732022aca682b4f60ac7c2cb96adb43055d0745ac6ee1",
+      "publicationSha256": "137b2784b18e5653c22732022aca682b4f60ac7c2cb96adb43055d0745ac6ee1",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/execution.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T08:22:14+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "880671f32805b4ae99097850b2b118a4f011cc4a313c98e6a6837a515e924e1c",
+      "publicationSha256": "880671f32805b4ae99097850b2b118a4f011cc4a313c98e6a6837a515e924e1c",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/forecasts.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:24+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "48537b169bf30011cfe2dbcf9d40db0c633adb8f4cdad097a609acfbec84de25",
+      "publicationSha256": "48537b169bf30011cfe2dbcf9d40db0c633adb8f4cdad097a609acfbec84de25",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/i18n.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:24+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1d758961b006eec4dab1b41783b8740dbc11af17c056c1f34a556f558a1ae485",
+      "publicationSha256": "1d758961b006eec4dab1b41783b8740dbc11af17c056c1f34a556f558a1ae485",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/kiln.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T02:30:16+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "81ec2449782cbf12351eed225b65d06414751036a6f5f7e7266746594f5ea27d",
+      "publicationSha256": "81ec2449782cbf12351eed225b65d06414751036a6f5f7e7266746594f5ea27d",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/ledger.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T19:08:59+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "e084c543ed9de3a7f0bf812a711597bcc157adce79347e714128fd7b25c63880",
+      "publicationSha256": "e084c543ed9de3a7f0bf812a711597bcc157adce79347e714128fd7b25c63880",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/market.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T19:07:26+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "4c442dbceee5d418eca93fcf130fa68e76c5db46762e518a201405fcfa338dcd",
+      "publicationSha256": "4c442dbceee5d418eca93fcf130fa68e76c5db46762e518a201405fcfa338dcd",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/orders.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T08:14:49+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "92b7cb1e0b35eb4c039b46fd05d1639e79cb1bb0428f1869afc8988a543f51f7",
+      "publicationSha256": "92b7cb1e0b35eb4c039b46fd05d1639e79cb1bb0428f1869afc8988a543f51f7",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/paper.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:46:16+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "f55767264ea958ad5abe20cad68f8e0487cb2a8a472abef363285260b6d139d0",
+      "publicationSha256": "f55767264ea958ad5abe20cad68f8e0487cb2a8a472abef363285260b6d139d0",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/prices.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:36:07+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1d25b427c1987c87a90be840b3336d5de0f1d6aef3b24dac8b02ca741237e58e",
+      "publicationSha256": "1d25b427c1987c87a90be840b3336d5de0f1d6aef3b24dac8b02ca741237e58e",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/prompts.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:04:25+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "029fd0f23c69ee9531c015107a68d7da3c287c3fec8ee5cdf88fa2882d4ccf2e",
+      "publicationSha256": "029fd0f23c69ee9531c015107a68d7da3c287c3fec8ee5cdf88fa2882d4ccf2e",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/research_runner.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:20:34+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "30e7ac8f9e7f6118683d3e5b5eba8e3c87127e8b4e41f16f231a01c18d4f8473",
+      "publicationSha256": "30e7ac8f9e7f6118683d3e5b5eba8e3c87127e8b4e41f16f231a01c18d4f8473",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/core/strategy_design.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:20:34+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "aadc463bb4e9fa56101930f05ea85aee693967a44320e3a6416f6eb4cf0643ee",
+      "publicationSha256": "aadc463bb4e9fa56101930f05ea85aee693967a44320e3a6416f6eb4cf0643ee",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/__init__.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:15:40+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "c7a192ce3791c8b573174ff4f125b5ed3ed6dd71e9e34cd092c813ea513d545a",
+      "publicationSha256": "c7a192ce3791c8b573174ff4f125b5ed3ed6dd71e9e34cd092c813ea513d545a",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/backtest.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:36:48+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1da830d46de11c04b2e31fcdc80147bc44ce67c21a619ca5fe0d514f633a6a18",
+      "publicationSha256": "1da830d46de11c04b2e31fcdc80147bc44ce67c21a619ca5fe0d514f633a6a18",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/evaluator.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:04:03+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "eae130b7b1c9c357ca7e16d517b30aea7bb3011b58e3cc8867918f69c1185c3d",
+      "publicationSha256": "eae130b7b1c9c357ca7e16d517b30aea7bb3011b58e3cc8867918f69c1185c3d",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/example.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:29:44+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "2859bb25a9bd6d472a3bd8a263683e16fcac8807c595ee4c3d0746b5f795ea73",
+      "publicationSha256": "2859bb25a9bd6d472a3bd8a263683e16fcac8807c595ee4c3d0746b5f795ea73",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/exectape.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:02+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1c7ac77e1c2f181f45cb734692f82c66a5414f31b680f5e27d0ea8c4a2aa2c6c",
+      "publicationSha256": "1c7ac77e1c2f181f45cb734692f82c66a5414f31b680f5e27d0ea8c4a2aa2c6c",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/execution_costs.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:32:28+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "5f49347d9d1d918b2d87d745ee773522e76347c0285ad97b76dd774ee8738e94",
+      "publicationSha256": "5f49347d9d1d918b2d87d745ee773522e76347c0285ad97b76dd774ee8738e94",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/marketdata.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T11:56:05+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "2d1f21a0b58ee6768a26c27d668591bfb1b74ef41bde48c5cfc2f80d698ddc22",
+      "publicationSha256": "2d1f21a0b58ee6768a26c27d668591bfb1b74ef41bde48c5cfc2f80d698ddc22",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/quantstore.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T11:57:08+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "9fc3a000694c4b041fcda8fba66c1130fc918a58b552c8deb02dca193db3948f",
+      "publicationSha256": "9fc3a000694c4b041fcda8fba66c1130fc918a58b552c8deb02dca193db3948f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/sandbox.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:08:22+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6e4d00ae0abe116cd79c1c0a81a7a2126efa0479d86cb8efbf2fd5de285a8b6d",
+      "publicationSha256": "092d7e13ecb165e75c63c719800c234d7041d62bab3ab16315f38d25e513d3b0",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "agent/xtxc_agent/research/stockmesh_journal.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:02+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "463404f285661368700d356bc032c2029f08c7681d94683f30a70cea9fb3d26b",
+      "publicationSha256": "463404f285661368700d356bc032c2029f08c7681d94683f30a70cea9fb3d26b",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/strategies.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T14:59:53+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "c6ead9eab425abbd7abbae4253b6cf3065c98bdbd70a13326f71a8a03747e17a",
+      "publicationSha256": "c6ead9eab425abbd7abbae4253b6cf3065c98bdbd70a13326f71a8a03747e17a",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/strategy_lang.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T14:59:20+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "a19c00f411e4a3265235a98c8db4969cc7bf2b44d33bfed6ab8bf66c7ef8ffa3",
+      "publicationSha256": "a19c00f411e4a3265235a98c8db4969cc7bf2b44d33bfed6ab8bf66c7ef8ffa3",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/token_products.json",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-28T18:15:45+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "495eb76694191c36fd9314576a36d60737b1f59a860593ecf5204b1c7dbf3f22",
+      "publicationSha256": "495eb76694191c36fd9314576a36d60737b1f59a860593ecf5204b1c7dbf3f22",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/universe.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:15:40+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0ef247a3bb049dd9774c7f7aaedcdd935ca8666e34207f26165e65e086e3c345",
+      "publicationSha256": "8ded5582a0a468b5ae7abcb53ada46764edc116ed12bacaad70622bdab8d0885",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "agent/xtxc_agent/research/universe_map.json",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T07:15:24+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "dbc203a87c077f438d280a4d8a26c65ee78cce4fe0ea078cd2dbcacf99f9e1f9",
+      "publicationSha256": "dbc203a87c077f438d280a4d8a26c65ee78cce4fe0ea078cd2dbcacf99f9e1f9",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "agent/xtxc_agent/research/volforecast.py",
+      "sourceLabel": "research-engine-20260929",
+      "observedSourceMtime": "2026-09-29T15:48:02+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6b329c65713c37032f99e4a61999e2b2464d73eb144b6c71c4464307412f328f",
+      "publicationSha256": "6b329c65713c37032f99e4a61999e2b2464d73eb144b6c71c4464307412f328f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "compute/evaluate.py",
+      "sourceLabel": "research-evaluator-20260929",
+      "observedSourceMtime": "2026-09-29T12:56:44.734758+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "86e9427d2c880ee4c3da0b6dcc62dcf2cb8bd837dd25c1a7642cf3c585fc4e7a",
+      "publicationSha256": "230543e710be779735025ab395e1f3e10d8171bbe67224252ced99b2f89486e0",
+      "modifiedForPublication": true,
+      "initialPublicationSha256": "cc377f2e8767fa0e1270e3a034f425d8e8929917f37cdd232746d2cdbcd30041",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "compute/test_evaluate.py",
+      "sourceLabel": "research-evaluator-20260929",
+      "observedSourceMtime": "2026-09-29T13:06:39.891772+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d925f2efce47c7436321d8cfd096a530c743af9a548d19eecc7bbed935c22b01",
+      "publicationSha256": "d925f2efce47c7436321d8cfd096a530c743af9a548d19eecc7bbed935c22b01",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "data-pipeline/collect_man_group_58.py",
+      "sourceLabel": "quant-data-pipeline-20260929",
+      "observedSourceMtime": "2026-09-29T16:12:55.613320+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "6127bfa151163b9e7c0bf866b076775c86990e0adf1a45cdd12e75ae8ddc2575",
+      "publicationSha256": "cdcc7112c10c22ababe4569c3761f76662c7aea5c474bdf684f7c3f0e3ecd2be",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "data-pipeline/collect_multi_frequency.py",
+      "sourceLabel": "quant-data-pipeline-20260929",
+      "observedSourceMtime": "2026-09-29T12:02:37.509094+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "4d65accc03b4621e3048e6adfb33ed410695d63a7a51f05493a8b1a7b152b159",
+      "publicationSha256": "06a486eafa3a8054485a18b3614d5b4c5cbfb04165a91ed34434fa16fea17d09",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "data-pipeline/daily_refresh.py",
+      "sourceLabel": "quant-data-pipeline-20260929",
+      "observedSourceMtime": "2026-09-29T16:12:55.612320+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0ec789ac3a255330986b635c7a1b17e80ce0e065b7db54b41a88fdd6e93b7bca",
+      "publicationSha256": "0ec789ac3a255330986b635c7a1b17e80ce0e065b7db54b41a88fdd6e93b7bca",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-agent-core.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:57:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d5c58c6348ea54e1bd490eb9fc54e7b9530e85733289aba03584a96d1a5efa32",
+      "publicationSha256": "5e8b9f690e01daea555023aeac0ed48acf2a5bf5cb94a4c8850924c91dc201a5",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "d5c58c6348ea54e1bd490eb9fc54e7b9530e85733289aba03584a96d1a5efa32",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-anchor.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:43:45+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "846b90b1c63944ff905e16278c9b18ce75a7bd3e2f1fb2df46d53e555bdecc92",
+      "publicationSha256": "846b90b1c63944ff905e16278c9b18ce75a7bd3e2f1fb2df46d53e555bdecc92",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-autonomy-control.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "8f86f972ad85bb6a84dfbf55260f1df11a97fa83cd3c4235df829d0db599ac87",
+      "publicationSha256": "107f8cd56bf25fa0857ccc784bf1b353957c08693e0c72417eb677f5a8520c44",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "8f86f972ad85bb6a84dfbf55260f1df11a97fa83cd3c4235df829d0db599ac87",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-devnet.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "a693adc60de1c9dce62018c5d03543230ed5aecc00e7b6dadfb670e637a7b0de",
+      "publicationSha256": "c2c1bff067cd1fb2d2b0ef53455f916f43204a7e452bc2da4cdaa4f71dfdb18e",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "a693adc60de1c9dce62018c5d03543230ed5aecc00e7b6dadfb670e637a7b0de",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-journal.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "cbc81493d8982d1a9376d2648317bd093e5e3ec326ae43d9df3dc2bfb384a685",
+      "publicationSha256": "51d5337f435379f605fc983d6265d0e5b8d5d12cf736926dece882f22b0333fd",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "cbc81493d8982d1a9376d2648317bd093e5e3ec326ae43d9df3dc2bfb384a685",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-policy.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "beeb44136d07c2c8fb2e9f6f8254941a0c53ed622818be0885c3abbf57fc7a2a",
+      "publicationSha256": "d0d061e67f09efb6550538b2c9fdf225be65f1238c3b81013e994cce2508dc9d",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "beeb44136d07c2c8fb2e9f6f8254941a0c53ed622818be0885c3abbf57fc7a2a",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-privy.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0a72b4838f1ec0e40251b84e5fa5505aaed793784ba0dcf38f737c0c35e127bc",
+      "publicationSha256": "0a72b4838f1ec0e40251b84e5fa5505aaed793784ba0dcf38f737c0c35e127bc",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-autonomy-rpc.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T16:21:56+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "5f96b7a4a855ff89ef894e041b9854c9f6f044ef3b79fc3620ce5d7dada7121f",
+      "publicationSha256": "5f96b7a4a855ff89ef894e041b9854c9f6f044ef3b79fc3620ce5d7dada7121f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-autonomy-runtime.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:56:47+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "01f2ddc22773f587add438680dbb777247031c75866e0e881e712fce85e63a02",
+      "publicationSha256": "8ac67a3921124536b633b316453ed14ccd7f8eda5b53b8e5efdd231baacdbc1c",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "01f2ddc22773f587add438680dbb777247031c75866e0e881e712fce85e63a02",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-stockmesh.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:52:58+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "22a28d694ad5c75442040aa4714ea56a389cce7d249bb9cefc81fa54a054cbaf",
+      "publicationSha256": "45055bdc66503a5a5f9935c69047379c62288996614d6b6f8a472604f00a8e38",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "22a28d694ad5c75442040aa4714ea56a389cce7d249bb9cefc81fa54a054cbaf",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-autonomy-wire.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T16:11:01+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "38d622bb5004fcc51c497e4dac9b88068f482749f50f1a5b6f9e54938b0da13f",
+      "publicationSha256": "652342d1928a6e64ba21c0f72726d28c8144e22e2499682e2807d598ad7dad27",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "38d622bb5004fcc51c497e4dac9b88068f482749f50f1a5b6f9e54938b0da13f",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-data-availability.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T17:02:18+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "c4e02ede95ea70e5214d3714f2e953d35c5d90fddd76081709281641f68faaa6",
+      "publicationSha256": "c4e02ede95ea70e5214d3714f2e953d35c5d90fddd76081709281641f68faaa6",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-evaluation-audit.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:39:11+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "9f0c0b56e01d5840340706dbb34c71b0a5bc218dac1d3ef89c3f84a53882905c",
+      "publicationSha256": "9f0c0b56e01d5840340706dbb34c71b0a5bc218dac1d3ef89c3f84a53882905c",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-holdings-watch.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:45:02+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "2956083ceba320ef12be174324efef750b707a17d5ee13c00ddb1997017a6532",
+      "publicationSha256": "2956083ceba320ef12be174324efef750b707a17d5ee13c00ddb1997017a6532",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "lib/research-intake.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T16:59:54+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "8e8aad8453d2dbff047d3182bddbdcfa1400bf53dc4cda4c0cc3550e2f578179",
+      "publicationSha256": "c9ea018d222a99005c8c48291743cc393f65d4ddfe6064112de9c008ca7749a7",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "8e8aad8453d2dbff047d3182bddbdcfa1400bf53dc4cda4c0cc3550e2f578179",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-kiln.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T18:56:53.481717+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "5d6a913525486f72020153d7727edf6af95321467717c57ccf51b325a364b65e",
+      "publicationSha256": "ba997b28098bf9692f1640bb5076b1ba074a06056cae4211fec86887a1ced99b",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "5d6a913525486f72020153d7727edf6af95321467717c57ccf51b325a364b65e",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-rebalance.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:43:45+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0e994383245fef1fd29c081653d12c6f9a803e15a835b5cde07c326d0dc150a2",
+      "publicationSha256": "056cde2bce15c547e88d5383f8ce709d1febbe1c3f79b9f5426b5b43d2ed1db7",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "0e994383245fef1fd29c081653d12c6f9a803e15a835b5cde07c326d0dc150a2",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-store.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T12:04:56+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d57f3c56903381705e3abaf3a1a12b06d72f7841c22d168ee13e410fa5f82d6a",
+      "publicationSha256": "f434cbe5e9418c3d103a43474d982dd84d8351cf9f60a9946f3e42026566d223",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "d57f3c56903381705e3abaf3a1a12b06d72f7841c22d168ee13e410fa5f82d6a",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "lib/research-wallet-connection.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:36:08+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "ad0cf388f8f6e6856eeda4342a2d5868e144362440b99cef0871c53343a561de",
+      "publicationSha256": "ad0cf388f8f6e6856eeda4342a2d5868e144362440b99cef0871c53343a561de",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "programs/xtxc-demo-policy/Cargo.lock",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:05:29.048922+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "db23e8ac9bab107424647e451f074dd9aed8267d56c8c4eab04205c325ea45dc",
+      "publicationSha256": "db23e8ac9bab107424647e451f074dd9aed8267d56c8c4eab04205c325ea45dc",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "programs/xtxc-demo-policy/Cargo.toml",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:04:18+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "263deab00cf3864d9f19ffb5961d787df762570952fbd1730eeb62a33084e102",
+      "publicationSha256": "263deab00cf3864d9f19ffb5961d787df762570952fbd1730eeb62a33084e102",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "programs/xtxc-demo-policy/proof/Cargo.lock",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:19:40.200451+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "4d6432d5da4a3a319f9a5cc47b44da2060c13bc7cfee667719b56b760e87bc8f",
+      "publicationSha256": "4d6432d5da4a3a319f9a5cc47b44da2060c13bc7cfee667719b56b760e87bc8f",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "programs/xtxc-demo-policy/proof/Cargo.toml",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:18:56+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "644601dee58646e56a1d364ad802f66c4f50a5a99b54dc7e63456be2c4d76a16",
+      "publicationSha256": "644601dee58646e56a1d364ad802f66c4f50a5a99b54dc7e63456be2c4d76a16",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "programs/xtxc-demo-policy/proof/src/main.rs",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:18:56+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "fb7cfa1b60551be90ffdbc2cd4435e8afb486b558b4c10e91e3088f2d14572fa",
+      "publicationSha256": "808301f004c7f1d223e491e39977e7c9c47fdb3ed4d97b2e23d1144d77643eb0",
+      "modifiedForPublication": true,
+      "initialPublicationSha256": "98e34353194deea701c4463212378f09946c7ec4ab525b9d0c8b2b165758a92e",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "programs/xtxc-demo-policy/src/lib.rs",
+      "sourceLabel": "devnet-policy-20260930",
+      "observedSourceMtime": "2026-09-29T16:07:15+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "943f32cda526cca5ed389abbe55373ece7e0fe6eefed0c6efa9a753752414974",
+      "publicationSha256": "8fb8fc6b6be8311d2d6dc4495091fc2b71faec4b5e70f18c131611d2ac19f420",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "943f32cda526cca5ed389abbe55373ece7e0fe6eefed0c6efa9a753752414974",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "scripts/research-agent-evidence.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:03:18+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "248a7fb8509784a19594df1187a6d1c31c553040749419bc85a10ee15f436cb2",
+      "publicationSha256": "801904975481d3cccd7c5e2d734ca8615e5d25136310e2038ce697aa65a4e80c",
+      "modifiedForPublication": true
+    },
+    {
+      "path": "scripts/research-agent-worker.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T18:56:53.482717+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "718abd384ea5724a5fe7a5a6c55bac39cc50648b5921ab73f6a0f6f48c460e55",
+      "publicationSha256": "a2f45d8f987d88c3a82a93e7328e53402abc5e851202c8cbf901eb7dcbec2252",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "718abd384ea5724a5fe7a5a6c55bac39cc50648b5921ab73f6a0f6f48c460e55",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "scripts/research-autonomy-service.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T20:06:38.373778+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "3f4a904572e85d78f78adeb60e083c9baafd1d6a4612e66fe094f957fb013314",
+      "publicationSha256": "3f4a904572e85d78f78adeb60e083c9baafd1d6a4612e66fe094f957fb013314",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "scripts/research-wallet-service.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:36:08+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d3f5e33cb6e8c0c5652149462380e840638a7e38e25048e990a3f272dbab7c72",
+      "publicationSha256": "d3f5e33cb6e8c0c5652149462380e840638a7e38e25048e990a3f272dbab7c72",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-agent.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:47:46+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "1c2b9369a6d7ec6abec69fd601f5a3d35b13ffa3168876a795746698ab942826",
+      "publicationSha256": "bc377cb6da2ba89838c3354ea2308f0b9f11a43984d0b3aa5d142c2989e25803",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "1c2b9369a6d7ec6abec69fd601f5a3d35b13ffa3168876a795746698ab942826",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "tests/research-anchor.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:30:10+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "e30aa688d3e21f5b57d715c9669c5697f7ccc40e5ccbbf5783548e618d00a0dc",
+      "publicationSha256": "e30aa688d3e21f5b57d715c9669c5697f7ccc40e5ccbbf5783548e618d00a0dc",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-autonomy-control.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:47:46+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "77ad65732138af0398b190b2a8b159ee0fab6a8e84ca43df3d0961543376a66e",
+      "publicationSha256": "5ab088831a89cdaf352164b733ec923835c874cb00fba482825db0171a16714a",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "77ad65732138af0398b190b2a8b159ee0fab6a8e84ca43df3d0961543376a66e",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "tests/research-autonomy-devnet.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T17:07:31+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d324dbfe514dcaeeaaa4e2f84a6ef773b77b1f57e0549dd3c368a8d0ddb0b678",
+      "publicationSha256": "d324dbfe514dcaeeaaa4e2f84a6ef773b77b1f57e0549dd3c368a8d0ddb0b678",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-autonomy-privy.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:23:49+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "0258eeff042400096442e585c9ccf3468476aa8e608d98a91105b03a7702a9b8",
+      "publicationSha256": "0258eeff042400096442e585c9ccf3468476aa8e608d98a91105b03a7702a9b8",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-autonomy.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T20:02:53+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "cf37f5dc3c0ae29e50e7ff6db08587c5216442c2973b140284ae2ca0011c707e",
+      "publicationSha256": "3de2f2303e39f4107d86a496c9b306308f2833f3a04d1488a82d0ad00e2ab70e",
+      "modifiedForPublication": false,
+      "initialPublicationSha256": "cf37f5dc3c0ae29e50e7ff6db08587c5216442c2973b140284ae2ca0011c707e",
+      "integrationRevision": "2026-09-30: actual PR07 bridge, full research coverage and exact buy/sell policy v2"
+    },
+    {
+      "path": "tests/research-data-availability.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T17:03:18+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "723b2a04890bcdc28860ecf287657efcd5d903b7f4fb45f53320ffd4622c924c",
+      "publicationSha256": "723b2a04890bcdc28860ecf287657efcd5d903b7f4fb45f53320ffd4622c924c",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-intake.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T16:59:54+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "d4d56e591930b949c96122b3749c9921fccb0b1ebb1c35f93cca8cffad1b46a8",
+      "publicationSha256": "d4d56e591930b949c96122b3749c9921fccb0b1ebb1c35f93cca8cffad1b46a8",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-rebalance.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T13:36:57+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "a62145d5fdf76e1f18ce33498c422b6465cd68b549c9f753ad4537646496ba07",
+      "publicationSha256": "a62145d5fdf76e1f18ce33498c422b6465cd68b549c9f753ad4537646496ba07",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-store.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T11:58:28+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "20d11c11e0d120ba594530a3430b786710cdf8c0ed716252bca9fc6ff87db845",
+      "publicationSha256": "20d11c11e0d120ba594530a3430b786710cdf8c0ed716252bca9fc6ff87db845",
+      "modifiedForPublication": false
+    },
+    {
+      "path": "tests/research-wallet-connection.test.mjs",
+      "sourceLabel": "deployed-agent-release-20260930-v11",
+      "observedSourceMtime": "2026-09-29T19:23:49+00:00",
+      "mtimeInEventWindow": true,
+      "sourceSha256": "33180e4b74c01a6514a6c2cb7d9dcd95d7d827b326a0c7abe87b5625358cc0c5",
+      "publicationSha256": "33180e4b74c01a6514a6c2cb7d9dcd95d7d827b326a0c7abe87b5625358cc0c5",
+      "modifiedForPublication": false
+    }
+  ]
+}

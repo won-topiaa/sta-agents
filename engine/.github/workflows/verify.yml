@@ -1,0 +1,36 @@
+name: Reviewable boundaries
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  agent-and-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: pip install -r requirements.txt
+      - run: npm run verify:bundle
+      - name: JavaScript tests without network access
+        run: sudo unshare -n -- "$(command -v node)" --test tests/*.test.mjs
+      - name: Research and local API tests without provider access
+        run: |
+          sudo unshare -n -- env PATH="$PATH" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 XTXC_CATALOG_REPORT="$PWD/fixtures/catalog-observation.json" XTXC_DATA_DIR="$RUNNER_TEMP/no-live-data" XTXC_KILN_OFFLINE=1 "$(command -v python)" -m pytest -q
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --locked --manifest-path programs/xtxc-demo-policy/Cargo.toml
