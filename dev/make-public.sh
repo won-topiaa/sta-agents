@@ -18,6 +18,7 @@ done
 rsync -a --delete "$SRC/web/app/api/v1/stocklana/research/" "$OUT/web/app/api/v1/stocklana/research/"
 for f in test.sh sync-shared.mjs e2e-bsc.mjs run-dev.sh diag_value.py make-public.sh; do cp "$SRC/dev/$f" "$OUT/dev/$f"; done
 cp "$SRC/PUBLIC_README.md" "$OUT/README.md"
+cp "$SRC/PUBLIC_NOTICE.md" "$OUT/NOTICE.md"
 printf 'node_modules\n__pycache__\n.pytest_cache\n*.sqlite*\n.env*\nsecrets/\n' > "$OUT/.gitignore"
 # Refuse to produce a snapshot that contains a credential: the actual values are read from the local key files at run
 # time (never written here), plus generic credential shapes.

@@ -156,3 +156,16 @@ New in this project:
 - the BNB gateway
 
 Market data and execution routes belong to their providers.
+
+## Team
+
+Built by members of **Blackstone**, a university blockchain collective.
+
+| Name | Responsibility | University |
+| --- | --- | --- |
+| 조민석 | Backend | Seoul National University |
+| 양주원 | Frontend | Chung-Ang University |
+| 허운 | Smart contracts | Chung-Ang University |
+| 제갈민 | Data analysis | Sungkyul University |
+
+See [NOTICE.md](NOTICE.md) for the source, data and dependency boundaries.
