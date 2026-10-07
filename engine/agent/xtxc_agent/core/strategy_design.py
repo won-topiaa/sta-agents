@@ -29,7 +29,11 @@ DESIGN_SYSTEM = (
     "\"design\": design}}. name and idea MUST NOT contain any digit. "
     "A design is {{\"score\": [term, ...] (one to four), \"filters\": [filter, ...] (zero to three), \"top_n\": integer "
     "1..20 or null, \"weighting\": \"equal\"|\"rank\"|\"inverse_volatility\", \"risk_off\": null or {{\"ticker\": \"QQQ\"|\"SPY\", "
-    "\"signal\": \"trend\"|\"momentum\"|\"drawdown\", \"lookback\": days, \"below\": number, \"exposure\": 0..1}}}}. "
+    "\"signal\": \"trend\"|\"momentum\"|\"drawdown\", \"lookback\": days, \"below\": number, \"exposure\": 0..1}}}}, plus "
+    "optional \"hold_buffer\": 1..4 (a held stock stays while it ranks within that many times top_n; fewer trades), "
+    "\"exit\": {{\"stop_loss\": 0.02..0.5 or null, \"trailing_stop\": 0.02..0.5 or null}} (sell a holding that falls that far "
+    "below its entry / its highest close since entry), \"breadth_off\": {{\"lookback\": days, \"below\": 0.05..0.95, "
+    "\"exposure\": 0..1}} (when fewer than 'below' of the stocks trade above their average, invest only 'exposure'). "
     "A term is {{\"signal\": s, \"lookback\": days 5..252, \"skip\": days 0..63 (momentum only), \"fast\": days "
     "2..lookback-1 (ma_cross only, required there), \"weight\": -3..3, not 0}}. "
     "A filter is {{\"signal\": s, \"lookback\": days, \"rule\": \"above\"|\"below\"|\"top_fraction\"|\"bottom_fraction\", "
@@ -41,7 +45,10 @@ DESIGN_SYSTEM = (
     "deviations, the Bollinger band position; -2 is the lower band), ma_cross (fast-day average vs lookback-day average, "
     "minus one; above 0 is a golden cross), volume_surge (20-day average volume vs the 120-day average, minus one; "
     "filter value -1..5), dollar_volume (log10 of the 20-day average dollars traded a day, 7 is $10M; filter value 3..12); "
-    "write lookback 5 for the two volume signals. Company fundamentals (as of each date, from SEC filings; write lookback 5): "
+    "rel_strength (return over lookback minus the Nasdaq-100's, above 0 beats the market), money_flow (20-day dollars "
+    "traded on up days minus down days over all dollars traded, -1..1), sector_momentum (the sector's median three-month "
+    "return), sector_money_flow (money moving into the whole sector, -1..1); "
+    "write lookback 5 for volume_surge, dollar_volume, money_flow and the sector signals. Company fundamentals (as of each date, from SEC filings; write lookback 5): "
     "earnings_yield (earnings / market value, higher is cheaper), book_to_price (equity / market value, higher is cheaper), "
     "fcf_yield (free cash flow / market value), roe (earnings / equity), debt_to_equity (long-term debt / equity, lower is "
     "safer; filter value 0..20), revenue_growth (twelve-month sales growth; filter value -1..5), dividend_yield "
@@ -184,6 +191,17 @@ def describe(design: dict) -> dict:
     ro = d["risk_off"]
     out["risk_off"] = (tr("dz.risk_off", t=ro["ticker"], sig=_signal_text(ro), v=f"{ro['below']:+.0%}", e=f"{ro['exposure']:.0%}")
                        if ro else tr("word.none"))
+    # Optional parts: present only when the design uses them.
+    if d.get("breadth_off"):
+        bo = d["breadth_off"]
+        out["breadth"] = tr("dz.breadth", b=f"{bo['below']:.0%}", span=_span(bo["lookback"]), e=f"{bo['exposure']:.0%}")
+    if d.get("hold_buffer"):
+        out["hold"] = tr("dz.hold", x=f"{d['hold_buffer']:g}")
+    ex = d.get("exit")
+    if ex:
+        parts = ([tr("dz.exit.stop", v=f"{ex['stop_loss']:.0%}")] if ex.get("stop_loss") else []) + \
+                ([tr("dz.exit.trail", v=f"{ex['trailing_stop']:.0%}")] if ex.get("trailing_stop") else [])
+        out["exit"] = i18n.join(parts)
     return out
 
 

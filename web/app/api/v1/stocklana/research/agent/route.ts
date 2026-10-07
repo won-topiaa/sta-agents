@@ -1,6 +1,7 @@
 import { requireRequesterSession, RequesterAuthError } from '@/lib/requester-auth';
 import { researchPrincipal, allowedStocksFor, isBscPrincipal, bscWallet } from '@/lib/research-principal';
-import { gateway } from '@/lib/bnb-gateway';
+import { gateway, binanceTokenPrice } from '@/lib/bnb-gateway';
+import { createSellPlan, approveProposed, strategyContracts, holdingsFor, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
 import { checkSent } from '@/lib/bsc-execution.mjs';
 import { bscProduct } from '@/lib/bsc-research-universe.mjs';
 import { BSC_USDT } from '@/lib/binance-web3.mjs';
@@ -36,11 +37,13 @@ export async function POST(request:Request){
       const id=str(b.planId),i=index(b.index),user=bscWallet(address);
       if(b.operation==='BSC_PREPARE'){
         const {pending}=await gateway<{pending:string}>('GET',`/v1/nonce?address=${user}`);
-        const {plan}=s.assertBscPreparable(address,id,i,pending),leg=plan.legs[i],product=bscProduct(leg.instrument);
-        if(!product)reject(`${leg.instrument} is not tradable on BNB Chain.`,409);
-        if(leg.side&&leg.side!=='BUY')reject('Only purchases are available on BNB Chain yet.',409);
+        const {plan}=s.assertBscPreparable(address,id,i,pending),leg=plan.legs[i],sell=leg.side==='SELL';
+        if(plan.wallet==='AGENTIC')reject('This sale runs in your Agentic Wallet. Use its controls.',409);
+        // A sale spends the exact token the plan names (validated against the listed contracts when it was made).
+        const product=sell?{contract:String(leg.productContract),symbol:leg.productSymbol}:bscProduct(leg.instrument);
+        if(!product?.contract)reject(`${leg.instrument} is not tradable on BNB Chain.`,409);
         const slippage=b.slippagePercent==null?'1':String(b.slippagePercent);
-        const prepared=await gateway<{step:'APPROVE'|'SWAP';tx:Record<string,string>;quote?:unknown;simulation?:unknown}>('POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:product.contract,amount:leg.inputAtoms,slippagePercent:slippage},60000);
+        const prepared=await gateway<{step:'APPROVE'|'SWAP';tx:Record<string,string>;quote?:unknown;simulation?:unknown}>('POST','/v1/prepare',sell?{user,fromToken:product.contract,toToken:BSC_USDT,amount:leg.inputAtoms,slippagePercent:slippage}:{user,fromToken:BSC_USDT,toToken:product.contract,amount:leg.inputAtoms,slippagePercent:slippage},60000);
         return Response.json({prepared:s.bscPrepared(address,id,i,prepared.step,prepared,pending),product},{headers});
       }
       const step=s.bscStep(address,id,i);
@@ -56,6 +59,20 @@ export async function POST(request:Request){
       const observed=await gateway<{receipt:{status:string;blockNumber:number}|null}>('GET',`/v1/tx?hash=${step.doc.sent.hash}`);
       return Response.json({step:s.bscReceipt(address,id,i,observed.receipt)},{headers});
     }
+    // BNB Chain holdings of this strategy's stock tokens, read on chain from the wallet that would sell them.
+    if(b.operation==='BSC_HOLDINGS'||b.operation==='BSC_CLOSE'){
+      if(!bsc)reject('Selling here is available for BNB Chain wallets.',409);
+      const strategy=s.get(s.owner(address),str(b.strategyId)),wallet=saleWallet(s,address,strategy);
+      const holdings=holdingsFor(strategy,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
+      if(b.operation==='BSC_HOLDINGS'){
+        const priced=await Promise.all(holdings.map(async h=>({...h,priceUsd:(await binanceTokenPrice(h.contract).catch(()=>null))?.priceUsd??null})));
+        return Response.json({wallet:wallet.kind,address:wallet.address,holdings:priced},{headers});
+      }
+      const only=Array.isArray(b.instruments)?b.instruments.map(String):null;
+      const plan=createSellPlan(s,address,strategy.id,{kind:'CLOSE',wallet:wallet.kind,holdings:holdings.filter(h=>!only||only.includes(h.instrument)).map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw}))});
+      return Response.json({plan},{headers});
+    }
+    if(b.operation==='APPROVE_PROPOSED')return Response.json({plan:approveProposed(s,address,str(b.planId))},{headers});
     if(b.operation==='RUN'){const runId=s.enqueue(address,str(b.strategyId),b.goal,str(b.requestId));return Response.json({runId},{headers});}
     if(b.operation==='CANCEL'){s.cancel(address,str(b.runId));return Response.json({cancelled:true},{headers});}
     if(b.operation==='REVIEW_REBALANCE'){
@@ -75,11 +92,18 @@ export async function POST(request:Request){
       return Response.json({draft:s.saveRebalanceDraft(address,runId,candidateId,reportHash,allocation)},{headers});
     }
     if(b.operation==='APPROVE'){
+      // BNB Chain rebalance: holdings of this strategy's stocks that the approved design no longer holds are sold first.
+      let options={};
+      if(bsc&&b.sellOutside===true){
+        const {strategy}=s.reviewCandidate(address,str(b.runId),str(b.candidateId),str(b.reportHash)),wallet=saleWallet(s,address,strategy);
+        const held=holdingsFor(strategy,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
+        options={sells:held.map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw})),wallet:wallet.kind};
+      }
       // Independent strategy approvals never wait on another strategy's orders.
       const plan=await s.approveReplacingUnused(address,str(b.runId),str(b.candidateId),str(b.reportHash),b.draftId==null?null:str(b.draftId),async(rawOwner:string,id:string)=>{
         try{return (await autonomyRequest(rawOwner,'DISCARD_UNSIGNED_DRAFT',{id})).execution;}
         catch{reject('The previous wallet approval is already signed or active. Stop it before approving another plan.',409);}
-      });
+      },options);
       return Response.json({plan},{headers});
     }
     if(b.operation==='MONITOR')return Response.json({monitor:s.monitor(address,str(b.strategyId),b.goal,b.enabled===true)},{headers});

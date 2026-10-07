@@ -8,6 +8,7 @@ import {approvalText} from './research-agent-profile';
 // BNB Smart Chain execution for an approved plan. Personal wallet: every approval and swap is a
 // separate signature over a transaction the server already checked and dry-ran. Agentic Wallet:
 // the agent runs the approved legs within the limits the owner set in the Binance app.
+const tokenUnits=(atoms:string,decimals=18)=>{try{return (Number(BigInt(atoms))/10**decimals).toLocaleString('en-US',{maximumSignificantDigits:6});}catch{return '—';}};
 const usdt=(atoms:string)=>`${(Number(BigInt(atoms)/10n**12n)/1e6).toLocaleString('en-US',{maximumFractionDigits:2})} USDT`;
 const phaseText:Record<string,string>={READY:'Ready',APPROVE_PREPARED:'Approval ready to sign',APPROVE_SENT:'Approval confirming',ALLOWANCE_READY:'Approved · swap next',
   SWAP_PREPARED:'Swap ready to sign',SUBMITTED:'Confirming on BNB Chain',RECONCILED:'Purchased',FAILED:'Reverted · nothing bought',UNKNOWN:'Needs a check',
@@ -54,18 +55,20 @@ export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:Ag
   const planLive=['APPROVED','PARTIAL','UNKNOWN'].includes(plan.status);
   return <details open className="bsc-exec"><summary>Trade with your BNB Chain wallet</summary>
     {!planLive&&plan.status!=='COMPLETE'&&<p className="ra-caption">This plan {plan.status==='REVOKED'?'was stopped':'has expired'}, so its remaining trades can no longer be sent. Approve a strategy again under Results to get a new plan.</p>}
-    {planLive&&<ol className="bsc-how"><li><b>Get a quote.</b> We check the route and dry-run it on BNB Chain.</li><li><b>Approve USDT.</b> Your wallet allows exactly this amount, nothing more.</li><li><b>Confirm the swap.</b> Your wallet signs the checked transaction.</li></ol>}
+    {planLive&&<ol className="bsc-how"><li><b>Get a quote.</b> We check the route and dry-run it on BNB Chain.</li><li><b>Approve the token you pay with.</b> USDT for a purchase, the stock token for a sale. Your wallet allows exactly this amount, nothing more.</li><li><b>Confirm the swap.</b> Your wallet signs the checked transaction.</li></ol>}
     <div className="ra-trade-legs">{plan.legs.map((leg,i)=>{
       const step=stepOf(i),phase=step?.phase??'READY',p=pending[i],prevDone=i===0||stepOf(i-1)?.phase==='RECONCILED';
       const canPrepare=prevDone&&['READY','ALLOWANCE_READY','FAILED','APPROVE_PREPARED','SWAP_PREPARED'].includes(phase)&&['APPROVED','PARTIAL'].includes(plan.status);
       const receipt=(step as {receipts?:{hash:string;kind:string;status:string}[]}|undefined)?.receipts?.filter(r=>r.kind==='SWAP').at(-1);
       const stage=stageOf(phase),started=Boolean(p)||!['READY','FAILED'].includes(phase);
-      return <div key={i} className="bsc-leg"><span><small className="bsc-leg-count">Trade {i+1} of {plan.legs.length}</small><b>Buy {leg.instrument}</b><small>{usdt(leg.inputAtoms)} · {phaseText[phase]??phase}</small>
-          <ol className="bsc-track" aria-label={`Trade ${i+1} progress`}>{['Approve USDT','Swap','Confirmed'].map((t,k)=><li key={t} className={k<stage?'done':started&&k===stage?'now':''}>{t}</li>)}</ol>
-          {p&&<small>{p.kind==='APPROVE'?`Lets the Binance router spend exactly ${usdt(leg.inputAtoms)}`:`Route: ${p.quote?.vendor??'Binance'} · dry run passed`}</small>}
+      // A sale spends the stock token (whole holding) for USDT; a purchase spends USDT.
+      const sell=leg.side==='SELL',paying=sell?leg.productSymbol??'token':'USDT',amount=sell?`${tokenUnits(leg.inputAtoms,leg.inputDecimals??18)} ${leg.productSymbol??leg.instrument}`:usdt(leg.inputAtoms);
+      return <div key={i} className="bsc-leg"><span><small className="bsc-leg-count">Trade {i+1} of {plan.legs.length}</small><b>{sell?'Sell':'Buy'} {leg.instrument}</b><small>{amount} · {sell&&phase==='RECONCILED'?'Sold':phaseText[phase]??phase}</small>
+          <ol className="bsc-track" aria-label={`Trade ${i+1} progress`}>{[`Approve ${paying}`,'Swap','Confirmed'].map((t,k)=><li key={t} className={k<stage?'done':started&&k===stage?'now':''}>{t}</li>)}</ol>
+          {p&&<small>{p.kind==='APPROVE'?`Lets the Binance router spend exactly ${amount}`:`Route: ${p.quote?.vendor??'Binance'} · dry run passed`}</small>}
           {receipt&&<a href={`https://bscscan.com/tx/${receipt.hash}`} target="_blank" rel="noreferrer">View on BscScan ↗</a>}
           {refused?.index===i&&refused.quote&&<RefusedQuote quote={refused.quote} code={refused.code} message={agent.error}/>}</span>
-        {phase==='RECONCILED'?<span className="bsc-done">Purchased</span>:p?<button className="ra-primary" disabled={busy!==null} onClick={()=>void sign(i)}>{busy===i?'Waiting for wallet…':p.kind==='APPROVE'?'Approve USDT in wallet':'Confirm swap in wallet'}</button>
+        {phase==='RECONCILED'?<span className="bsc-done">{sell?'Sold':'Purchased'}</span>:p?<button className="ra-primary" disabled={busy!==null} onClick={()=>void sign(i)}>{busy===i?'Waiting for wallet…':p.kind==='APPROVE'?`Approve ${paying} in wallet`:'Confirm swap in wallet'}</button>
           :<span className="bsc-action"><button className={canPrepare?'ra-primary':''} disabled={busy!==null||!canPrepare} onClick={()=>void prepare(i)}>{busy===i?'Checking…':phase==='ALLOWANCE_READY'?'Get swap quote':'Get quote'}</button>{!prevDone&&<small>After trade {i}</small>}</span>}
       </div>;})}</div>
     {/* Agent request errors (e.g. no gas) are shown once, below the plans. */}
@@ -113,10 +116,30 @@ export function AgenticPanel({plan,wallet}:{plan:AgentPlan;wallet:string;onRefre
     <header><div><h4>{run?`Agent ${run.status.toLowerCase()}`:'Let your agent trade within limits'}</h4><p>Binance Agentic Wallet · Binance enforces the limits you set in its app.</p></div></header>
     <AgenticConnect agentic={agentic}/>
     {agentic.connected&&<>
-      <p className="ra-caption">This plan buys {usdt((BigInt(plan.budgetAtoms)-BigInt(plan.cashAtoms)).toString())} in {plan.legs.length} orders, one at a time.</p>
+      <p className="ra-caption">{(()=>{const sales=plan.legs.filter(l=>l.side==='SELL').length,buys=plan.legs.length-sales;
+        return [sales?`This plan sells ${sales} holding${sales===1?'':'s'} for USDT`:'',buys?`${sales?'then buys':'This plan buys'} ${usdt((BigInt(plan.budgetAtoms)-BigInt(plan.cashAtoms)).toString())} of stocks`:''].filter(Boolean).join(', ')+`, in ${plan.legs.length} order${plan.legs.length===1?'':'s'}, one at a time.`;})()}</p>
       {!run&&<button className="ra-primary" disabled={agentic.busy||plan.status!=='APPROVED'} onClick={()=>void agentic.post({operation:'START',planId:plan.id})}>Start agent</button>}
       {run?.status==='RUNNING'&&<button className="ra-text" disabled={agentic.busy} onClick={()=>void agentic.post({operation:'STOP',planId:plan.id})}>Stop remaining trades</button>}
       {run&&run.status!=='RUNNING'&&run.reason&&<p className="ra-caption">{run.reason}</p>}
     </>}
+  </section>;
+}
+
+// The owner's tokens of this strategy's stocks, read on BNB Chain when asked. Selling creates a sale plan: the owner
+// then signs each sale (own wallet) or starts the agent (Agentic Wallet).
+type Held={instrument:string;platform:string;contract:string;symbol:string;decimals:number;raw:string;priceUsd:number|null};
+export function BscHoldings({agent,strategyId}:{agent:AgentController;strategyId:string}){
+  const [held,setHeld]=useState<{wallet:'PERSONAL'|'AGENTIC';holdings:Held[]}|null>(null);
+  async function load(){const b=await agent.act({operation:'BSC_HOLDINGS',strategyId});if(b)setHeld(b as {wallet:'PERSONAL'|'AGENTIC';holdings:Held[]});}
+  async function sell(instruments?:string[]){const b=await agent.act({operation:'BSC_CLOSE',strategyId,...(instruments?{instruments}:{})});if(b)setHeld(null);}
+  const value=(h:Held)=>{const n=Number(BigInt(h.raw))/10**h.decimals;return h.priceUsd?` ≈ $${(n*h.priceUsd).toLocaleString('en-US',{maximumFractionDigits:2})}`:'';};
+  return <section className="bsc-holdings" aria-label="Your holdings in this strategy">
+    <div className="bsc-holdings-head"><div><b>Your holdings in this strategy</b><small>{held?(held.wallet==='AGENTIC'?'In your Agentic Wallet':'In your wallet')+' · read on BNB Chain':'Read on BNB Chain when you ask.'}</small></div>
+      <button disabled={agent.busy} onClick={()=>void load()}>{held?'Refresh':'Check holdings'}</button></div>
+    {held&&(held.holdings.length?<>
+      <ul>{held.holdings.map(h=><li key={h.contract}><span><b>{h.instrument}</b><small>{tokenUnits(h.raw,h.decimals)} {h.symbol}{value(h)}</small></span><button disabled={agent.busy} onClick={()=>void sell([h.instrument])}>Sell</button></li>)}</ul>
+      <div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={()=>void sell()}>Sell all</button>
+        <small className="ra-caption">Creates a sale plan below. {held.wallet==='AGENTIC'?'Start it to let your agent sell within your Binance limits.':'You confirm each sale in your wallet.'}</small></div></>
+      :<p className="ra-caption">This wallet holds none of this strategy&apos;s stock tokens.</p>)}
   </section>;
 }

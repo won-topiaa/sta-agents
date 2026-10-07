@@ -11,6 +11,9 @@ export function reject(message:string,status?:number):never;
 export function validateGoal(value:unknown):ResearchGoal;
 export function briefHash(value:unknown):string;
 export function budgetAtoms(value:string,decimals?:number):string;
+export type SaleHolding={instrument:string;contract:string;raw:string};
+export type SaleLeg={side:'SELL';instrument:string;productContract:string;productSymbol:string;platform:string;inputAtoms:string;inputDecimals:number};
+export function sellLegs(strategy:ResearchStrategy,holdings:SaleHolding[]):SaleLeg[];
 export class AgentStore extends ResearchStore {
   db:DatabaseSync;
   owner(address:string):string;
@@ -23,8 +26,8 @@ export class AgentStore extends ResearchStore {
   cancel(address:string,id:string):void;
   reviewCandidate(address:string,runId:string,candidateId:string,reportHash:string):{strategy:ResearchStrategy;candidate:ResearchCandidate;input:unknown};
   saveRebalanceDraft(address:string,runId:string,candidateId:string,reportHash:string,allocation:unknown):RebalanceDraft;
-  approve(address:string,runId:string,candidateId:string,reportHash:string,draftId?:string|null):AgentPlan;
-  approveReplacingUnused(address:string,runId:string,candidateId:string,reportHash:string,draftId:string|null,discardDraft:(owner:string,id:string)=>Promise<unknown>):Promise<AgentPlan>;
+  approve(address:string,runId:string,candidateId:string,reportHash:string,draftId?:string|null,options?:{sells?:SaleHolding[]|null;wallet?:'PERSONAL'|'AGENTIC'}):AgentPlan;
+  approveReplacingUnused(address:string,runId:string,candidateId:string,reportHash:string,draftId:string|null,discardDraft:(owner:string,id:string)=>Promise<unknown>,options?:{sells?:SaleHolding[]|null;wallet?:'PERSONAL'|'AGENTIC'}):Promise<AgentPlan>;
   plan(address:string,id:string):AgentPlan;
   claimAutonomy(address:string,id:string,policyId:string):void;
   syncAutonomy(address:string,id:string,execution:unknown):void;

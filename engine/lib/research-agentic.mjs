@@ -27,6 +27,8 @@ export function startAgentic(store,address,planId,quotaLeftUsd){
   store.assertAutonomyAllowed(address,p);   // the agent's CURRENT setting must allow trading on its own
   if(!b||b.owner!==owner)reject('Connect your Agentic Wallet first.',409);
   if(p.status!=='APPROVED'||Date.now()>p.expiresAt)reject('Approve a current plan first.',409);
+  // Tokens to sell must be in the Agentic Wallet; holdings in the owner's own wallet are signed there, step by step.
+  if(p.wallet==='PERSONAL'&&p.legs.some(l=>l.side==='SELL'))reject('These holdings are in your own wallet. Sign each sale in the trade steps.',409);
   if(store.db.prepare('SELECT 1 FROM agent_steps WHERE plan_id=?').get(planId))reject('This plan already has trades. Use a fresh approval.',409);
   const total=usd18(p.budgetAtoms)-usd18(p.cashAtoms);
   if(!(Number(quotaLeftUsd)>=total))reject(`Your Agentic Wallet has $${Number(quotaLeftUsd).toFixed(2)} of daily limit left; this plan needs $${total.toFixed(2)}.`,409);
@@ -64,15 +66,17 @@ export async function agenticTick(store,gw){
     const done=store.db.prepare("SELECT count(*) n FROM agent_steps WHERE plan_id=? AND phase='RECONCILED'").get(run.plan_id).n;
     store.db.prepare('UPDATE agent_plans SET status=? WHERE id=?').run(done===plan.legs.length?'COMPLETE':done?'PARTIAL':'APPROVED',run.plan_id);
     if(done===plan.legs.length){finishRun(store,run.plan_id,'COMPLETE');store.event(run.owner,run.strategy,'AGENTIC_COMPLETE',{planId:run.plan_id});continue;}
-    const index=done,leg=plan.legs[index],product=bscProduct(leg.instrument);
-    if(!product){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue;}
+    // A sale names the exact token held (Ondo or bStock); a purchase buys the listed product.
+    const index=done,leg=plan.legs[index],sell=leg.side==='SELL',product=sell?{contract:leg.productContract,symbol:leg.productSymbol,platform:leg.platform}:bscProduct(leg.instrument);
+    if(!product?.contract){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue;}
     let quota;try{quota=await gw('GET','/v1/agentic/quota');}catch{continue;}
     const left=Number(quota?.quotaLeft??quota?.leftQuota??quota?.left??NaN);
-    if(Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue;}
+    // A purchase leg's USD value is known; a sale's is not until it fills, so Binance's own limit check covers it.
+    if(!sell&&Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue;}
     const doc={leg,product,mode:'AGENTIC',wallet:run.address,at:Date.now()};
     setStep(store,run.plan_id,index,'AGENTIC_SUBMITTING',doc);   // durable before the order exists
     try{
-      const r=await gw('POST','/v1/agentic/swap',{fromToken:USDT,toToken:product.contract,fromTokenQty:decimal18(leg.inputAtoms)});
+      const r=await gw('POST','/v1/agentic/swap',sell?{fromToken:product.contract,toToken:USDT,fromTokenQty:decimal18(leg.inputAtoms)}:{fromToken:USDT,toToken:product.contract,fromTokenQty:decimal18(leg.inputAtoms)});
       const orderId=r?.orderId??r?.id??r?.order?.orderId;
       if(!orderId){setStep(store,run.plan_id,index,'UNKNOWN',{...doc,reason:'NO_ORDER_ID',reply:r});finishRun(store,run.plan_id,'ATTENTION','NO_ORDER_ID');continue;}
       setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(orderId)});

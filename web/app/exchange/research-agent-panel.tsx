@@ -1,11 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SolanaSignTransactionFeature } from '@solana/wallet-standard-features';
-import { defaultGoal, type ResearchGoal, type AgentReply, type AgentRun, type AgentPlan, type ResearchCandidate, type RebalanceDraft, type ResearchLeg } from '@/lib/research-agent-types';
+import { defaultGoal, type ResearchGoal, type AgentReply, type AgentRun, type AgentPlan, type ResearchCandidate, type RebalanceDraft, type ResearchLeg, type ExitReason } from '@/lib/research-agent-types';
 import {ResearchAnchor} from './research-anchor-panel';
 import {ResearchAutonomyPanel} from './research-autonomy-panel';
 import {AgentChecks} from './research-agent-profile';
-import {BscPlanExecution,AgenticPanel} from './research-bsc-execution';
+import {BscPlanExecution,AgenticPanel,BscHoldings} from './research-bsc-execution';
 import type { ResearchStrategy } from '@/lib/research-workspace';
 import { assertPreparedReview, wireBytes, saveAttempt, ATTEMPT_EVENT, type PreparedTrade } from '@/lib/stock-trade-review';
 import { sameTransactionMessage } from '@/lib/stock-order-state';
@@ -22,7 +22,7 @@ const labels:Record<string,string>={QUEUED:'Queued',RUNNING:'Researching',WAITIN
 const signed=(bps:number)=>`${bps>0?'+':bps<0?'−':''}${pct(Math.abs(bps))}`;
 const drop=(bps:number)=>`−${pct(Math.abs(bps))}`;
 export const horizonText=(days:number)=>({30:'1-month',90:'3-month',180:'6-month',365:'1-year'} as Record<number,string>)[days]??`${days}-day`;
-export const planStatusText:Record<string,string>={APPROVED:'Ready to trade',PARTIAL:'In progress',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
+export const planStatusText:Record<string,string>={PROPOSED:'Needs your approval',APPROVED:'Ready to trade',PARTIAL:'In progress',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
 export const runActive=active;
 
 export type RefusalQuote={vendor?:string;fromAmount:string;fromSymbol?:string;toTokenAmount:string;toSymbol?:string;toDecimals?:number;priceImpactPercent?:string|number;quotedAt?:string|number};
@@ -73,8 +73,8 @@ function Curve({candidate}:{candidate:ResearchCandidate}){
 }
 // The engine's own plain-English description of the tested design (report field howItPicks).
 function HowItPicks({candidate}:{candidate:ResearchCandidate}){
-  const how=(candidate as ResearchCandidate&{howItPicks?:Partial<Record<'score'|'filters'|'pick'|'weighting'|'risk_off',string>>}).howItPicks;
-  const rows=how?([['Ranks stocks by','score'],['Filters','filters'],['Buys','pick'],['Splits the money','weighting'],['Market guard','risk_off']] as const).filter(([,k])=>how[k]&&how[k]!=='none'):[];
+  const how=(candidate as ResearchCandidate&{howItPicks?:Partial<Record<'score'|'filters'|'pick'|'weighting'|'risk_off'|'breadth'|'hold'|'exit',string>>}).howItPicks;
+  const rows=how?([['Ranks stocks by','score'],['Filters','filters'],['Buys','pick'],['Splits the money','weighting'],['Market guard','risk_off'],['Breadth guard','breadth'],['Keeps','hold'],['Exits','exit']] as const).filter(([,k])=>how[k]&&how[k]!=='none'):[];
   if(!rows.length)return null;
   return <dl className="ra-how">{rows.map(([label,k])=><div key={k}><dt>{label}</dt><dd>{how![k]}</dd></div>)}</dl>;
 }
@@ -97,12 +97,14 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
   const wallet=agent.data?.owner.replace(/^solana:/,'');
   const bsc=Boolean(agent.data?.owner.startsWith('eip155:56:')),asset=bsc?'USDT':'USDC';
   const [draft,setDraft]=useState<RebalanceDraft|null>(null);
-  const [selectedCandidate,setSelectedCandidate]=useState<string|null>(null);
-  useEffect(()=>{setDraft(null);setSelectedCandidate(null);},[run?.id,agent.data?.owner]);
+  const [selectedCandidate,setSelectedCandidate]=useState<string|null>(null),[sellOutside,setSellOutside]=useState(false);
+  useEffect(()=>{setDraft(null);setSelectedCandidate(null);setSellOutside(false);},[run?.id,agent.data?.owner]);
   if(!run)return <div className="ra-empty"><h3>Set a target. Test the possibilities.</h3><p>Your agent designs up to three strategies and tests each one on past prices, after trading costs. The results appear here.</p></div>;
   if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3>{active(run)&&<div className="ra-progress" role="progressbar" aria-label="Research in progress"><span/></div>}<p>{run.error??'Designing strategies, then testing each one on past prices after costs. This usually takes about a minute.'}</p><small>Started {new Date(run.createdAt).toLocaleString()}</small></div>;
   const r=run.result,h=horizonText(run.goal.horizonDays),fits=r.candidates.filter(c=>c.verdict==='ELIGIBLE').length;
   const candidate=r.candidates.find(c=>c.id===selectedCandidate)??r.candidates.find(c=>c.verdict==='ELIGIBLE')??r.candidates[0];
+  // A run is approved at most once; an approval that lapsed needs a fresh run.
+  const used=agent.data?.plans.find(p=>p.runId===run.id&&!p.kind),ended=used&&['EXPIRED','SUPERSEDED','REVOKED'].includes(used.status);
   return <div className="ra-results"><header><span className={`ra-verdict ${fits?'ra-ok':'ra-no'}`}>{fits?`${fits} of ${r.candidates.length} fit your limits`:'None fit your limits'}</span><h3>{labels[run.status]}</h3><p>{r.explanation}</p><small>Your goal: {signed(run.goal.targetReturnBps)} over {h.replace('-',' ')} · lose no more than {pct(run.goal.maxDrawdownBps)}{r.agent&&<> · Designed by {r.agent.name}</>}</small></header>
     <div className="ra-compare" role="group" aria-label="Compare strategies">{r.candidates.map(c=><button key={c.id} aria-pressed={candidate?.id===c.id} onClick={()=>setSelectedCandidate(c.id)}><b>{c.name}</b><Verdict candidate={c}/><span className="ra-compare-num"><em>{signed(c.horizonMedianBps)}</em> typical {h} return</span><small>Worst drop {drop(c.holdoutDrawdownBps)}</small></button>)}</div>
     {(candidate?[candidate]:[]).map(c=><article className="ra-candidate" key={c.id}><div className="ra-candidate-heading"><h4>{c.name}</h4><Verdict candidate={c}/></div>
@@ -114,13 +116,25 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
       {c.agentChecks&&<AgentChecks checks={c.agentChecks} agentName={r.agent?.name}/>}
       {c.reasons.length>0&&<div className="ra-reasons"><b>{c.verdict==='ELIGIBLE'?'Notes':'Why it does not fit'}</b><ul>{c.reasons.map(x=><li key={x}>{reasonLabels[x]??x}</li>)}</ul>{c.verdict!=='ELIGIBLE'&&<small>Try a lower target, a longer period or different stocks, then run research again.</small>}</div>}
       <details><summary>Method & evidence</summary><p>{r.method}</p><p>{c.windowCount} non-overlapping windows, held out from {c.holdoutStart}. The median is a past observation, not an expected return.</p><p>{r.dataset.limitations.join(' ')}</p><code>Report {r.reportHash}</code><code>Dataset {r.dataset.id}</code></details>
-      {c.verdict==='ELIGIBLE'&&<section className="ra-approve" aria-label="Approve this strategy"><div><b>Approve {c.name}</b><p>Approving turns this strategy into a trade plan. Nothing is bought yet: {autoTrade?'your agent then places the orders within the limits you set in Binance, and you can stop it at any time.':'you then confirm each trade in your wallet, one at a time.'}</p></div><div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)onActivity();}}>{agent.busy?'Approving…':'Approve plan'}</button>{!bsc&&<><button disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'AGENT_WALLET',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Use agent holdings</button><button className="ra-text" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'PERSONAL',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Personal wallet holdings</button></>}</div></section>}
+      {c.verdict==='ELIGIBLE'&&used&&<section className="ra-approve" aria-label="Approval">{ended
+        ?<><div><b>This approval has ended</b><p>Approvals last an hour and this run was already approved once. Run research again to approve a fresh plan.</p></div><div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy||agent.running} onClick={()=>void agent.start()}>Run research again</button></div></>
+        :<><div><b>{used.candidateId===c.id?'Approved':'Another strategy from this run is approved'}</b><p>Its trades are listed under Trades.</p></div><div className="ra-inline-actions"><button className="ra-primary" onClick={onActivity}>Go to trades</button></div></>}</section>}
+      {c.verdict==='ELIGIBLE'&&!used&&<section className="ra-approve" aria-label="Approve this strategy"><div><b>Approve {c.name}</b><p>Approving turns this strategy into a trade plan. Nothing is bought yet: {autoTrade?'your agent then places the orders within the limits you set in Binance, and you can stop it at any time.':'you then confirm each trade in your wallet, one at a time.'}</p></div>{bsc&&<label className="ra-check"><input type="checkbox" checked={sellOutside} onChange={e=>setSellOutside(e.target.checked)}/><span><b>Rebalance my holdings</b> Sell this strategy&apos;s other stocks I already hold first, then buy.</span></label>}
+        <div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,...(bsc&&sellOutside?{sellOutside:true}:{})});if(b)onActivity();}}>{agent.busy?'Approving…':sellOutside?'Approve rebalance':'Approve plan'}</button>{!bsc&&<><button disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'AGENT_WALLET',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Use agent holdings</button><button className="ra-text" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'PERSONAL',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Personal wallet holdings</button></>}</div></section>}
       {draft?.candidateId===c.id&&<section className="ra-allocation-review" aria-label="Rebalance review"><h4>Rebalance selected stocks</h4><p>{usd(draft.heldValueAtoms)} already held · {usd(draft.portfolioValueAtoms)} total allocation</p><small>Other stocks stay untouched. Sales run first. {draft.snapshot?.owner&&draft.snapshot.owner!==wallet?'Review the full allocation, then approve your agent wallet.':'Review each transaction in your wallet.'}</small><div className="ra-trade-legs">{draft.legs.map((leg,i)=><div key={i}><span>{leg.side} {leg.instrument}</span><b>{legAmount(leg)}</b></div>)}</div><p>{usd(draft.cashAtoms)} retained as cash</p><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,draftId:draft.id});if(b){setDraft(null);onActivity();}}}>Approve this allocation</button></section>}
     </article>)}
+    {agent.error&&<p className="ra-error" role="alert">{agent.error}</p>}
     <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.inputTokens+r.model.outputTokens} tokens · Data through {r.dataset.asOf}</span></footer>
   </div>;
 }
 
+// Why the agent proposes a sale: the exit rule, the entry and the latest close it was checked against.
+function ExitWhy({reason}:{reason:ExitReason}){
+  const pctOf=(a:number|null,b:number|null)=>a!=null&&b?`${((1-a/b)*100).toFixed(1)}%`:'—';
+  return <ul className="ra-exit-why">{reason.rules.map(r=><li key={r.instrument+r.rule}><b>{r.rule==='stop_loss'?'Stop loss':'Trailing stop'} · {r.instrument}</b>
+    <span>{r.rule==='stop_loss'?`Closed at ${r.lastClose??'—'} on ${r.lastDate??'—'}, ${pctOf(r.lastClose,r.entryClose)} below its entry close of ${r.entryClose??'—'} (${r.since}).`
+      :`Closed at ${r.lastClose??'—'} on ${r.lastDate??'—'}, ${pctOf(r.lastClose,r.peakClose)} below its highest close since entry (${r.peakClose??'—'}).`} Your agent&apos;s limit: {(r.threshold*100).toFixed(0)}%.</span></li>)}</ul>;
+}
 export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:AgentController;wallet:string|null;strategy:ResearchStrategy;onRefresh:()=>void}){
   const [signing,setSigning]=useState(false),[error,setError]=useState<string|null>(null),[boundPlans,setBoundPlans]=useState<Record<string,boolean>>({});
   const live=useRef(true),context=useRef('');context.current=`${wallet}:${strategy.id}`;
@@ -158,18 +172,25 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
   const progress=(p:AgentPlan)=>{const done=p.steps.filter(s=>s.phase==='RECONCILED').length;return <div className="ra-plan-progress"><span>{done} of {p.legs.length} trade{p.legs.length===1?'':'s'} done</span><div><i style={{width:`${p.legs.length?done/p.legs.length*100:0}%`}}/></div></div>;};
   const status=(p:AgentPlan)=><span className={`ra-status ra-status-${p.status.toLowerCase()}`}>{planStatusText[p.status]??p.status}</span>;
   return <section className="ra-execution">
-    {!plans.some(p=>p.chain==='eip155:56')&&<div className="ra-inline-actions"><a className="ra-text" href="/exchange/agent-wallet">Agent wallet ↗</a></div>}
+    {!plans.some(p=>p.chain==='eip155:56')&&!(wallet&&/^0x/.test(wallet))&&<div className="ra-inline-actions"><a className="ra-text" href="/exchange/agent-wallet">Agent wallet ↗</a></div>}
+    {wallet&&/^0x/.test(wallet)&&<BscHoldings agent={agent} strategyId={strategy.id}/>}
     {plans.length===0&&<div className="ra-empty ra-empty-small"><h3>No approved plan yet</h3><p>Open Results, pick a strategy that fits your limits and approve it. Its trades appear here, ready to confirm.</p></div>}
     {plans.map(p=>{
-      if(p.chain==='eip155:56'&&wallet)return <article key={p.id} className="ra-plan">
-        <div className="ra-candidate-heading"><h4>{nameOf(p)}{p.agent&&<small> · {p.agent.name}</small>}</h4>{status(p)}</div>
-        <p>{(Number(BigInt(p.budgetAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT on BNB Chain · {(Number(BigInt(p.cashAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT stays in cash</p>
+      if(p.chain==='eip155:56'&&wallet){
+        const sales=p.legs.filter(l=>l.side==='SELL').length,refresh=()=>{void agent.refresh();onRefresh();};
+        return <article key={p.id} className={`ra-plan ${p.status==='PROPOSED'?'ra-plan-proposed':''}`}>
+        <div className="ra-candidate-heading"><h4>{p.kind==='CLOSE'?'Close positions':p.kind==='EXIT'?`Exit: ${p.legs.map(l=>l.instrument).join(', ')}`:nameOf(p)}{p.agent&&<small> · {p.agent.name}</small>}</h4>{status(p)}</div>
+        <p>{p.kind?`Sells ${sales} holding${sales===1?'':'s'} for USDT${p.wallet==='AGENTIC'?' from your Agentic Wallet':' from your wallet'}`
+          :<>{(Number(BigInt(p.budgetAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT on BNB Chain · {(Number(BigInt(p.cashAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT stays in cash{sales?` · sells ${sales} holding${sales===1?'':'s'} first`:''}</>}</p>
+        {p.reason&&<ExitWhy reason={p.reason}/>}
+        {p.status==='PROPOSED'?<div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={()=>void agent.act({operation:'APPROVE_PROPOSED',planId:p.id})}>Approve sale</button><button className="ra-text" disabled={agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Keep holding</button><small className="ra-caption">Nothing is sold unless you approve. The proposal lapses after 24 hours.</small></div>:<>
         {progress(p)}
         {p.belowMinimum?.length?<p className="ra-caption">Below the 5 USDT minimum order, kept in cash: {p.belowMinimum.join(', ')}</p>:null}
-        <AgenticPanel plan={p} wallet={wallet} onRefresh={()=>{void agent.refresh();onRefresh();}}/>
-        <BscPlanExecution plan={p} agent={agent} wallet={wallet} onRefresh={()=>{void agent.refresh();onRefresh();}}/>
-        {['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)&&<button className="ra-text" disabled={agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Revoke remaining trades</button>}
-      </article>;
+        {/* Sales from the owner's own wallet are signed step by step; the Agentic Wallet only sells what it holds. */}
+        {p.wallet!=='PERSONAL'&&<AgenticPanel plan={p} wallet={wallet} onRefresh={refresh}/>}
+        {p.wallet!=='AGENTIC'&&<BscPlanExecution plan={p} agent={agent} wallet={wallet} onRefresh={refresh}/>}
+        {['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)&&<button className="ra-text" disabled={agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Revoke remaining trades</button>}</>}
+      </article>;}
       const assigned=boundPlans[p.id]||(p as AgentPlan&{executionMode?:string}).executionMode==='AGENT_WALLET';
       return <article key={p.id} className="ra-plan">
         <div className="ra-candidate-heading"><h4>{nameOf(p)}</h4>{status(p)}</div>

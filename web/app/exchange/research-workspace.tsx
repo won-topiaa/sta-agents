@@ -119,11 +119,13 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
   // A strategy opens at its latest message; the start screen opens at its top.
   useEffect(()=>{messages.current?.scrollTo({top:selected?messages.current.scrollHeight:0,behavior:'instant'});},[selected,strategy?.messages.length]);
   // Where this strategy stands, from data loaded for it: drives the step bar, the next-step card and the first tab shown.
-  const fresh=Boolean(strategy&&agent.dataId===strategy.id),plans=fresh?agent.data?.plans??[]:[],lastRun=fresh?agent.run:undefined;
+  const fresh=Boolean(strategy&&agent.dataId===strategy.id),allPlans=fresh?agent.data?.plans??[]:[],lastRun=fresh?agent.run:undefined;
+  // Research plans drive the steps; sales (closing positions, agent exits) are shown on their own.
+  const plans=allPlans.filter(p=>!p.kind),proposal=allPlans.find(p=>p.status==='PROPOSED'),openSale=allPlans.find(p=>p.kind&&['APPROVED','PARTIAL','UNKNOWN'].includes(p.status));
   const fitting=lastRun?.result?.candidates.filter(c=>c.verdict==='ELIGIBLE').length??0;
   const openPlan=plans.find(p=>['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)),donePlan=plans.find(p=>p.status==='COMPLETE');
   const [opened,setOpened]=useState<string|null>(null);
-  if(strategy&&fresh&&opened!==strategy.id){setOpened(strategy.id);if(openPlan)setTab('Execution');else if(lastRun?.result)setTab('Backtest');}
+  if(strategy&&fresh&&opened!==strategy.id){setOpened(strategy.id);if(openPlan||proposal||openSale)setTab('Execution');else if(lastRun?.result)setTab('Backtest');}
   function select(id:string){
     interpretation.current++;setIntake(null);intakeRun.current=null;
     setPinned([]);setPickerOpen(false);
@@ -231,12 +233,14 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
     :needsAgent?{text:'Create your agent first',detail:'Pick a starting style below. You can change everything later.'}
     :!strategy?intake?{text:'Check your request, then run research',detail:'Nothing is bought during research.'}:{text:'Describe your goal',detail:'Type it in the box below, or pick an example.',action:{label:'Write request',run:()=>document.getElementById('research-note')?.focus()}}
     :!fresh?null
+    :proposal?{text:`Your agent suggests selling ${proposal.legs.map(l=>l.instrument).join(', ')}`,detail:`${proposal.reason?.rules.map(r=>`${r.rule==='stop_loss'?'Stop loss':'Trailing stop'} on ${r.instrument}`).join(' · ')||'An exit rule fired.'} · nothing is sold unless you approve`,action:{label:'Review',run:show('Execution')}}
+    :openSale&&!openPlan?{text:'Confirm your sales',detail:openSale.wallet==='AGENTIC'?'Your agent sells within your Binance limits.':'Each sale needs your wallet.',action:{label:'Go to trades',run:show('Execution')}}
     :!lastRun?{text:'Run research to test strategies',detail:'Set the target below, or run with the defaults.',action:{label:'Run research',run:()=>{show('Backtest')();void agent.start();}}}
     :runActive(lastRun)?{text:'Researching…',detail:'Usually about a minute. You can keep browsing.',action:{label:'View progress',run:show('Backtest')}}
     :!lastRun.result?{text:'Research needs attention',detail:lastRun.error??'Open Results for details.',action:{label:'See details',run:show('Backtest')}}
     :openPlan?{text:'Confirm your trades',detail:`${tradesDone} of ${openPlan.legs.length} done · ${openPlan.agent?.approval==='AUTO_WITHIN_LIMITS'?'your agent trades within your limits':'each trade needs your wallet'}`,action:{label:'Go to trades',run:show('Execution')}}
     :donePlan?{text:'All trades done',detail:'Receipts are listed under Trades.',action:{label:'View trades',run:show('Execution')}}
-    :plans.length?{text:'This plan has ended',detail:'Run research again for a new plan.',action:{label:'Review results',run:show('Backtest')}}
+    :plans.some(p=>p.runId===lastRun.id)?{text:'This plan has ended',detail:'Approvals last an hour. Run research again for a fresh plan.',action:{label:'Run again',run:()=>{show('Backtest')();void agent.start();}}}
     :fitting?{text:`${fitting} strateg${fitting===1?'y fits':'ies fit'} your limits`,detail:'Compare them and approve one. Nothing is bought yet.',action:{label:'Review results',run:show('Backtest')}}
     :{text:'No strategy fit your limits',detail:'See why, then adjust the target, period or stocks.',action:{label:'See why',run:show('Backtest')}};
 
@@ -280,7 +284,7 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
       </section>
       <div className="rw-resizer" role="separator" aria-label="Resize conversation" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={440} aria-valuenow={chatWidth} tabIndex={0} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setChatWidth(v=>Math.min(440,Math.max(320,v+(e.key==='ArrowRight'?16:-16))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))resize(e.clientX);}} onPointerUp={e=>e.currentTarget.releasePointerCapture(e.pointerId)}/>
       <section className="rw-report" aria-label="Research report">
-        <div className="rw-tabs" role="tablist" aria-label="Report sections" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=(tabs.indexOf(tab)+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;setTab(tabs[i]);document.getElementById(`rw-tab-${tabs[i]}`)?.focus();}}}>{tabs.map(t=><button key={t} role="tab" id={`rw-tab-${t}`} aria-controls="rw-report-panel" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}>{tabLabels[t]}{((t==='Backtest'&&fitting>0&&!approved)||(t==='Execution'&&openPlan))&&<i className="sx-dot" aria-label="needs your attention"/>}</button>)}</div>
+        <div className="rw-tabs" role="tablist" aria-label="Report sections" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=(tabs.indexOf(tab)+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;setTab(tabs[i]);document.getElementById(`rw-tab-${tabs[i]}`)?.focus();}}}>{tabs.map(t=><button key={t} role="tab" id={`rw-tab-${t}`} aria-controls="rw-report-panel" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}>{tabLabels[t]}{((t==='Backtest'&&fitting>0&&!approved)||(t==='Execution'&&(openPlan||proposal||openSale)))&&<i className="sx-dot" aria-label="needs your attention"/>}</button>)}</div>
         <div className="rw-report-scroll" role="tabpanel" id="rw-report-panel" aria-labelledby={`rw-tab-${tab}`} tabIndex={0}>
           {tab==='Overview'&&<>
             <div className="rw-market-head"><div>{market&&<StockLogo market={directoryMarket(market)}/>}<div><b>{market?.name??'Choose a stock'}</b><small>{market?.instrument} · Stock</small></div></div><select aria-label="Research chart stock" value={market?.instrument??''} onChange={e=>setFocus(e.target.value)}>{directory.filter(r=>!chartUniverse||chartUniverse.includes(r.instrument)).map(r=><option key={r.instrument} value={r.instrument}>{r.instrument}</option>)}</select></div>

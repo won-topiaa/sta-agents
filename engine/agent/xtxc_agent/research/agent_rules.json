@@ -71,6 +71,35 @@
             }
           ]
         },
+        "rotation": {
+          "label": "Sector rotation",
+          "help": "Rides the strongest sectors while money flows in, and trades less when ranks barely move.",
+          "rebalance": "monthly",
+          "rules": [
+            {
+              "id": "strong_sector",
+              "params": {
+                "keep": 0.4
+              }
+            },
+            {
+              "id": "sector_inflow",
+              "params": {}
+            },
+            {
+              "id": "relative_strength",
+              "params": {
+                "days": 126
+              }
+            },
+            {
+              "id": "fewer_trades",
+              "params": {
+                "within": 2
+              }
+            }
+          ]
+        },
         "custom": {
           "label": "Custom",
           "help": "Start from no rules and add your own.",
@@ -690,6 +719,178 @@
         "lookback": 5,
         "rule": "above",
         "value": 0
+      }
+    },
+    "relative_strength": {
+      "label": "Beats the market",
+      "help": "Holds only stocks that rose more than the Nasdaq-100 (QQQ) over the last {days} trading days.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "days": {
+          "options": [
+            63,
+            126,
+            252
+          ],
+          "default": 126,
+          "display": "days"
+        }
+      },
+      "filter": {
+        "signal": "rel_strength",
+        "lookback": "$days",
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "strong_sector": {
+      "label": "Strongest sectors",
+      "help": "Keeps the {keep} of stocks whose sectors rose the most over the last three months.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "keep": {
+          "min": 0.2,
+          "max": 0.8,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "sector_momentum",
+        "lookback": 5,
+        "rule": "top_fraction",
+        "value": "$keep"
+      }
+    },
+    "money_inflow": {
+      "label": "Money flowing in",
+      "help": "Holds only stocks where dollars traded on up days beat down days by at least {min} over 20 days.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "min": {
+          "min": 0.0,
+          "max": 0.5,
+          "step": 0.05,
+          "default": 0.1,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "money_flow",
+        "lookback": 5,
+        "rule": "above",
+        "value": "$min"
+      }
+    },
+    "sector_inflow": {
+      "label": "Money flowing into the sector",
+      "help": "Holds only stocks whose whole sector had more dollars traded on up days than on down days over 20 days.",
+      "styles": [
+        "technical"
+      ],
+      "params": {},
+      "filter": {
+        "signal": "sector_money_flow",
+        "lookback": 5,
+        "rule": "above",
+        "value": 0
+      }
+    },
+    "breadth_guard": {
+      "label": "Breadth guard",
+      "help": "When fewer than {share} of the stocks trade above their 200-day average, invests only {exposure} of the usual amount.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "share": {
+          "min": 0.3,
+          "max": 0.7,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        },
+        "exposure": {
+          "min": 0,
+          "max": 0.9,
+          "step": 0.1,
+          "default": 0.5,
+          "display": "percent"
+        }
+      },
+      "breadth_off": {
+        "lookback": 200,
+        "below": "$share",
+        "exposure": "$exposure"
+      }
+    },
+    "fewer_trades": {
+      "label": "Fewer trades",
+      "help": "Keeps a stock it holds while it still passes the rules and ranks within {within} times the number of holdings.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "within": {
+          "options": [
+            1.5,
+            2,
+            3
+          ],
+          "default": 2,
+          "display": "number"
+        }
+      },
+      "hold_buffer": "$within"
+    },
+    "stop_loss": {
+      "label": "Stop loss",
+      "help": "Sells a holding once its price falls {loss} below the purchase price; it can come back at the next rebalance.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "loss": {
+          "min": 0.05,
+          "max": 0.3,
+          "step": 0.05,
+          "default": 0.1,
+          "display": "percent"
+        }
+      },
+      "exit": {
+        "stop_loss": "$loss"
+      }
+    },
+    "trailing_stop": {
+      "label": "Trailing stop",
+      "help": "Sells a holding once its price falls {drop} from its highest close since purchase; it can come back at the next rebalance.",
+      "styles": [
+        "technical",
+        "value"
+      ],
+      "params": {
+        "drop": {
+          "min": 0.05,
+          "max": 0.3,
+          "step": 0.05,
+          "default": 0.15,
+          "display": "percent"
+        }
+      },
+      "exit": {
+        "trailing_stop": "$drop"
       }
     }
   },

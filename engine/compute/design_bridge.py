@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import math
 import pathlib
+import pandas as pd
 from evaluate import load_prices, assess
 from xtxc_agent.core.strategy_design import design_messages, validate_candidates, choose, design_checks, describe
 from xtxc_agent.research import sandbox
@@ -55,6 +56,14 @@ def with_fundamentals(prices, snapshot, root, tickers):
     closes, _ = load_prices(root, usable + peers, column='close', common=False)
     prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable + peers}, set(usable), sectors,
                                  fx=meta.get('fx'), splits=fundamentals.split_events(root, usable + peers))
+    # Sector strength and sector money flow, over the same sector peers (technical signals; rows <= t only).
+    try:
+        volumes, _ = load_prices(root, usable + peers, column='volume', common=False)
+        cols = volume.sector_columns(prices.index, closes, volumes, {t: sectors[t] for t in usable + peers if sectors.get(t)}, set(usable))
+        if cols:
+            prices = pd.concat([prices, pd.DataFrame(cols, index=prices.index)], axis=1)
+    except (ValueError, KeyError):
+        pass
     meta = {k: v for k, v in meta.items() if k != 'fx'} | {'fxCurrencies': sorted(meta.get('fx', {}))}
     old = 'Adjusted history is not a point-in-time fundamentals dataset.'
     snapshot = {**snapshot, 'limitations': [x for x in snapshot.get('limitations', []) if x != old]}
@@ -62,7 +71,7 @@ def with_fundamentals(prices, snapshot, root, tickers):
                                                   'sectorPeers': len(peers)},
                     'limitations': [*snapshot.get('limitations', []),
                                     'Company fundamentals are SEC EDGAR XBRL facts, usable from the session after their filing date; '
-                                    'foreign IFRS filers, funds and some multi-class issuers have none.']}
+                                    'funds and issuers whose share counts SEC publishes only per class have none.']}
 
 
 def with_volume(prices, root, tickers):

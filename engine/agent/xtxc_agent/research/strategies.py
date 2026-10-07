@@ -247,8 +247,9 @@ def _leveraged_tickers() -> frozenset[str]:
     return frozenset(i.ticker for i in load_universe() if i.kind == "leveraged_etf")
 
 
-def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int) -> dict[str, float]:
-    """Target weights at the close of row ``asof_index`` using rows <= asof_index only.
+def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: frozenset | set | None = None) -> dict[str, float]:
+    """Target weights at the close of row ``asof_index`` using rows <= asof_index only. ``held``: names the strategy
+    holds going into that day (custom designs with a ``hold_buffer`` keep them while they rank close enough).
 
     Returns {ticker: weight} for names with weight > 0 (sorted by ticker).  Cash = 1 - sum.
     """
@@ -319,7 +320,7 @@ def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int) -> dict[st
         fund = {sig: np.column_stack([hist[f"{t}::{sig}"].to_numpy(dtype="float64") if f"{t}::{sig}" in hist.columns
                                       else np.full(len(hist), np.nan) for t in tickers])
                 for sig in column_signals(p["design"])}
-        scores, exposure = design_scores(p["design"], arr, tickers, market, momentum_top_n(s["max_weight"], s["min_cash"]), fund)
+        scores, exposure = design_scores(p["design"], arr, tickers, market, momentum_top_n(s["max_weight"], s["min_cash"]), fund, held)
         total *= exposure
 
     else:  # equal_weight

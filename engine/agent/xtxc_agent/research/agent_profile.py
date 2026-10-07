@@ -147,26 +147,31 @@ def _fill(template, params: dict):
 
 
 def enforced(profile: dict) -> dict:
-    """What the profile adds to every design: ``filters``, an optional ``risk_off`` and an optional ``top_n_cap``."""
+    """What the profile adds to every design: ``filters``, an optional ``risk_off`` and ``breadth_off`` market guard,
+    an optional ``top_n_cap``, a minimum ``hold_buffer`` and ``exit`` rules (largest allowed stop distances)."""
     p = normalize_profile(profile)
     cat = catalog()["rules"]
-    out = {"filters": [], "risk_off": None, "top_n_cap": None}
+    out = {"filters": [], "risk_off": None, "breadth_off": None, "top_n_cap": None, "hold_buffer": None, "exit": {}}
     for r in p["rules"]:
         spec = cat[r["id"]]
         if "filter" in spec:
             out["filters"].append(_fill(spec["filter"], r["params"]))
-        if "risk_off" in spec:
-            out["risk_off"] = _fill(spec["risk_off"], r["params"])
+        for key in ("risk_off", "breadth_off", "hold_buffer"):
+            if key in spec:
+                out[key] = _fill(spec[key], r["params"])
         if "top_n_cap" in spec:
             out["top_n_cap"] = int(_fill(spec["top_n_cap"], r["params"]))
+        if "exit" in spec:
+            out["exit"].update(_fill(spec["exit"], r["params"]))
     # The same checks as any design: a rule can never produce something the strategy language rejects.
-    probe = {"score": [{"signal": "trend", "lookback": 20, "weight": 1}], "filters": out["filters"],
-             "weighting": "equal", "risk_off": out["risk_off"]}
+    probe = {"score": [{"signal": "trend", "lookback": 20, "weight": 1}], "filters": out["filters"], "weighting": "equal",
+             "risk_off": out["risk_off"], "breadth_off": out["breadth_off"], "hold_buffer": out["hold_buffer"], "exit": out["exit"] or None}
     try:
         d = normalize_design(probe)
     except DesignError as exc:
         raise ProfileError(f"agent rules are inconsistent: {exc}") from exc
-    return {"filters": d["filters"], "risk_off": d["risk_off"], "top_n_cap": out["top_n_cap"]}
+    return {"filters": d["filters"], "risk_off": d["risk_off"], "breadth_off": d.get("breadth_off"), "top_n_cap": out["top_n_cap"],
+            "hold_buffer": d.get("hold_buffer"), "exit": d.get("exit")}
 
 
 def apply(design: dict, profile: dict) -> dict:
@@ -184,7 +189,17 @@ def apply(design: dict, profile: dict) -> dict:
     top_n = d["top_n"]
     if e["top_n_cap"] is not None:
         top_n = e["top_n_cap"] if top_n is None else min(top_n, e["top_n_cap"])
-    return normalize_design({**d, "filters": filters, "top_n": top_n, "risk_off": e["risk_off"] or d["risk_off"]})
+    out = {**d, "filters": filters, "top_n": top_n, "risk_off": e["risk_off"] or d["risk_off"]}
+    if e["breadth_off"]:
+        out["breadth_off"] = e["breadth_off"]
+    if e["hold_buffer"]:
+        out["hold_buffer"] = max(e["hold_buffer"], d.get("hold_buffer") or 0)
+    if e["exit"]:
+        # the agent's stop is the loosest allowed: the model may only sell earlier, never later
+        mine, theirs = e["exit"], d.get("exit") or {}
+        out["exit"] = {k: min(v for v in (mine.get(k), theirs.get(k)) if v is not None)
+                       if (mine.get(k) is not None or theirs.get(k) is not None) else None for k in ("stop_loss", "trailing_stop")}
+    return normalize_design(out)
 
 
 def compliance(design: dict, profile: dict) -> list[dict]:
@@ -200,6 +215,15 @@ def compliance(design: dict, profile: dict) -> list[dict]:
             want = normalize_design({"score": d["score"], "weighting": "equal",
                                      "risk_off": _fill(spec["risk_off"], r["params"])})["risk_off"]
             ok = d["risk_off"] == want
+        elif "breadth_off" in spec:
+            want = normalize_design({"score": d["score"], "weighting": "equal",
+                                     "breadth_off": _fill(spec["breadth_off"], r["params"])})["breadth_off"]
+            ok = d.get("breadth_off") == want
+        elif "hold_buffer" in spec:
+            ok = (d.get("hold_buffer") or 0) >= _fill(spec["hold_buffer"], r["params"]) - 1e-9
+        elif "exit" in spec:
+            want = _fill(spec["exit"], r["params"])
+            ok = all((d.get("exit") or {}).get(k) is not None and d["exit"][k] <= v + 1e-9 for k, v in want.items())
         else:
             cap = int(_fill(spec["top_n_cap"], r["params"]))
             ok = d["top_n"] is not None and d["top_n"] <= cap

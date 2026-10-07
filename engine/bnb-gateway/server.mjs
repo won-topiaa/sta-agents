@@ -67,6 +67,16 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     const sim=checkSimulation(await transaction.simulate(client,{from:tx.from,to:tx.to,value:tx.value,data:tx.data}),{user,toToken,minReceiveAmount:tx.minReceiveAmount});
     return {step:'SWAP',tx,quote,simulation:sim,preparedId:randomUUID()};
   }
+  // On-chain balances of listed stock tokens (balanceOf), for whole-holding sales. Only known tokens, at most 40.
+  async function holdings(address,list){
+    if(!isAddress(address))throw new ExecutionCheckError('INPUT','Check the address.');
+    const tokens=[...new Set(String(list??'').split(',').map(t=>t.trim().toLowerCase()).filter(Boolean))];
+    if(!tokens.length||tokens.length>40||tokens.some(t=>!isAddress(t)))throw new ExecutionCheckError('INPUT','Check the token list.');
+    for(const t of tokens)if(!await known(t)||STABLES.some(s=>sameAddress(s,t)))throw new ExecutionCheckError('TOKEN','Only listed stock tokens can be read here.');
+    const data='0x70a08231'+address.toLowerCase().slice(2).padStart(64,'0'),out=[];
+    for(let i=0;i<tokens.length;i+=8)out.push(...await Promise.all(tokens.slice(i,i+8).map(async t=>({contract:t,raw:BigInt(await rpc('eth_call',[{to:t,data},'latest'])).toString()}))));
+    return {address,observedAt:new Date(now()).toISOString(),holdings:out};
+  }
   async function txStatus(hash){
     if(!/^0x[0-9a-fA-F]{64}$/.test(hash))throw new ExecutionCheckError('INPUT','Check the transaction hash.');
     const [tx,receipt]=await Promise.all([rpc('eth_getTransactionByHash',[hash]),rpc('eth_getTransactionReceipt',[hash])]);
@@ -92,6 +102,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     'POST /v1/prepare':body=>prepare(body),
     'GET /v1/tx':(_,q)=>txStatus(q.get('hash')??''),
     'GET /v1/nonce':async(_,q)=>{const a=q.get('address')??'';if(!isAddress(a))throw new ExecutionCheckError('INPUT','Check the address.');return {address:a,pending:BigInt(await rpc('eth_getTransactionCount',[a,'pending'])).toString()};},
+    'GET /v1/holdings':(_,q)=>holdings(q.get('address')??'',q.get('tokens')),
     'GET /v1/balances':async(_,q)=>{const a=q.get('address')??'';if(!isAddress(a))throw new ExecutionCheckError('INPUT','Check the address.');return wallet.balances(client,a);},
     'GET /v1/agentic/status':()=>agentic.status(),'GET /v1/agentic/address':()=>agentic.address(),
     'GET /v1/agentic/settings':()=>agentic.settings(),'GET /v1/agentic/quota':()=>agentic.quota(),

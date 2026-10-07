@@ -23,7 +23,10 @@ log('session',session.address===principal?'ok':'MISMATCH',principal);
 if(process.env.E2E_INTERPRET){const {draft}=await call('POST','/api/v1/stocklana/research/interpret',{text:process.env.E2E_INTERPRET});
   log('interpret',draft.universeSource,draft.executionChain,draft.brief.instruments.join(','),'missing',draft.missing.join(',')||'-');}
 const STYLE=process.env.E2E_STYLE??'technical',VALUE=STYLE==='value'||STYLE==='dividend';
-const profile=STYLE==='dividend'?{name:'E2E dividend',style:'value',preset:'dividend',rules:[{id:'pays_dividend',params:{min:0.015}},{id:'cheaper_than_sector'},{id:'liquid_only',params:{min:7}}],
+const profile=STYLE==='rotation'?{name:'E2E rotation',style:'technical',preset:'rotation',rules:[{id:'strong_sector',params:{keep:0.4}},{id:'sector_inflow'},{id:'relative_strength',params:{days:126}},
+    {id:'fewer_trades',params:{within:2}},{id:'trailing_stop',params:{drop:0.15}},{id:'stop_loss',params:{loss:0.1}}],
+    philosophy:'',risk:{maxWeightBps:3000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'weekly',approval:'PER_TRADE'}
+  :STYLE==='dividend'?{name:'E2E dividend',style:'value',preset:'dividend',rules:[{id:'pays_dividend',params:{min:0.015}},{id:'cheaper_than_sector'},{id:'liquid_only',params:{min:7}}],
     philosophy:'I want dependable dividend payers that are cheaper than their peers.',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:4000},rebalance:'monthly',approval:'PER_TRADE'}
   :STYLE==='volume'?{name:'E2E volume',style:'technical',preset:'custom',rules:[{id:'liquid_only',params:{min:8}},{id:'volume_surge',params:{min:0.2}},{id:'uptrend_only',params:{days:50}}],
     philosophy:'',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'weekly',approval:'PER_TRADE'}
@@ -33,7 +36,8 @@ const profile=STYLE==='dividend'?{name:'E2E dividend',style:'value',preset:'divi
     philosophy:'',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'monthly',approval:'PER_TRADE'};
 const {agent}=await call('POST','/api/v1/stocklana/research/agents',{operation:'CREATE',requestId:randomUUID(),profile});
 log('agent',agent.id,agent.revision,agent.rules.map(r=>r.id).join(','));
-const created=await call('POST','/api/v1/stocklana/research',{operation:'CREATE',requestId:randomUUID(),brief:STYLE==='dividend'?{name:'E2E dividends on BSC',objective:'Find cheap, dependable dividend payers for one year with 30 USDT.',budget:'30',instruments:['KO','PEP','PG','WMT','HD','LOW','MCD','JPM','XOM','CVX','IBM','UNH','ABBV','SO','NEE','WM'],weights:[],cashBps:null,agentId:agent.id}
+const created=await call('POST','/api/v1/stocklana/research',{operation:'CREATE',requestId:randomUUID(),brief:STYLE==='rotation'?{name:'E2E rotation on BSC',objective:'Rotate into the strongest sectors for one year with 30 USDT.',budget:'30',instruments:['MU','NVDA','AMD','INTC','AVGO','TSM','MRVL','AMAT','LRCX','ASML','TXN','QCOM','XOM','CVX','JPM','BAC','LLY','UNH','WMT','COST','CAT','GE'],weights:[],cashBps:null,agentId:agent.id}
+  :STYLE==='dividend'?{name:'E2E dividends on BSC',objective:'Find cheap, dependable dividend payers for one year with 30 USDT.',budget:'30',instruments:['KO','PEP','PG','WMT','HD','LOW','MCD','JPM','XOM','CVX','IBM','UNH','ABBV','SO','NEE','WM'],weights:[],cashBps:null,agentId:agent.id}
   :STYLE==='volume'?{name:'E2E volume on BSC',objective:'Research liquid stocks with rising volume for one year with 30 USDT.',budget:'30',instruments:['NVDA','AMD','AVGO','MU','AAPL','MSFT','AMZN','META','TSLA','PLTR','GOOGL','NFLX'],weights:[],cashBps:null,agentId:agent.id}
   :VALUE?{name:'E2E value on BSC',objective:'Find undervalued, cash-generating large companies for one year with 30 USDT.',budget:'30',instruments:['AAPL','MSFT','NVDA','AMD','INTC','MU','KO','PEP','PG','WMT','MCD','JPM','LLY','UNH','CVX','IBM','ORCL','F','GOOGL','META','AMZN'].filter(t=>true),weights:[],cashBps:null,agentId:agent.id}
   :{name:'E2E chips on BSC',objective:'Research AI chip stocks for one year with 30 USDT.',budget:'30',instruments:['NVDA','AMD','AVGO','MU','TSM'],weights:[],cashBps:null,agentId:agent.id}});
@@ -45,7 +49,8 @@ let run;for(let i=0;i<120;i++){await new Promise(r=>setTimeout(r,5000));run=(awa
 log('run',run?.status,run?.error??'');
 if(!run?.result){process.exitCode=1;process.exit();}
 const r=run.result;log('agent in report',JSON.stringify(r.agent));
-for(const c of r.candidates)log('candidate',c.name,'|',c.verdict,c.reasons.join(',')||'-','| checks',(c.agentChecks??[]).map(x=>`${x.rule}:${x.status}`).join(' '),'| weights',c.weights.map(w=>`${w.instrument}:${w.weightBps}`).join(' '));
+for(const c of r.candidates){log('candidate',c.name,'|',c.verdict,c.reasons.join(',')||'-','| checks',(c.agentChecks??[]).map(x=>`${x.rule}:${x.status}`).join(' '),'| weights',c.weights.map(w=>`${w.instrument}:${w.weightBps}`).join(' '));
+  if(c.design?.exit||c.design?.hold_buffer||c.design?.breadth_off)log('   design extras',JSON.stringify({exit:c.design.exit,hold_buffer:c.design.hold_buffer,breadth_off:c.design.breadth_off}),'| howItPicks',JSON.stringify({hold:c.howItPicks?.hold,exit:c.howItPicks?.exit}));}
 const eligible=r.candidates.find(c=>c.verdict==='ELIGIBLE');
 if(!eligible){log('no eligible candidate; stopping before approval');process.exit();}
 const {plan}=await call('POST','/api/v1/stocklana/research/agent',{operation:'APPROVE',runId,candidateId:eligible.id,reportHash:r.reportHash});

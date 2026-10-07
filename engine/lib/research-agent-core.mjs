@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { ResearchStore, ResearchStoreError } from './research-store.mjs';
 import { normalizeProfile, clampGoal, agentSnapshot, AgentProfileError, PROFILE_SCHEMA } from './research-agent-profile.mjs';
+import { BSC_RESEARCH_PRODUCTS } from './bsc-research-universe.mjs';
 
 export const AGENT_VERSION = 'xtxc-research-agent/1';
 export const canonical = x => JSON.stringify(x, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))) : v);
@@ -33,6 +34,25 @@ export function allocateBudget(total, weights) {
   if(sum>10000||new Set(rows.map(r=>r.instrument)).size!==rows.length)reject('Invalid strategy allocation.');
   // Rounding remains cash, never an extra debit; economic amounts stay integers.
   return {legs:rows.filter(r=>BigInt(r.inputAtoms)>0n),cashAtoms:(BigInt(total)-rows.reduce((n,r)=>n+BigInt(r.inputAtoms),0n)).toString()};
+}
+
+// BNB Chain sale legs: token -> USDT for whole holdings the gateway read on chain. Only this strategy's stocks and only
+// the Ondo/bStock contracts listed for them; amounts are token atoms (18 decimals).
+export function sellLegs(strategy, holdings) {
+  if(!Array.isArray(holdings)||holdings.length>20)reject('Check the holdings to sell.');
+  const seen=new Set(),legs=[];
+  for(const h of holdings){
+    const instrument=String(h?.instrument??''),contract=String(h?.contract??'').toLowerCase(),raw=String(h?.raw??'');
+    if(!strategy.instruments.includes(instrument))reject(`${instrument||'This stock'} is not part of this strategy.`,409);
+    const listed=Object.entries(BSC_RESEARCH_PRODUCTS[instrument]??{}).find(([,p])=>p?.contract?.toLowerCase()===contract);
+    if(!listed)reject(`${instrument} is not a listed BNB Chain token for this strategy.`,409);
+    if(!/^[1-9]\d{0,35}$/.test(raw))continue;   // nothing held: nothing to sell
+    if(seen.has(contract))reject('Each holding can be sold once per plan.');
+    seen.add(contract);
+    const [platform,p]=listed;
+    legs.push({side:'SELL',instrument,productContract:p.contract,productSymbol:p.symbol,platform,inputAtoms:raw,inputDecimals:p.decimals??18});
+  }
+  return legs;
 }
 
 export class AgentStore extends ResearchStore {
@@ -195,10 +215,18 @@ export class AgentStore extends ResearchStore {
         this.event(owner,row.strategy,'APPROVAL_EXPIRED',{planId:row.id,expiresAt,observedAt:now,reason:'UNUSED_APPROVAL_DEADLINE'});
         expired.push(row.id);
       }
+      // A sale the agent proposed lapses unanswered; the next daily check proposes it again if the rule still applies.
+      for(const row of this.db.prepare("SELECT id,strategy,document FROM agent_plans WHERE owner=? AND status='PROPOSED'").all(owner)){
+        const expiresAt=JSON.parse(row.document).expiresAt;
+        if(!Number.isSafeInteger(expiresAt)||expiresAt>now)continue;
+        this.db.prepare("UPDATE agent_plans SET status='EXPIRED' WHERE id=? AND status='PROPOSED'").run(row.id);
+        this.event(owner,row.strategy,'PROPOSAL_EXPIRED',{planId:row.id});expired.push(row.id);
+      }
       return expired;
     });
   }
-  approve(address,runId,candidateId,reportHash,draftId=null) {
+  // options.sells (BNB Chain): holdings to sell first because the approved strategy no longer holds them.
+  approve(address,runId,candidateId,reportHash,draftId=null,options={}) {
     const owner=this.owner(address);
     // Commit expiry independently: an invalid/repeated approval request must
     // not roll back cleanup and resurrect the owner's obsolete blocking plan.
@@ -225,8 +253,9 @@ export class AgentStore extends ResearchStore {
       if(bsc){const min=BSC_MIN_LEG_ATOMS,small=a.legs.filter(l=>BigInt(l.inputAtoms)<min);
         if(small.length){a={legs:a.legs.filter(l=>BigInt(l.inputAtoms)>=min),cashAtoms:(BigInt(a.cashAtoms)+small.reduce((n,l)=>n+BigInt(l.inputAtoms),0n)).toString(),belowMinimum:small.map(l=>l.instrument)};}
         if(!a.legs.length)reject('Every purchase in this plan is below the 5 USDT minimum order. Raise the budget or choose fewer stocks.',409);}
+      const sells=bsc&&options.sells?sellLegs(s,options.sells).filter(l=>!c.weights.some(w=>w.instrument===l.instrument&&w.weightBps>0)):[];
       if(draftId){const draft=this.db.prepare('SELECT * FROM agent_rebalance_drafts WHERE id=? AND owner=?').get(draftId,owner);if(!draft||draft.run_id!==runId||draft.candidate_id!==candidateId||draft.report_hash!==reportHash)reject('Review the matching holdings allocation.',409);rebalance=JSON.parse(draft.document);if(rebalance.expiresAt<Date.now())reject('Refresh the holdings review before approving.',409);a=rebalance;}
-      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l})),cashAtoms:a.cashAtoms,...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
+      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
       const id=hash(document),plan={...document,id};
       this.db.prepare('INSERT INTO agent_plans VALUES(?,?,?,?,?,?,?)').run(id,owner,s.id,runId,JSON.stringify(plan),'APPROVED',Date.now());this.event(owner,s.id,'APPROVED',{planId:id,runId});return plan;
     });
@@ -235,10 +264,10 @@ export class AgentStore extends ResearchStore {
     const owner=this.owner(address),claims=this.db.prepare(`SELECT p.id,c.policy_id FROM agent_plans p JOIN agent_autonomy_claims c ON c.plan_id=p.id WHERE p.owner=? AND (p.status IN ('APPROVED','PARTIAL','UNKNOWN') OR EXISTS (SELECT 1 FROM agent_steps s WHERE s.plan_id=p.id AND s.phase IN ('UNKNOWN','SUBMITTED','FINALIZED'))) ORDER BY p.created_at LIMIT 20`).all(owner);
     for(const p of claims)this.syncAutonomy(address,p.id,await observe(address.slice(7),p.policy_id));
   }
-  async approveReplacingUnused(address,runId,candidateId,reportHash,draftId,discardDraft) {
+  async approveReplacingUnused(address,runId,candidateId,reportHash,draftId,discardDraft,options={}) {
     // Compatibility for existing callers. New approvals coexist: never stop or
     // revoke another strategy as a side effect of this approval.
-    return this.approve(address,runId,candidateId,reportHash,draftId);
+    return this.approve(address,runId,candidateId,reportHash,draftId,options);
   }
   async replaceUnusedApprovalLegacy(address,runId,candidateId,reportHash,draftId,discardDraft) {
     const approve=()=>this.approve(address,runId,candidateId,reportHash,draftId);

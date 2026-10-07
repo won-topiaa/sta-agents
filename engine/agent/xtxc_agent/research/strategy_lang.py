@@ -29,8 +29,12 @@ Signals (per stock, from adjusted closes up to the decision day; a stock without
                              (-2 is the lower band of a 2-standard-deviation band)
   ma_cross(fast, lookback)   ``fast``-day average / ``lookback``-day average - 1 (above 0: the short average is on top,
                              i.e. a "golden cross" state)
+  rel_strength(lookback)     return over ``lookback`` days minus the Nasdaq-100 (QQQ) return over the same days
   volume_surge               20-day average volume / 120-day average volume - 1 (trading activity picking up)
   dollar_volume              log10 of the 20-day average traded value in dollars (7 = $10M a day)
+  money_flow                 20-day money flow: (dollars traded on up days - on down days) / all dollars traded, -1..1
+  sector_momentum            median three-month return of the company's sector (every released company of it)
+  sector_money_flow          20-day money flow of the whole sector: money moving into (>0) or out of (<0) it
 Company fundamentals (research/fundamentals.py, as filed by the decision day): earnings_yield, book_to_price, fcf_yield,
   roe, debt_to_equity, revenue_growth, dividend_yield, ebitda_yield (EBITDA / enterprise value), and
   earnings_yield_vs_sector / book_to_price_vs_sector (the company's value minus its sector's median that day).
@@ -40,6 +44,12 @@ Filters ``rule``: "above" / "below" a ``value`` of the raw signal, or "top_fract
         A model writes at most ``MAX_FILTERS``; an agent profile may add its own enforced filters on top
         (``MAX_TOTAL_FILTERS`` in all, see ``research/agent_profile``).
 Weighting  equal; rank (best-ranked gets the most, linear in rank); inverse_volatility (1 / volatility over 63 days).
+hold_buffer  (optional, 1..4) a stock already held stays while it ranks within ``hold_buffer`` x the number of holdings
+           and still passes the filters, so fewer trades are made for small changes in rank
+exit       (optional) {"stop_loss": x, "trailing_stop": y}: between rebalances a holding is sold once its close is x
+           below its entry close, or y below its highest close since entry; it stays out until the next rebalance
+breadth_off  (optional) {"lookback": L, "below": b, "exposure": e}: when fewer than b of the stocks trade above their
+           L-day average, the invested budget is multiplied by e (with risk_off, the smaller exposure applies)
 risk_off   when the market ticker's signal is below ``below``, the invested budget is multiplied by ``exposure``
            (the rest stays cash). The ticker is only read, never bought unless it is also one of the stocks.
 """
@@ -52,9 +62,9 @@ import math
 
 import numpy as np
 
-PRICE_SIGNALS = ("momentum", "volatility", "trend", "drawdown", "sharpe", "rsi", "zscore", "ma_cross")
+PRICE_SIGNALS = ("momentum", "volatility", "trend", "drawdown", "sharpe", "rsi", "zscore", "ma_cross", "rel_strength")
 # Trading activity, precomputed per day from rows <= t (research/volume.py).
-VOLUME_SIGNALS = ("volume_surge", "dollar_volume")
+VOLUME_SIGNALS = ("volume_surge", "dollar_volume", "money_flow", "sector_momentum", "sector_money_flow")
 # Company fundamentals as of the decision day (research/fundamentals.py).
 FUNDAMENTAL_SIGNALS = ("earnings_yield", "book_to_price", "fcf_yield", "roe", "debt_to_equity", "revenue_growth",
                        "dividend_yield", "ebitda_yield", "earnings_yield_vs_sector", "book_to_price_vs_sector")
@@ -68,6 +78,9 @@ LOOKBACK = (5, 252)
 SKIP = (0, 63)
 MAX_TERMS, MAX_FILTERS, MAX_TOP_N = 4, 3, 20
 MAX_TOTAL_FILTERS = 9
+HOLD_BUFFER = (1.0, 4.0)
+EXIT_RANGE = (0.02, 0.5)
+BENCHMARK = "QQQ"   # rel_strength compares with it
 # raw-value range a filter may compare against; every other signal is a fraction (-1..1)
 FILTER_VALUE = {"rsi": (0.0, 100.0), "zscore": (-5.0, 5.0), "book_to_price": (0.0, 10.0), "roe": (-2.0, 2.0),
                 "debt_to_equity": (0.0, 20.0), "revenue_growth": (-1.0, 5.0), "volume_surge": (-1.0, 5.0),
@@ -124,7 +137,7 @@ def _signal(d, name) -> dict:
 
 def normalize_design(design) -> dict:
     """Validate and canonicalise. Raises DesignError with a message the model can act on."""
-    _keys(design, {"score", "filters", "top_n", "weighting", "risk_off"}, {"score", "weighting"}, "design")
+    _keys(design, {"score", "filters", "top_n", "weighting", "risk_off", "hold_buffer", "exit", "breadth_off"}, {"score", "weighting"}, "design")
     terms = design["score"]
     if not isinstance(terms, list) or not 1 <= len(terms) <= MAX_TERMS:
         raise DesignError(f"score must be a list of 1 to {MAX_TERMS} terms")
@@ -157,10 +170,26 @@ def normalize_design(design) -> dict:
             raise DesignError("risk_off.signal must be trend, momentum or drawdown")
         ro = {"ticker": ro["ticker"], "signal": ro["signal"], "lookback": _int(ro["lookback"], "risk_off.lookback", *LOOKBACK),
               "below": _num(ro["below"], "risk_off.below", -1, 1), "exposure": _num(ro["exposure"], "risk_off.exposure", 0, 1)}
+    # Optional parts appear in the canonical form only when used, so designs without them keep their hash.
+    extra = {}
+    if design.get("hold_buffer") is not None:
+        extra["hold_buffer"] = _num(design["hold_buffer"], "hold_buffer", *HOLD_BUFFER)
+    ex = design.get("exit")
+    if ex is not None:
+        _keys(ex, {"stop_loss", "trailing_stop"}, set(), "exit")
+        ex = {k: None if ex.get(k) is None else _num(ex[k], f"exit.{k}", *EXIT_RANGE) for k in ("stop_loss", "trailing_stop")}
+        if any(v is not None for v in ex.values()):
+            extra["exit"] = ex
+    bo = design.get("breadth_off")
+    if bo is not None:
+        _keys(bo, {"lookback", "below", "exposure"}, {"lookback", "below", "exposure"}, "breadth_off")
+        extra["breadth_off"] = {"lookback": _int(bo["lookback"], "breadth_off.lookback", 20, LOOKBACK[1]),
+                                "below": _num(bo["below"], "breadth_off.below", 0.05, 0.95),
+                                "exposure": _num(bo["exposure"], "breadth_off.exposure", 0, 1)}
     # canonical order: terms and filters sorted so the same idea written differently hashes the same
     score.sort(key=lambda t: json.dumps(t, sort_keys=True))
     filters.sort(key=lambda t: json.dumps(t, sort_keys=True))
-    return {"score": score, "filters": filters, "top_n": top_n, "weighting": design["weighting"], "risk_off": ro}
+    return {"score": score, "filters": filters, "top_n": top_n, "weighting": design["weighting"], "risk_off": ro, **extra}
 
 
 def design_hash(design: dict) -> str:
@@ -187,12 +216,16 @@ def column_signals(design: dict) -> set[str]:
 
 
 def market_tickers(design: dict) -> list[str]:
-    ro = normalize_design(design).get("risk_off")
-    return [ro["ticker"]] if ro else []
+    d = normalize_design(design)
+    out = [d["risk_off"]["ticker"]] if d["risk_off"] else []
+    if any(t["signal"] == "rel_strength" for t in d["score"] + d["filters"]) and BENCHMARK not in out:
+        out.append(BENCHMARK)
+    return out
 
 
 # ------------------------------------------------------------------ evaluation (rows <= t only)
-def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | None = None) -> np.ndarray:
+def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | None = None,
+                   bench: np.ndarray | None = None) -> np.ndarray:
     """Signal per column of ``arr`` (rows = days up to the decision day). NaN when the window is incomplete.
     Column signals read the last row of ``fund[signal]`` (same columns as ``arr``): the value as of that day."""
     if sig["signal"] in COLUMN_SIGNALS:
@@ -204,6 +237,12 @@ def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | Non
     L, k = sig["lookback"], sig.get("skip", 0)
     n = arr.shape[0]
     out = np.full(arr.shape[1], np.nan)
+    if sig["signal"] == "rel_strength":
+        if bench is None or len(bench) != n:
+            return out
+        own = _signal_values({"signal": "momentum", "lookback": L, "skip": 0}, arr)
+        market = _signal_values({"signal": "momentum", "lookback": L, "skip": 0}, bench.reshape(-1, 1))[0]
+        return own - market if np.isfinite(market) else out
     if sig["signal"] == "momentum":
         if n - 1 - k - L < 0:
             return out
@@ -247,18 +286,33 @@ def _z(x: np.ndarray) -> np.ndarray:
     return np.zeros_like(x) if sd <= 0 or not math.isfinite(sd) else (x - float(np.mean(x))) / sd
 
 
+def breadth(hist_arr: np.ndarray, lookback: int) -> float:
+    """Share of the stocks (with a full window) whose last close is above their ``lookback``-day average; NaN if none."""
+    v = _signal_values({"signal": "trend", "lookback": lookback}, hist_arr)
+    v = v[np.isfinite(v)]
+    return float(np.mean(v > 0)) if len(v) else float("nan")
+
+
 def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market: dict[str, np.ndarray],
-                  default_top_n: int, fundamentals: dict[str, np.ndarray] | None = None) -> tuple[dict[str, float], float]:
+                  default_top_n: int, fundamentals: dict[str, np.ndarray] | None = None,
+                  held: set[str] | frozenset | None = None) -> tuple[dict[str, float], float]:
     """(scores for cap_weights, exposure multiplier). ``hist_arr`` rows are days <= t, columns ``tickers``;
-    ``fundamentals[signal]`` has the same rows and columns (point-in-time company values)."""
+    ``fundamentals[signal]`` has the same rows and columns (point-in-time company values). ``held`` is what the
+    strategy holds going into day t (only used with ``hold_buffer``)."""
     fund = fundamentals or {}
     d = normalize_design(design)
+    bench = market.get(BENCHMARK)
     exposure = 1.0
     ro = d["risk_off"]
     if ro and ro["ticker"] in market:
         m = _signal_values(ro, market[ro["ticker"]].reshape(-1, 1))[0]
         if np.isfinite(m) and m < ro["below"]:
             exposure = ro["exposure"]
+    bo = d.get("breadth_off")
+    if bo:
+        b = breadth(hist_arr, bo["lookback"])
+        if np.isfinite(b) and b < bo["below"]:
+            exposure = min(exposure, bo["exposure"])
     need = window(d)
     if hist_arr.shape[0] < need or not tickers:
         return {}, exposure
@@ -267,7 +321,7 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
     for f in d["filters"]:
         if not len(idx):
             break
-        v = _signal_values(f, hist_arr[:, idx], {k: a[:, idx] for k, a in fund.items()})
+        v = _signal_values(f, hist_arr[:, idx], {k: a[:, idx] for k, a in fund.items()}, bench)
         keep = np.isfinite(v)
         if f["rule"] == "above":
             keep &= v > f["value"]
@@ -285,7 +339,7 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
         return {}, exposure
     sub = hist_arr[:, idx]
     fsub = {k: a[:, idx] for k, a in fund.items()}
-    vals = [(_signal_values(t, sub, fsub), t["weight"]) for t in d["score"]]
+    vals = [(_signal_values(t, sub, fsub, bench), t["weight"]) for t in d["score"]]
     ok = np.all([np.isfinite(v) for v, _ in vals], axis=0)
     if not ok.any():
         return {}, exposure
@@ -296,6 +350,11 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
     order = sorted(range(len(names)), key=lambda i: (-total[i], names[i]))
     n = min(d["top_n"] or default_top_n, len(order))
     pick = order[:n]
+    if d.get("hold_buffer") and held:
+        # Holdings still within the buffer keep their place; the rest of the slots go to the best-ranked others.
+        reach = int(math.ceil(n * d["hold_buffer"]))
+        keep = [i for i in order[:reach] if names[i] in held][:n]
+        pick = sorted(keep + [i for i in order if i not in keep][:n - len(keep)], key=order.index)
     if d["weighting"] == "equal":
         return {names[i]: 1.0 for i in pick}, exposure
     if d["weighting"] == "rank":
@@ -321,4 +380,6 @@ def scaled(design: dict, factor: float) -> dict:
     out = {**d, "score": [periods(t) for t in d["score"]], "filters": [periods(f) for f in d["filters"]]}
     if d["risk_off"]:
         out["risk_off"] = {**d["risk_off"], "lookback": s(d["risk_off"])}
+    if d.get("breadth_off"):
+        out["breadth_off"] = {**d["breadth_off"], "lookback": max(20, s(d["breadth_off"]))}
     return normalize_design(out)

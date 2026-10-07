@@ -155,6 +155,12 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
     band_skipped = 0
     pending: dict[str, float] | None = target_weights(s, prices, i0) if i0 in signal_days else None
     costs_paid = 0.0
+    # Exit rules of a custom design: checked on each close, sold at the next close (like any signal).
+    ex = (s["params"].get("design") or {}).get("exit") if s["template"] == "custom" else None
+    entry = np.full(len(tickers), np.nan)       # close at which the current holding was bought
+    peak = np.full(len(tickers), np.nan)        # highest close since then
+    exit_due = np.zeros(len(tickers), dtype=bool)
+    exits: list[list] = []
 
     for k in range(1, n_days):
         i = i0 + k
@@ -163,6 +169,18 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             growth = np.where((pos != 0) & np.isfinite(prev) & np.isfinite(cur) & (prev > 0), cur / prev, 1.0)
         pos = pos * growth
         E = cash + float(pos.sum())
+        if exit_due.any():
+            mask = exit_due & np.isfinite(raw[i]) & (pos > 0)
+            if mask.any():
+                new_pos, fee = _execute(mask, np.zeros(len(tickers)), pos, E, bps)
+                delta, cost = new_pos - pos, float(fee.sum())
+                cash -= float(delta.sum()) + cost
+                pos, costs_paid = new_pos, costs_paid + cost
+                exec_log.append({"k": k, "turnover": float(np.abs(delta).sum() / E / 2.0) if E > 0 else 0.0,
+                                 "trades": int(mask.sum()), "cost": cost})
+                exits.extend([dates[k], tickers[j]] for j in np.flatnonzero(mask))
+                E = cash + float(pos.sum())
+            exit_due[:] = False
         if pending is not None:
             target = np.array([pending.get(t, 0.0) for t in tickers], dtype="float64")
             tradable = np.isfinite(raw[i])
@@ -194,8 +212,18 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             E = cash + float(pos.sum())
             held_log.append([dates[k], {t: float(pos[j] / E) for j, t in enumerate(tickers) if pos[j] > 0},
                              float(cash / E)])
+        if ex:
+            held_now = pos > 0
+            fresh = held_now & ~np.isfinite(entry)
+            entry = np.where(fresh, cur, np.where(held_now, entry, np.nan))
+            peak = np.where(held_now, np.fmax(np.where(fresh, cur, peak), cur), np.nan)
+            with np.errstate(invalid="ignore"):
+                if ex.get("stop_loss") is not None:
+                    exit_due |= held_now & (cur <= entry * (1 - ex["stop_loss"]))
+                if ex.get("trailing_stop") is not None:
+                    exit_due |= held_now & (cur <= peak * (1 - ex["trailing_stop"]))
         if i in signal_days:
-            pending = target_weights(s, prices, i)
+            pending = target_weights(s, prices, i, held=frozenset(t for j, t in enumerate(tickers) if pos[j] > 0))
         equity[k] = E
         invested[k] = float(pos.sum()) / E if E > 0 else 0.0
 
@@ -228,7 +256,7 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             "benchmark": compute_metrics(bench_curve[base:], exposure=1.0) if bench_curve is not None else None,
         }
 
-    latest = target_weights(s, prices, i1)
+    latest = target_weights(s, prices, i1, held=frozenset(t for j, t in enumerate(tickers) if pos[j] > 0))
     return {
         "equity": [[d, round(float(v), 6)] for d, v in zip(dates, equity)],
         "benchmark": [[d, round(float(v), 6)] for d, v in zip(dates, bench_curve)] if bench_curve is not None else [],
@@ -250,6 +278,7 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
         "held_cash": [[d, c] for d, _, c in held_log],
         "band": s["params"]["band"],
         "band_skipped": band_skipped,  # (execution, name) pairs left untraded because inside the band
+        "exits": exits,  # [date, ticker] sold by the design's exit rules between rebalances
         "spec_hash": spec_hash(s),
         "snapshot_id": snapshot_id,
         "universe_used": tickers,
@@ -269,6 +298,10 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             "sharpe annualised with sqrt(252), risk-free rate 0",
             f"holdout = last {holdout_days} trading days of the period",
             "long/cash only: no shorting, no leverage",
+            *([f"exit rules: a holding is sold at the next close once its close is "
+               + " or ".join(x for x in (f"{ex['stop_loss']:.0%} below its entry close" if ex.get("stop_loss") else "",
+                                         f"{ex['trailing_stop']:.0%} below its highest close since entry" if ex.get("trailing_stop") else "") if x)
+               + "; it stays out until the next rebalance"] if ex else []),
         ],
     }
 

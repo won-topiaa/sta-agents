@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { AgentStore, briefHash } from '../lib/research-agent-core.mjs';
 import { kilnProposal, AgentUnavailable } from '../lib/research-kiln.mjs';
 import { agenticTick } from '../lib/research-agentic.mjs';
+import { exitWatch } from '../lib/research-bsc-sell.mjs';
+import { dirname, join } from 'node:path';
 
 export function evaluate(input,inspect=false,signal) {
   return new Promise((resolve,reject)=>{
@@ -18,6 +20,21 @@ export function evaluate(input,inspect=false,signal) {
     child.stdin.end(JSON.stringify(input));
   });
 }
+// The engine's exit check (engine/compute/exit_check.py): the same stop-loss / trailing-stop definition as the
+// backtest, on the same verified price release.
+export function exitCheck(input) {
+  return new Promise((resolve,reject)=>{
+    const script=process.env.XTXC_RESEARCH_EXIT_CHECK??join(dirname(process.env.XTXC_RESEARCH_EVALUATOR??''),'exit_check.py');
+    const child=spawn(process.env.XTXC_RESEARCH_PYTHON,[script,process.env.XTXC_RESEARCH_DATA_ROOT],{cwd:dirname(script),
+      env:{PATH:'/usr/bin:/bin',PYTHONPATH:process.env.XTXC_RESEARCH_PYTHONPATH,PYTHONDONTWRITEBYTECODE:'1',OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'},
+      stdio:['pipe','pipe','pipe'],timeout:120000,killSignal:'SIGKILL'});
+    let out='';child.stdout.on('data',d=>{if(out.length<2000000)out+=d;});child.stderr.resume();
+    child.on('error',()=>reject(new Error('Exit check could not start.')));
+    child.on('close',code=>{try{const v=JSON.parse(out);if(code!==0||v.error)throw new Error(String(v.error??'Exit check failed.'));resolve(v);}catch(e){reject(e instanceof Error?e:new Error('Exit check failed.'));}});
+    child.stdin.end(JSON.stringify(input));
+  });
+}
+const releaseId=()=>{try{return JSON.parse(readFileSync(process.env.XTXC_RESEARCH_DATA_ROOT+'/prices/quant_release.json','utf8')).release_id;}catch{return null;}};
 export async function processRun(store,run,config) {
   const abort=new AbortController();
   const timer=setInterval(()=>{
@@ -60,10 +77,16 @@ export async function gatewayCall(method,path,body){
 }
 async function main() {
   const store=new AgentStore(process.env.XTXC_RESEARCH_DB,[]);
-  let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
+  let stopping=false,exitAt=0;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
   while(!stopping){
     try{monitors(store);if(process.env.XTXC_BNB_GATEWAY_URL)await agenticTick(store,gatewayCall);const run=store.claim();if(run)await processRun(store,run,process.env);}
     catch{process.stderr.write('Research worker cycle failed; no transaction was sent.\n');}
+    // Daily exit rules (once per price release). A failure retries after 10 minutes; nothing is sent from here
+    // except Agentic Wallet sales of an agent allowed to trade on its own (through agenticTick on the next cycle).
+    if(process.env.XTXC_BNB_GATEWAY_URL&&Date.now()>=exitAt){
+      try{await exitWatch(store,{gw:gatewayCall,check:exitCheck,release:releaseId()});exitAt=Date.now()+60000;}
+      catch(e){exitAt=Date.now()+600000;process.stderr.write(`Exit check failed; it retries later. ${String(e?.message??'').slice(0,160)}\n`);}
+    }
     if(process.argv.includes('--once'))break;
     await new Promise(r=>setTimeout(r,3000));
   }

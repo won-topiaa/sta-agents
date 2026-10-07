@@ -1,0 +1,14 @@
+import type {AgentStore,SaleHolding} from './research-agent-core.mjs';
+import type {AgentPlan} from './research-agent-types';
+import type {ResearchStrategy} from './research-workspace';
+type Gateway=(method:'GET'|'POST',path:string,body?:unknown)=>Promise<any>;
+export type StrategyContract={instrument:string;platform:string;contract:string;symbol:string;decimals:number};
+export type Holding=StrategyContract&{raw:string};
+export function strategyContracts(strategy:ResearchStrategy):StrategyContract[];
+export function holdingsFor(strategy:ResearchStrategy,reply:unknown):Holding[];
+export function readHoldings(gw:Gateway,wallet:string,contracts:string[]):Promise<{address?:string;observedAt?:string;holdings:{contract:string;raw:string}[]}>;
+export function saleWallet(store:AgentStore,address:string,strategy:ResearchStrategy):{kind:'PERSONAL'|'AGENTIC';address:string};
+export function createSellPlan(store:AgentStore,address:string,strategyId:string,options:{kind:'CLOSE'|'EXIT';holdings:SaleHolding[];wallet?:'PERSONAL'|'AGENTIC';reason?:unknown;proposed?:boolean}):AgentPlan;
+export function approveProposed(store:AgentStore,address:string,id:string):AgentPlan;
+export function exitPositions(store:AgentStore):unknown[];
+export function exitWatch(store:AgentStore,options:{gw:Gateway;check:(input:unknown)=>Promise<any>;release:string|null}):Promise<unknown>;
