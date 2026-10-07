@@ -334,25 +334,29 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
         return {}, exposure
     alive = np.all(np.isfinite(hist_arr[-need:]) & (hist_arr[-need:] > 0), axis=0)
     idx = np.flatnonzero(alive)
-    # Every filter looks at the same eligible stocks and a stock must pass all of them, so the order of filters never
-    # matters and "the top 50%" is half of the eligible stocks with a value, not half of what another filter left.
-    passed = np.ones(len(idx), dtype=bool)
+    # Order never matters: threshold filters (above / below) all apply to the eligible stocks; then each share filter
+    # (top / bottom fraction) ranks the stocks that passed every threshold, and a stock must make every share filter.
+    # "The cheapest 40%" is thus the cheapest 40% of the companies meeting the hard limits, and a share filter written
+    # the other way round (bottom instead of top) cannot turn an agent's rule into its opposite.
     fbase = {k: a[:, idx] for k, a in fund.items()}
+    passed = np.ones(len(idx), dtype=bool)
     for f in d["filters"]:
-        v = _signal_values(f, hist_arr[:, idx], fbase, bench)
-        keep = np.isfinite(v)
-        if f["rule"] == "above":
-            keep &= v > f["value"]
-        elif f["rule"] == "below":
-            keep &= v < f["value"]
-        else:
-            finite = np.flatnonzero(keep)
+        if f["rule"] in ("above", "below"):
+            v = _signal_values(f, hist_arr[:, idx], fbase, bench)
+            passed &= np.isfinite(v) & ((v > f["value"]) if f["rule"] == "above" else (v < f["value"]))
+    idx = idx[passed]
+    fbase = {k: a[:, idx] for k, a in fund.items()}
+    passed = np.ones(len(idx), dtype=bool)
+    for f in d["filters"]:
+        if f["rule"].endswith("fraction") and len(idx):
+            v = _signal_values(f, hist_arr[:, idx], fbase, bench)
+            finite = np.flatnonzero(np.isfinite(v))
+            keep = np.zeros(len(idx), dtype=bool)
             if len(finite):
                 k = max(1, int(math.floor(len(finite) * f["value"] + 1e-9)))
                 order = finite[np.argsort(-v[finite] if f["rule"] == "top_fraction" else v[finite], kind="stable")]
-                keep = np.zeros_like(keep)
                 keep[order[:k]] = True
-        passed &= keep
+            passed &= keep
     idx = idx[passed]
     if not len(idx):
         return {}, exposure

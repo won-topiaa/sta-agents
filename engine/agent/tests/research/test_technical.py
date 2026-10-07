@@ -131,7 +131,8 @@ def test_filters_do_not_depend_on_their_order():
     both_ways = [{"signal": "trend", "lookback": 100, "rule": "above", "value": 0},
                  {"signal": "momentum", "lookback": 126, "skip": 21, "rule": "top_fraction", "value": 0.5}]
     one, _ = sl.design_scores({**BASE, "top_n": 5, "filters": both_ways}, hist, names, {}, 5)
-    assert set(one) == {"S0", "S1", "S2", "S3", "S4"}                     # half of the ten, not half of the risers
+    two, _ = sl.design_scores({**BASE, "top_n": 5, "filters": list(reversed(both_ways))}, hist, names, {}, 5)
+    assert one == two and set(one) == {"S0", "S1"}                        # the top half of the five risers, either order
 
 
 def test_an_exit_on_a_rebalance_day_is_not_bought_back_at_once():
