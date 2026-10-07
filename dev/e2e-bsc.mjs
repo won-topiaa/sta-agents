@@ -25,7 +25,7 @@ if(process.env.E2E_INTERPRET){const {draft}=await call('POST','/api/v1/stocklana
 const STYLE=process.env.E2E_STYLE??'technical',VALUE=STYLE==='value'||STYLE==='dividend';
 const profile=STYLE==='rotation'?{name:'E2E rotation',style:'technical',preset:'rotation',rules:[{id:'strong_sector',params:{keep:0.4}},{id:'sector_inflow'},{id:'relative_strength',params:{days:126}},
     {id:'fewer_trades',params:{within:2}},{id:'trailing_stop',params:{drop:0.15}},{id:'stop_loss',params:{loss:0.1}}],
-    philosophy:'',risk:{maxWeightBps:3000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'weekly',approval:'PER_TRADE'}
+    philosophy:'',risk:{maxWeightBps:3000,minCashBps:1000,maxDrawdownBps:3500},rebalance:process.env.E2E_REBALANCE??'monthly',approval:'PER_TRADE'}
   :STYLE==='dividend'?{name:'E2E dividend',style:'value',preset:'dividend',rules:[{id:'pays_dividend',params:{min:0.015}},{id:'cheaper_than_sector'},{id:'liquid_only',params:{min:7}}],
     philosophy:'I want dependable dividend payers that are cheaper than their peers.',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:4000},rebalance:'monthly',approval:'PER_TRADE'}
   :STYLE==='volume'?{name:'E2E volume',style:'technical',preset:'custom',rules:[{id:'liquid_only',params:{min:8}},{id:'volume_surge',params:{min:0.2}},{id:'uptrend_only',params:{days:50}}],
