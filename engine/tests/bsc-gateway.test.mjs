@@ -77,6 +77,7 @@ test('gateway: approval first, then a checked and simulated swap; refuses closed
   f=fakeClient({gas:0n});
   r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
   assert.equal(r.body.error.code,'NO_GAS');assert.match(r.body.error.message,/BNB/);
+  assert.equal(r.body.error.quote.fromSymbol,'USDT');assert.ok(BigInt(r.body.error.quote.toTokenAmount)>0n);assert.ok(r.body.error.quote.toSymbol);   // the live quote is still shown
   f=fakeClient({funds:10n**18n});
   r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
   assert.equal(r.body.error.code,'NO_FUNDS');assert.match(r.body.error.message,/25\.00/);

@@ -134,3 +134,11 @@ def test_the_prompt_quotes_the_agent_but_lists_its_rules_as_enforced():
     assert '"max_holdings": 4' in user and '"exposure": 0.5' in user
     plain = design_messages(brief, {"NVDA": "NVIDIA"}, {}, ["NVDA"])[1]["content"]
     assert "agent" not in plain
+
+
+def test_a_long_idea_is_shortened_not_rejected():
+    long = ("Buys companies that pay dependable dividends and trade below their sector on earnings. " * 4).strip()
+    out = validate_candidates({"candidates": [{"name": "Income value", "idea": long, "design": MODEL}]})["candidates"][0]["idea"]
+    assert len(out) <= 240 and out.endswith(".") and out.startswith("Buys companies")
+    with pytest.raises(ValueError, match="idea must be text"):
+        validate_candidates({"candidates": [{"name": "Income value", "idea": "short", "design": MODEL}]})

@@ -19,7 +19,7 @@ const stores=new Map<string,AgentStore>();
 function db(address:string){const path=process.env.XTXC_RESEARCH_DB;if(!path?.startsWith('/var/lib/xtxc-research/')&&!path?.startsWith('/srv/xtxc-operations/research-test/'))reject('Research storage is unavailable.',503);
   const chain=isBscPrincipal(address)?'bsc':'solana';let s=stores.get(chain);if(!s){s=new AgentStore(path,allowedStocksFor(address));stores.set(chain,s);}return s;}
 async function owner(request:Request){return researchPrincipal(await requireRequesterSession(request));}
-function failure(e:unknown){if(e instanceof RequesterAuthError||e instanceof ResearchStoreError||e instanceof ServiceExchangeError)return Response.json({error:{message:e.message}},{status:e.status,headers});return Response.json({error:{message:'Research is temporarily unavailable. Your saved work is unchanged.'}},{status:503,headers});}
+function failure(e:unknown){if(e instanceof RequesterAuthError||e instanceof ResearchStoreError||e instanceof ServiceExchangeError){const {code,quote}=e as {code?:string;quote?:unknown};return Response.json({error:{message:e.message,...(code?{code}:{}),...(quote?{quote}:{})}},{status:e.status,headers});}return Response.json({error:{message:'Research is temporarily unavailable. Your saved work is unchanged.'}},{status:503,headers});}
 export async function GET(request:Request){try{const address=await owner(request),q=new URL(request.url).searchParams;return Response.json(db(address).view(address,q.get('id')??'',Number(q.get('after')??0)),{headers});}catch(e){return failure(e);}}
 const str=(v:unknown)=>typeof v==='string'?v:reject('Invalid research request.');
 const index=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0?Number(v):reject('Invalid trade step.');

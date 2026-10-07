@@ -12,7 +12,8 @@ from xtxc_agent.research.backtest import simulate, report_curve
 def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
-def load_prices(root, tickers, column='adjclose'):
+def load_prices(root, tickers, column='adjclose', common=True):
+    """Verified daily values per ticker. ``common``: only sessions every ticker has (else the union, NaN-padded)."""
     root = pathlib.Path(root)
     path = root / 'prices' / 'quant_release.json'
     if not path.exists(): raise ValueError('WAITING_DATA: A verified price release has not been published.')
@@ -54,11 +55,12 @@ def load_prices(root, tickers, column='adjclose'):
             try: x=float(r[column])
             except (TypeError, ValueError):
                 raise ValueError('WAITING_DATA: Malformed adjusted price.')
-            if not math.isfinite(x) or x<=0: raise ValueError('WAITING_DATA: Invalid adjusted price.')
+            if not math.isfinite(x) or x<0 or (x==0 and column!='volume'): raise ValueError('WAITING_DATA: Invalid adjusted price.')
             values[r['date']]=x
         content[ticker]=pd.Series(values,dtype='float64')
         coverage[ticker]={'objectHash':obj,'rows':len(values),'provenance':provenance}
-    prices=pd.DataFrame(content).sort_index().dropna()
+    prices=pd.DataFrame(content).sort_index()
+    if common: prices=prices.dropna()
     prices.index=pd.to_datetime(prices.index)
     if prices.empty or (dt.datetime.now(dt.timezone.utc).date()-prices.index[-1].date()).days>7:
         raise ValueError('WAITING_DATA: Common price history is stale or empty.')

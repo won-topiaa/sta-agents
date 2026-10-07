@@ -1,0 +1,52 @@
+/* Step bar and next-step card above the strategy conversation; "How it works" on the start screen;
+   intake card sections. */
+.sx-journey{padding:12px 16px 14px;border-bottom:1px solid #222;background:#0e0e0e;flex-shrink:0}
+.sx-journey ol{display:flex;gap:4px;list-style:none;margin:0;padding:0}
+.sx-journey li{flex:1;min-width:0;position:relative}
+.sx-journey li+li::before{content:"";position:absolute;left:-4px;right:calc(100% - 1px);top:10px;height:1px;background:#333}
+.sx-journey li>span,.rw-root .sx-journey li>button{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;padding:0;margin:0;background:none;border:0;color:#8a8a8a;font-size:11px;line-height:1.2;text-align:center;white-space:nowrap;cursor:default}
+.rw-root .sx-journey li>button{cursor:pointer}
+.rw-root .sx-journey li>button:hover{color:#ededed;background:none}
+.sx-mark{display:grid;place-items:center;width:21px;height:21px;border-radius:50%;border:1px solid #3c3c3c;background:#141414;font-size:10.5px;font-variant-numeric:tabular-nums;color:#9a9a9a}
+.sx-mark svg{width:12px;height:12px}
+.sx-done .sx-mark{background:#203024;border-color:#3d6146;color:#a9e0b2}
+.sx-done{color:#c8c8c8}
+.sx-journey .sx-done>span,.rw-root .sx-journey .sx-done>button{color:#c8c8c8}
+.sx-journey .sx-now>span,.rw-root .sx-journey .sx-now>button{color:#f2f2f2;font-weight:600}
+.sx-now .sx-mark{background:#ededed;border-color:#ededed;color:#111;font-weight:700}
+.sx-next{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 12px;border:1px solid #333;border-radius:8px;background:#151515}
+.sx-next>div{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.sx-next b{font-size:13px;font-weight:600;color:#f0f0f0}
+.sx-next small{font-size:11.5px;line-height:1.45;color:#a6a6a6}
+.rw-root .sx-next .rw-button{flex-shrink:0;white-space:nowrap;padding:8px 12px;font-size:12px}
+.sx-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#a9e0b2;margin-left:6px;vertical-align:2px}
+
+.sx-how{list-style:none;counter-reset:sx;margin:26px 0 0;padding:16px 0 0;border-top:1px solid #262626;display:flex;flex-direction:column;gap:12px}
+.sx-how li{counter-increment:sx;display:grid;grid-template-columns:24px 1fr;column-gap:10px;row-gap:2px}
+.sx-how li::before{content:counter(sx);grid-row:span 2;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1px solid #3a3a3a;font-size:11px;color:#bdbdbd}
+.sx-how b{font-size:12.5px;font-weight:600;color:#e9e9e9}
+.sx-how span{font-size:11.5px;line-height:1.5;color:#9d9d9d}
+
+.sx-trade-links{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:18px 0 6px;font-size:12px;color:#8f8f8f}
+.sx-trade-links>span{width:100%;font-size:11px;letter-spacing:.2px}
+.rw-root .sx-trade-links .rw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.sx-trade-links svg{width:13px;height:13px}
+
+.rw-intake-section{display:flex;flex-direction:column;gap:7px;margin:12px 0 0}
+.rw-intake-section>span{font-size:11px;color:#a8a8a8}
+.rw-intake-section .rw-brief-tags{margin:0}
+.rw-horizons{display:flex;flex-wrap:wrap;gap:6px}
+.rw-root .rw-horizons button{border:1px solid #393939;border-radius:999px;padding:5px 10px;font-size:11.5px;background:#151515;color:#d8d8d8;cursor:pointer}
+.rw-root .rw-horizons button[aria-pressed=true]{background:#ededed;color:#151515;border-color:#ededed;font-weight:600}
+.rw-intake-question{font-size:13.5px!important;color:#f0f0f0!important;font-weight:550}
+.rw-intake .rw-intake-fields{margin-top:14px}
+.rw-missing>span,.rw-missing{color:#f3d9a4}
+.rw-missing input{border-color:#8a6d33!important}
+.rw-intake-section.rw-missing .rw-horizons button{border-color:#6e5a32}
+
+@media (max-width:640px){
+  .sx-journey{padding:10px 12px 12px}
+  .sx-journey li>span,.rw-root .sx-journey li>button{font-size:10.5px}
+  .sx-next{flex-direction:column;align-items:stretch}
+  .rw-root .sx-next .rw-button{width:100%}
+}

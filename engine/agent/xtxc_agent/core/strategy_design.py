@@ -39,10 +39,15 @@ DESIGN_SYSTEM = (
     "over lookback, zero or negative), sharpe (return per unit of swing), rsi (relative strength 0..100 over lookback "
     "daily moves; under 30 is oversold, over 70 overbought), zscore (price vs its lookback average in standard "
     "deviations, the Bollinger band position; -2 is the lower band), ma_cross (fast-day average vs lookback-day average, "
-    "minus one; above 0 is a golden cross). Company fundamentals (as of each date, from SEC filings; write lookback 5): "
+    "minus one; above 0 is a golden cross), volume_surge (20-day average volume vs the 120-day average, minus one; "
+    "filter value -1..5), dollar_volume (log10 of the 20-day average dollars traded a day, 7 is $10M; filter value 3..12); "
+    "write lookback 5 for the two volume signals. Company fundamentals (as of each date, from SEC filings; write lookback 5): "
     "earnings_yield (earnings / market value, higher is cheaper), book_to_price (equity / market value, higher is cheaper), "
     "fcf_yield (free cash flow / market value), roe (earnings / equity), debt_to_equity (long-term debt / equity, lower is "
-    "safer; filter value 0..20), revenue_growth (twelve-month sales growth; filter value -1..5). Stocks without filings "
+    "safer; filter value 0..20), revenue_growth (twelve-month sales growth; filter value -1..5), dividend_yield "
+    "(twelve-month dividends / market value), ebitda_yield (EBITDA / enterprise value, higher is cheaper), "
+    "earnings_yield_vs_sector and book_to_price_vs_sector (the company's value minus its sector's median; above 0 is "
+    "cheaper than its sector). Stocks without filings "
     "(funds, some foreign companies) have no fundamental values and drop out of designs that use them. "
     "The score is the weighted sum of the signals "
     "compared across the stocks (a negative weight prefers low values, e.g. volatility -1 prefers calm stocks). "
@@ -58,7 +63,8 @@ EXAMPLE = {"score": [{"signal": "momentum", "lookback": 126, "skip": 21, "weight
 
 STYLE_TEXT = {
     "technical": "a technical-analysis trader: choices come from price behaviour (trend, momentum, oversold or "
-                 "overbought levels, bands and moving averages), not from company financials; use price signals only",
+                 "overbought levels, bands, moving averages and trading volume), not from company financials; use price and "
+                 "volume signals only",
     "value": "a fundamental (value) investor: choices come from company financials (cheapness, profitability, cash "
              "generation, balance-sheet strength, growth); every design must score at least one fundamental signal, "
              "and price signals may only time or temper it",
@@ -92,6 +98,18 @@ def design_messages(brief: dict, names: dict[str, str], sectors: dict[str, str],
             {"role": "user", "content": user}]
 
 
+def _short(text: str, limit: int) -> str:
+    """At most ``limit`` characters, cut after the last whole sentence (else the last whole word) that fits."""
+    t = " ".join(text.split())
+    if len(t) <= limit:
+        return t
+    head = t[:limit]
+    end = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if end >= 10:
+        return head[:end + 1]
+    return head[:max(head.rfind(" "), limit - 1)].rstrip(" ,;:") + "…"
+
+
 def validate_candidates(answer) -> dict:
     """Code decides: a candidate that breaks a rule is dropped (with the reason); the answer is sent back to the model
     only when no candidate is usable."""
@@ -107,6 +125,8 @@ def validate_candidates(answer) -> dict:
             if not isinstance(c, dict) or set(c) != {"name", "idea", "design"}:
                 raise ValueError("keys must be exactly name, idea, design")
             for k, lo, hi in (("name", 2, 40), ("idea", 10, 240)):
+                if k == "idea" and isinstance(c[k], str):
+                    c = {**c, "idea": _short(c[k], hi)}   # display text: a long idea is cut, not a reason to drop the design
                 if not isinstance(c[k], str) or not lo <= len(c[k].strip()) <= hi:
                     raise ValueError(f"{k} must be text of {lo} to {hi} characters")
                 if DIGIT.findall(c[k]):
@@ -156,7 +176,8 @@ def describe(design: dict) -> dict:
             filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), p=f"{f['value']:.0%}"))
         else:
             v = (f"{f['value']:g}" if f["signal"] == "rsi" else f"{f['value']:+g}σ" if f["signal"] == "zscore"
-                 else f"{f['value']:+.0%}")
+                 else f"${10 ** f['value'] / 1e6:,.0f}M" if f["signal"] == "dollar_volume"
+                 else f"{f['value']:g}x" if f["signal"] == "debt_to_equity" else f"{f['value']:+.0%}")
             filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), v=v))
     out = {"score": i18n.join(score), "filters": i18n.join(filters) if filters else tr("word.none"),
            "pick": tr("dz.top", n=d["top_n"]) if d["top_n"] else tr("dz.top.auto"), "weighting": tr(f"dz.w.{d['weighting']}")}

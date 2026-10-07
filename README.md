@@ -52,8 +52,8 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 
 | Module | Calls | Used for |
 | --- | --- | --- |
-| RWA Data | `GET /api/v1/dex/market/rwa/platforms`, `/rwa/tokens` | Ondo and bStock tokens on BSC, underlying ticker, token-to-share ratio, market status (no order is prepared for a token that is not `TRADING`) |
-| Trading | `GET /api/v1/dex/aggregator/quote`, `/aggregator/swap`, `/aggregator/approve-transaction` | Route and price, unsigned swap transaction, exact-amount approval of the router |
+| RWA Data | `GET /api/v1/dex/market/rwa/platforms`, `/rwa/tokens` | Ondo and bStock tokens on BSC, underlying ticker, token-to-share ratio, market status (no order is prepared for a token that is not `TRADING`), token prices where no DEX pool is indexed |
+| Trading | `GET /api/v1/dex/aggregator/quote`, `/aggregator/swap`, `/aggregator/approve-transaction` | Route and price (shown even when the wallet cannot pay yet), unsigned swap transaction, exact-amount approval of the router |
 | Transaction | `POST /api/v1/dex/pre-transaction/simulate`, `GET /post-transaction/transaction-detail-by-txhash` | Dry run before any signature; indexed status after sending |
 | Wallet | `GET /api/v1/dex/balance/all-token-balances-by-address` | Holdings view |
 | Agentic Wallet (`@binance/agentic-wallet`) | `auth signin/verify`, `wallet address/settings/left-quota`, `market-order swap/list` | QR sign-in from the agent card; the limits Binance enforces; autonomous legs |
@@ -97,10 +97,25 @@ Value signals come from **SEC EDGAR XBRL company facts** (`engine/agent/xtxc_age
 | ROE | TTM net income / equity |
 | debt-to-equity | Long-term debt / equity |
 | revenue growth | TTM revenue / TTM revenue four quarters earlier − 1 |
+| dividend yield | TTM dividends paid / market value |
+| EBITDA yield | TTM (operating income + depreciation and amortization) / enterprise value (market value + long-term debt − cash) |
+| … vs sector | Earnings yield or book-to-price minus the median of the company's sector that day |
+
+- **Sectors**: from each company's SEC SIC code, grouped into broad sectors. The median uses every company in the data release from that sector, not only the stocks in the request, and needs at least three values that day.
+- **Release format**: the raw `companyfacts` files are stored by content hash, with a small digest per company (dated series, no prices). A research run reads only the digests.
 
 - **Quarters**: taken from 3-month facts, or from differences of year-to-date facts. Cash-flow statements are cumulative.
 - **Market value**: split-adjusted close × shares outstanding put on the same split basis. Dividend-adjusted prices are not used for valuation.
 - **Backtester input**: the values are attached to the price panel as point-in-time columns, so the same "rows ≤ t" slicing and the same future-data perturbation test cover them.
+
+Trading-activity signals for every stock and fund (`engine/agent/xtxc_agent/research/volume.py`) use the same columns:
+**volume surge** (20-day / 120-day average volume − 1) and **dollar volume** (log10 of 20-day average dollars traded).
+
+## Research universe
+
+Every Ondo or bStock token on BSC whose underlying has at least 1,135 sessions of verified daily history (enough for a one-year held-out test): **381 tickers**, 293 stocks and 88 funds, from a Binance Web3 RWA Data snapshot. `dev/gen_bsc_universe.py` regenerates the list; execution re-checks each token's live status and contract.
+
+A request that names a theme (dividends, value, a sector, crypto) starts from a group built from the same data by `dev/gen_bsc_themes.py`: SIC sector, dividends paid and filings on record, ranked by trading volume. A request with no theme starts from the most traded companies with filings, taking turns across sectors. These groups only seed a draft the user reviews; the agent's rules and the backtests decide.
 
 ## Repository layout
 
@@ -138,7 +153,7 @@ The live app is the hosted way to try it; the `web/` folder is an excerpt and do
 
 ## Limitations
 
-- **Coverage of value signals**: none for funds, foreign IFRS filers (TSM, NVO, AZN, ASML) and some multi-class issuers (V, BRK.B). The research universe is today's listed stocks, so survivorship bias remains.
+- **Coverage of value signals**: none for funds, foreign IFRS filers (TSM, NVO, AZN, ASML) and some multi-class issuers (V, BRK.B). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
 - **One Agentic Wallet per gateway**: it is bound to the first account that signs in. The CLI stores its session in the OS keychain.
 - **Not audited.** Small amounts only.

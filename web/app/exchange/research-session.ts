@@ -20,7 +20,7 @@ export async function ensureEvmSession(wallet: string): Promise<string> {
   if (!Array.isArray(accounts) || !accounts.some(a => a.toLowerCase() === wallet.toLowerCase())) throw new Error('The connected wallet changed. Review the request again.');
   const issuedAt = new Date(), expiresAt = new Date(issuedAt.getTime() + 5 * 60_000);
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
-  const message = ['Skew Stocklana', 'Sign in to trade on Skew.', '', `URI: ${window.location.origin}`, 'Version: 1', 'Chain: BNB Smart Chain (eip155:56)', `Address: ${address}`,
+  const message = ['XTXC', 'Sign in to XTXC research on BNB Chain.', '', `URI: ${window.location.origin}`, 'Version: 1', 'Chain: BNB Smart Chain (eip155:56)', `Address: ${address}`,
     `Nonce: ${nonce}`, `Issued At: ${issuedAt.toISOString()}`, `Expiration Time: ${expiresAt.toISOString()}`].join('\n');
   const signature = await provider.request({ method: 'personal_sign', params: [toHex(message), address] }) as string;
   const reply = await fetch('/api/v1/requester-sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'EVM_SESSION', address, message, signature }) });

@@ -35,3 +35,16 @@ test('ungrounded model theme does not suppress the budget-only starter path',()=
  const d=resolveIntake({...slots,themes:['broad_market'],budgetUSDC:'100',budgetEvidence:'100달러'},'100달러로 1년 5% 목표로 연구해줘',allowed);
  assert.equal(d.universeSource,'STARTER_RESEARCH');assert.deepEqual(d.missing,[]);
 });
+test('BNB Chain drafts use data-built groups: value and dividend requests get companies, not funds',async()=>{
+ const {CATALOGS}=await import('../lib/research-intake.mjs');const {BSC_RESEARCH_STOCKS,BSC_RESEARCH_FUNDS}=await import('../lib/bsc-research-universe.mjs');
+ const text='Find undervalued dividend payers among large US companies. 30 USDT, one year, 6% target.';
+ const p={...slots,title:'Dividend value',themes:['value','dividend'],budgetUSDC:'30',budgetEvidence:'30 USDT',targetPercent:'6',targetEvidence:'6%',horizonDays:365,horizonEvidence:'one year'};
+ const d=resolveIntake(p,text,BSC_RESEARCH_STOCKS,null,[],CATALOGS.bsc);
+ assert.equal(d.universeSource,'YOUR_REQUEST');assert.equal(d.executionChain,'eip155:56');
+ assert.deepEqual(d.brief.instruments,[...new Set([...CATALOGS.bsc.themes.value,...CATALOGS.bsc.themes.dividend])]);
+ assert.ok(d.brief.instruments.every(t=>!BSC_RESEARCH_FUNDS.includes(t)));
+ const starter=resolveIntake({...p,themes:[]},'30 USDT, one year, 6%',BSC_RESEARCH_STOCKS,null,[],CATALOGS.bsc);
+ assert.equal(starter.universeSource,'STARTER_RESEARCH');assert.deepEqual(starter.brief.instruments,[...CATALOGS.bsc.starter]);
+ assert.ok(new Set(starter.brief.instruments.map(t=>t)).size>=10);
+ assert.throws(()=>resolveIntake(p,text,allowed));                      // the Solana catalog has no dividend group
+});

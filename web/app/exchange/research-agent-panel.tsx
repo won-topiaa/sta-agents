@@ -17,26 +17,39 @@ const pct=(bps:number)=>`${(bps/100).toLocaleString('en-US',{maximumFractionDigi
 const usd=(atoms:string)=>(Number(atoms)/1e6).toLocaleString('en-US',{style:'currency',currency:'USD'});
 const legAmount=(leg:ResearchLeg)=>leg.side==='SELL'?`${(Number(leg.inputAtoms)/10**(leg.inputDecimals??0)).toLocaleString('en-US',{maximumFractionDigits:9})} tokens`:usd(leg.inputAtoms);
 const active=(r?:AgentRun)=>Boolean(r&&['QUEUED','RUNNING','WAITING_DATA','WAITING_MODEL'].includes(r.status));
-const labels:Record<string,string>={QUEUED:'Queued',RUNNING:'Researching',WAITING_DATA:'Waiting for data',WAITING_MODEL:'Waiting for Kiln',REVIEW:'Ready to review',DECLINED:'Target not supported',CANCELLED:'Cancelled',SUPERSEDED:'Brief changed',FAILED:'Run needs attention'};
+const labels:Record<string,string>={QUEUED:'Queued',RUNNING:'Researching',WAITING_DATA:'Waiting for data',WAITING_MODEL:'Waiting for the AI model',REVIEW:'Ready to review',DECLINED:'Target not supported',CANCELLED:'Cancelled',SUPERSEDED:'Brief changed',FAILED:'Run needs attention'};
+// Plain-language wording for results and plans; the stored values stay as the engine reports them.
+const signed=(bps:number)=>`${bps>0?'+':bps<0?'−':''}${pct(Math.abs(bps))}`;
+const drop=(bps:number)=>`−${pct(Math.abs(bps))}`;
+export const horizonText=(days:number)=>({30:'1-month',90:'3-month',180:'6-month',365:'1-year'} as Record<number,string>)[days]??`${days}-day`;
+export const planStatusText:Record<string,string>={APPROVED:'Ready to trade',PARTIAL:'In progress',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
+export const runActive=active;
 
+export type RefusalQuote={vendor?:string;fromAmount:string;fromSymbol?:string;toTokenAmount:string;toSymbol?:string;toDecimals?:number;priceImpactPercent?:string|number;quotedAt?:string|number};
+export type Refusal={operation:string;planId?:string;index?:number;code?:string;quote:RefusalQuote|null};
 export function useResearchAgent(wallet:string|null,strategy:ResearchStrategy|null){
   const [data,setData]=useState<AgentReply|null>(null),[goal,setGoal]=useState<ResearchGoal>(defaultGoal),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
+  // The strategy the current data was loaded for; data from the previous strategy can outlive one render.
+  const [dataId,setDataId]=useState('');
+  // The structured part of the last refusal (e.g. a BNB Chain quote returned with NO_GAS), tied to the request that raised it.
+  const [failure,setFailure]=useState<Refusal|null>(null);
   const current=useRef(''),live=useRef(true),flight=useRef(false),goalLoaded=useRef('');const id=strategy?.id??'';current.current=`${wallet}:${id}`;
   useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
-  useEffect(()=>{setData(null);setGoal(defaultGoal());setError(null);},[wallet,id]);
+  // Reopening a strategy loads its last goal again instead of keeping the defaults.
+  useEffect(()=>{setData(null);setDataId('');setGoal(defaultGoal());setError(null);setFailure(null);goalLoaded.current='';},[wallet,id]);
   const refresh=useCallback(async()=>{
     if(!wallet||!id)return;const key=`${wallet}:${id}`;
-    try{const r=await fetch(`${endpoint}?id=${id}`,{cache:'no-store',headers:{'X-Skew-Expected-Requester':researchPrincipalOf(wallet)},signal:AbortSignal.timeout(10000)});const b=await r.json();if(current.current!==key||!live.current)return;if(r.ok&&b.owner===researchPrincipalOf(wallet)){setData(b);if(goalLoaded.current!==key){goalLoaded.current=key;if(b.runs?.[0]?.goal)setGoal(b.runs[0].goal);}}}
+    try{const r=await fetch(`${endpoint}?id=${id}`,{cache:'no-store',headers:{'X-Skew-Expected-Requester':researchPrincipalOf(wallet)},signal:AbortSignal.timeout(10000)});const b=await r.json();if(current.current!==key||!live.current)return;if(r.ok&&b.owner===researchPrincipalOf(wallet)){setData(b);setDataId(id);if(goalLoaded.current!==key){goalLoaded.current=key;if(b.runs?.[0]?.goal)setGoal(b.runs[0].goal);}}}
     catch{/* Preserve the last report; never replace it with fabricated progress. */}
   },[wallet,id]);
   useEffect(()=>{void refresh();const t=setInterval(()=>{if(!document.hidden)void refresh();},active(data?.runs[0])?3000:15000);return()=>clearInterval(t);},[refresh,data?.runs[0]?.status]);
   const act=async(payload:Record<string,unknown>)=>{
-    if(!wallet||!id||flight.current)return null;const key=current.current;flight.current=true;setBusy(true);setError(null);
-    try{await ensureResearchSession(wallet);if(current.current!==key)return null;const r=await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Skew-Expected-Requester':researchPrincipalOf(wallet)},body:JSON.stringify(payload),signal:AbortSignal.timeout(payload.operation==='REVIEW_REBALANCE'?90000:30000)});const b=await r.json();if(current.current!==key||!live.current)return null;if(!r.ok)throw new Error(b.error?.message??'Request was not completed.');await refresh();return b;}
+    if(!wallet||!id||flight.current)return null;const key=current.current;flight.current=true;setBusy(true);setError(null);setFailure(null);
+    try{await ensureResearchSession(wallet);if(current.current!==key)return null;const r=await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Skew-Expected-Requester':researchPrincipalOf(wallet)},body:JSON.stringify(payload),signal:AbortSignal.timeout(payload.operation==='REVIEW_REBALANCE'?90000:30000)});const b=await r.json();if(current.current!==key||!live.current)return null;if(!r.ok){setFailure({operation:String(payload.operation),planId:payload.planId as string|undefined,index:payload.index as number|undefined,code:b.error?.code,quote:b.error?.quote??null});throw new Error(b.error?.message??'Request was not completed.');}await refresh();return b;}
     catch(e){if(live.current&&current.current===key)setError(e instanceof Error?e.message:'Request failed.');return null;}
     finally{flight.current=false;if(live.current)setBusy(false);}
   };
-  return{data,goal,setGoal,busy,error,refresh,act,run:data?.runs[0],running:active(data?.runs[0]),start:()=>act({operation:'RUN',strategyId:id,goal,requestId:crypto.randomUUID()})};
+  return{data,dataId,goal,setGoal,busy,error,failure,refresh,act,run:data?.runs[0],running:active(data?.runs[0]),start:()=>act({operation:'RUN',strategyId:id,goal,requestId:crypto.randomUUID()})};
 }
 export type AgentController=ReturnType<typeof useResearchAgent>;
 
@@ -56,25 +69,52 @@ function Curve({candidate}:{candidate:ResearchCandidate}){
   const c=candidate.curve,values=c.strategy;if(values.length<2)return null;
   const low=Math.min(...values,...c.benchmark.filter(v=>Number.isFinite(v))),high=Math.max(...values,...c.benchmark.filter(v=>Number.isFinite(v))),span=high-low||1;
   const path=(series:number[])=>series.map((v,i)=>`${i?'L':'M'}${(i/(series.length-1)*600).toFixed(1)},${(145-(v-low)/span*130).toFixed(1)}`).join(' ');
-  return <figure className="ra-curve"><svg viewBox="0 0 600 160" role="img" aria-label={`${candidate.name} historical equity; benchmark shown in gray`}><path d="M0 145H600" stroke="#292929"/>{c.benchmark.length>1&&<path d={path(c.benchmark)} fill="none" stroke="#555" strokeWidth="1.5"/>}<path d={path(values)} fill="none" stroke="#e7e7e7" strokeWidth="2"/></svg><figcaption><span>{c.dates[0]}</span><span>Backtest · QQQ benchmark</span><span>{c.dates.at(-1)}</span></figcaption></figure>;
+  return <figure className="ra-curve"><div className="ra-legend" aria-hidden="true"><span><i/>This strategy</span><span><i className="ra-legend-bench"/>Nasdaq-100 (QQQ)</span><span>Past prices · backtest</span></div><svg viewBox="0 0 600 160" role="img" aria-label={`${candidate.name} historical equity; benchmark shown in gray`}><path d="M0 145H600" stroke="#292929"/>{c.benchmark.length>1&&<path d={path(c.benchmark)} fill="none" stroke="#555" strokeWidth="1.5"/>}<path d={path(values)} fill="none" stroke="#e7e7e7" strokeWidth="2"/></svg><figcaption><span>{c.dates[0]}</span><span>{c.dates.at(-1)}</span></figcaption></figure>;
+}
+// The engine's own plain-English description of the tested design (report field howItPicks).
+function HowItPicks({candidate}:{candidate:ResearchCandidate}){
+  const how=(candidate as ResearchCandidate&{howItPicks?:Partial<Record<'score'|'filters'|'pick'|'weighting'|'risk_off',string>>}).howItPicks;
+  const rows=how?([['Ranks stocks by','score'],['Filters','filters'],['Buys','pick'],['Splits the money','weighting'],['Market guard','risk_off']] as const).filter(([,k])=>how[k]&&how[k]!=='none'):[];
+  if(!rows.length)return null;
+  return <dl className="ra-how">{rows.map(([label,k])=><div key={k}><dt>{label}</dt><dd>{how![k]}</dd></div>)}</dl>;
+}
+function Verdict({candidate}:{candidate:ResearchCandidate}){
+  return candidate.verdict==='ELIGIBLE'?<span className="ra-verdict ra-ok">Fits your limits</span>:<span className="ra-verdict ra-no">Outside your limits</span>;
+}
+// Target split of the budget. Amounts are an estimate until the plan is approved; the server sizes the exact legs.
+function Allocation({candidate,budget,asset,bsc}:{candidate:ResearchCandidate;budget?:string;asset:string;bsc:boolean}){
+  const total=Number(budget)>0?Number(budget):0,money=(bps:number)=>(total*bps/10000).toLocaleString('en-US',{maximumFractionDigits:2});
+  const small=bsc&&total?candidate.weights.filter(w=>total*w.weightBps/10000<5).map(w=>w.instrument):[];
+  return <div className="ra-alloc" aria-label="Target allocation">
+    <div className="ra-alloc-bar">{candidate.weights.map((w,i)=><span key={w.instrument} style={{flex:w.weightBps,opacity:Math.max(.3,1-i*.14)}}/>)}{candidate.cashBps>0&&<span className="ra-alloc-cash" style={{flex:candidate.cashBps}}/>}</div>
+    <ul>{candidate.weights.map(w=><li key={w.instrument}><b>{w.instrument}</b><span>{pct(w.weightBps)}</span>{total>0&&<small>≈ {money(w.weightBps)} {asset}</small>}</li>)}{candidate.cashBps>0&&<li className="ra-alloc-cash-row"><b>Cash</b><span>{pct(candidate.cashBps)}</span>{total>0&&<small>≈ {money(candidate.cashBps)} {asset}</small>}</li>}</ul>
+    {small.length>0&&<small className="ra-alloc-note">{small.join(', ')} would be under the 5 {asset} minimum order and stay in cash.</small>}
+  </div>;
 }
 const reasonLabels:Record<string,string>={TARGET_NOT_SUPPORTED:'Return target not supported',DRAWDOWN_LIMIT_EXCEEDED:'Loss limit exceeded',NON_POSITIVE_HOLDOUT_RETURN:'No positive held-out return',COST_STRESS_FAILED:'Failed doubled-cost test',NO_CURRENT_ALLOCATION:'No current stock allocation',DESIGN_STABILITY_NEEDS_REVIEW:'Strategy stability needs review',FUTURE_DATA_LEAKAGE:'Future-data check failed',AGENT_RULE_NOT_ENFORCED:'Agent rule not enforced'};
-export function ResearchResults({agent,onActivity}:{agent:AgentController;onActivity:()=>void}){
+export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent:AgentController;onActivity:()=>void;budget?:string;autoTrade?:boolean}){
   const run=agent.run;
   const wallet=agent.data?.owner.replace(/^solana:/,'');
-  const bsc=Boolean(agent.data?.owner.startsWith('eip155:56:'));
+  const bsc=Boolean(agent.data?.owner.startsWith('eip155:56:')),asset=bsc?'USDT':'USDC';
   const [draft,setDraft]=useState<RebalanceDraft|null>(null);
   const [selectedCandidate,setSelectedCandidate]=useState<string|null>(null);
   useEffect(()=>{setDraft(null);setSelectedCandidate(null);},[run?.id,agent.data?.owner]);
-  if(!run)return <div className="ra-empty"><h3>Set a target. Test the possibilities.</h3><p>Your strategies and their results will appear here.</p></div>;
-  if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3><p>{run.error??'Checking the available data, then comparing three strategies after costs.'}</p><small>{new Date(run.createdAt).toLocaleString()}</small></div>;
-  const r=run.result;
+  if(!run)return <div className="ra-empty"><h3>Set a target. Test the possibilities.</h3><p>Your agent designs up to three strategies and tests each one on past prices, after trading costs. The results appear here.</p></div>;
+  if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3>{active(run)&&<div className="ra-progress" role="progressbar" aria-label="Research in progress"><span/></div>}<p>{run.error??'Designing strategies, then testing each one on past prices after costs. This usually takes about a minute.'}</p><small>Started {new Date(run.createdAt).toLocaleString()}</small></div>;
+  const r=run.result,h=horizonText(run.goal.horizonDays),fits=r.candidates.filter(c=>c.verdict==='ELIGIBLE').length;
   const candidate=r.candidates.find(c=>c.id===selectedCandidate)??r.candidates.find(c=>c.verdict==='ELIGIBLE')??r.candidates[0];
-  return <div className="ra-results"><header><h3>{labels[run.status]}</h3><p>{r.explanation}</p><small>{pct(run.goal.targetReturnBps)} target / {run.goal.horizonDays} days · Max. loss {pct(run.goal.maxDrawdownBps)}{r.agent&&<> · Designed by {r.agent.name}</>}</small></header>
-    <div className="ra-compare" role="group" aria-label="Compare strategies">{r.candidates.map(c=><button key={c.id} aria-pressed={candidate?.id===c.id} onClick={()=>setSelectedCandidate(c.id)}><b>{c.name}</b><span>{c.verdict==='ELIGIBLE'?'Within your limits':'Outside your limits'}</span><small>{pct(c.holdoutDrawdownBps)} max. drawdown</small></button>)}</div>
-    {(candidate?[candidate]:[]).map(c=><article className="ra-candidate" key={c.id}><div className="ra-candidate-heading"><h4>{c.name}</h4><span>{c.verdict==='ELIGIBLE'?'Review':'Not suitable'}</span></div><Curve candidate={c}/><dl className="ra-metrics"><div><dt>Historical horizon median</dt><dd>{pct(c.horizonMedianBps)}</dd></div><div><dt>Held-out max. drawdown</dt><dd>{pct(c.holdoutDrawdownBps)}</dd></div><div><dt>After doubled costs</dt><dd>{pct(c.stressHorizonMedianBps)}</dd></div></dl><div className="ra-weights">{c.weights.map(w=><span key={w.instrument}>{w.instrument} {pct(w.weightBps)}</span>)}<span>Cash {pct(c.cashBps)}</span></div>{c.agentChecks&&<AgentChecks checks={c.agentChecks} agentName={r.agent?.name}/>}{c.reasons.length>0&&<p className="ra-caption">{c.reasons.map(x=>reasonLabels[x]??x).join(' · ')}</p>}
+  return <div className="ra-results"><header><span className={`ra-verdict ${fits?'ra-ok':'ra-no'}`}>{fits?`${fits} of ${r.candidates.length} fit your limits`:'None fit your limits'}</span><h3>{labels[run.status]}</h3><p>{r.explanation}</p><small>Your goal: {signed(run.goal.targetReturnBps)} over {h.replace('-',' ')} · lose no more than {pct(run.goal.maxDrawdownBps)}{r.agent&&<> · Designed by {r.agent.name}</>}</small></header>
+    <div className="ra-compare" role="group" aria-label="Compare strategies">{r.candidates.map(c=><button key={c.id} aria-pressed={candidate?.id===c.id} onClick={()=>setSelectedCandidate(c.id)}><b>{c.name}</b><Verdict candidate={c}/><span className="ra-compare-num"><em>{signed(c.horizonMedianBps)}</em> typical {h} return</span><small>Worst drop {drop(c.holdoutDrawdownBps)}</small></button>)}</div>
+    {(candidate?[candidate]:[]).map(c=><article className="ra-candidate" key={c.id}><div className="ra-candidate-heading"><h4>{c.name}</h4><Verdict candidate={c}/></div>
+      <p className="ra-summary">Over past {h} periods, this strategy&apos;s typical return was <b>{signed(c.horizonMedianBps)}</b>. Its worst drop in the held-out test was <b>{drop(c.holdoutDrawdownBps)}</b>. With trading costs doubled, the typical return was <b>{signed(c.stressHorizonMedianBps)}</b>.</p>
+      <HowItPicks candidate={c}/>
+      <Curve candidate={c}/>
+      <dl className="ra-metrics"><div><dt>Typical {h} return</dt><dd>{signed(c.horizonMedianBps)}</dd><small>Median of {c.windowCount} past periods</small></div><div><dt>Worst drop</dt><dd>{drop(c.holdoutDrawdownBps)}</dd><small>Held-out test from {c.holdoutStart}</small></div><div><dt>With doubled costs</dt><dd>{signed(c.stressHorizonMedianBps)}</dd><small>Typical return if trading cost twice as much</small></div></dl>
+      <Allocation candidate={c} budget={budget} asset={asset} bsc={bsc}/>
+      {c.agentChecks&&<AgentChecks checks={c.agentChecks} agentName={r.agent?.name}/>}
+      {c.reasons.length>0&&<div className="ra-reasons"><b>{c.verdict==='ELIGIBLE'?'Notes':'Why it does not fit'}</b><ul>{c.reasons.map(x=><li key={x}>{reasonLabels[x]??x}</li>)}</ul>{c.verdict!=='ELIGIBLE'&&<small>Try a lower target, a longer period or different stocks, then run research again.</small>}</div>}
       <details><summary>Method & evidence</summary><p>{r.method}</p><p>{c.windowCount} non-overlapping windows, held out from {c.holdoutStart}. The median is a past observation, not an expected return.</p><p>{r.dataset.limitations.join(' ')}</p><code>Report {r.reportHash}</code><code>Dataset {r.dataset.id}</code></details>
-      {c.verdict==='ELIGIBLE'&&<div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)onActivity();}}>Approve new investment</button>{!bsc&&<><button disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'AGENT_WALLET',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Use agent holdings</button><button className="ra-text" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'PERSONAL',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Personal wallet holdings</button></>}</div>}
+      {c.verdict==='ELIGIBLE'&&<section className="ra-approve" aria-label="Approve this strategy"><div><b>Approve {c.name}</b><p>Approving turns this strategy into a trade plan. Nothing is bought yet: {autoTrade?'your agent then places the orders within the limits you set in Binance, and you can stop it at any time.':'you then confirm each trade in your wallet, one at a time.'}</p></div><div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)onActivity();}}>{agent.busy?'Approving…':'Approve plan'}</button>{!bsc&&<><button disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'AGENT_WALLET',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Use agent holdings</button><button className="ra-text" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'PERSONAL',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Personal wallet holdings</button></>}</div></section>}
       {draft?.candidateId===c.id&&<section className="ra-allocation-review" aria-label="Rebalance review"><h4>Rebalance selected stocks</h4><p>{usd(draft.heldValueAtoms)} already held · {usd(draft.portfolioValueAtoms)} total allocation</p><small>Other stocks stay untouched. Sales run first. {draft.snapshot?.owner&&draft.snapshot.owner!==wallet?'Review the full allocation, then approve your agent wallet.':'Review each transaction in your wallet.'}</small><div className="ra-trade-legs">{draft.legs.map((leg,i)=><div key={i}><span>{leg.side} {leg.instrument}</span><b>{legAmount(leg)}</b></div>)}</div><p>{usd(draft.cashAtoms)} retained as cash</p><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,draftId:draft.id});if(b){setDraft(null);onActivity();}}}>Approve this allocation</button></section>}
     </article>)}
     <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.inputTokens+r.model.outputTokens} tokens · Data through {r.dataset.asOf}</span></footer>
@@ -113,13 +153,18 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
     const timer=setInterval(()=>{if(!document.hidden&&!signing&&!agent.busy){const p=pending[0];if(p)void agent.act({operation:'CHECK',...p}).then(()=>onRefresh());}},5000);
     return()=>clearInterval(timer);
   },[pendingKey,signing,agent.busy]);
+  // Plans store the candidate id (a hash); show the strategy name the owner approved.
+  const nameOf=(p:AgentPlan)=>agent.data?.runs.find(r=>r.id===p.runId)?.result?.candidates.find(c=>c.id===p.candidateId)?.name??'Approved plan';
+  const progress=(p:AgentPlan)=>{const done=p.steps.filter(s=>s.phase==='RECONCILED').length;return <div className="ra-plan-progress"><span>{done} of {p.legs.length} trade{p.legs.length===1?'':'s'} done</span><div><i style={{width:`${p.legs.length?done/p.legs.length*100:0}%`}}/></div></div>;};
+  const status=(p:AgentPlan)=><span className={`ra-status ra-status-${p.status.toLowerCase()}`}>{planStatusText[p.status]??p.status}</span>;
   return <section className="ra-execution">
-    <div className="ra-inline-actions"><a className="ra-text" href="/exchange/agent-wallet">Agent wallet ↗</a></div>
-    {plans.length===0&&<p className="ra-caption">Approve a researched strategy to review its purchases here.</p>}
+    {!plans.some(p=>p.chain==='eip155:56')&&<div className="ra-inline-actions"><a className="ra-text" href="/exchange/agent-wallet">Agent wallet ↗</a></div>}
+    {plans.length===0&&<div className="ra-empty ra-empty-small"><h3>No approved plan yet</h3><p>Open Results, pick a strategy that fits your limits and approve it. Its trades appear here, ready to confirm.</p></div>}
     {plans.map(p=>{
       if(p.chain==='eip155:56'&&wallet)return <article key={p.id} className="ra-plan">
-        <div className="ra-candidate-heading"><h4>{p.candidateId.replaceAll('_',' ')}{p.agent&&<small> · {p.agent.name}</small>}</h4><span>{p.status}</span></div>
-        <p>{(Number(BigInt(p.budgetAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT budget on BNB Chain · {(Number(BigInt(p.cashAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT stays in cash</p>
+        <div className="ra-candidate-heading"><h4>{nameOf(p)}{p.agent&&<small> · {p.agent.name}</small>}</h4>{status(p)}</div>
+        <p>{(Number(BigInt(p.budgetAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT on BNB Chain · {(Number(BigInt(p.cashAtoms)/10n**12n)/1e6).toLocaleString('en-US')} USDT stays in cash</p>
+        {progress(p)}
         {p.belowMinimum?.length?<p className="ra-caption">Below the 5 USDT minimum order, kept in cash: {p.belowMinimum.join(', ')}</p>:null}
         <AgenticPanel plan={p} wallet={wallet} onRefresh={()=>{void agent.refresh();onRefresh();}}/>
         <BscPlanExecution plan={p} agent={agent} wallet={wallet} onRefresh={()=>{void agent.refresh();onRefresh();}}/>
@@ -127,7 +172,7 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
       </article>;
       const assigned=boundPlans[p.id]||(p as AgentPlan&{executionMode?:string}).executionMode==='AGENT_WALLET';
       return <article key={p.id} className="ra-plan">
-        <div className="ra-candidate-heading"><h4>{p.candidateId.replaceAll('_',' ')}</h4><span>{p.status}</span></div>
+        <div className="ra-candidate-heading"><h4>{nameOf(p)}</h4>{status(p)}</div>
         <p>{usd(p.budgetAtoms)} additional cash{p.heldValueAtoms?` + ${usd(p.heldValueAtoms)} selected holdings`:''} · {usd(p.cashAtoms)} stays in USDC</p>
         <ResearchAutonomyPanel plan={p} wallet={wallet} onBound={()=>setBoundPlans(old=>old[p.id]?old:{...old,[p.id]:true})} onRefresh={()=>{void agent.refresh();onRefresh();}}/>
         {!assigned&&(!p.snapshot?.owner||p.snapshot.owner===wallet)&&<details open={p.budgetScope!=='NEW_CAPITAL'}><summary>Trade with your personal wallet</summary><small>Each trade needs your signature. Network fees and account rent are separate.</small><div className="ra-trade-legs">{p.legs.map((leg,i)=>{
@@ -137,7 +182,7 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
         {['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)&&<button className="ra-text" disabled={signing||agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Revoke remaining trades</button>}
       </article>;
     })}
-    {(error||agent.error)&&<p role="alert" className="ra-error">{error??agent.error}</p>}
-    <div className="ra-watch"><div><b>Keep researching</b><p>Re-evaluate new data for 7 days. A new allocation needs your approval.</p></div><button disabled={agent.busy} onClick={()=>void agent.act({operation:'MONITOR',strategyId:strategy.id,goal:agent.run?.goal??agent.goal,enabled:!agent.data?.monitor?.enabled})}>{agent.data?.monitor?.enabled?'Stop monitoring':'Enable monitoring'}</button></div>
+    {(error||(agent.error&&!agent.failure?.quote))&&<p role="alert" className="ra-error">{error??agent.error}</p>}
+    <div className="ra-watch"><div><b>Keep researching</b><p>For the next 7 days, your agent re-evaluates this research as new prices arrive. Any new allocation still needs your approval.</p></div><button disabled={agent.busy} onClick={()=>void agent.act({operation:'MONITOR',strategyId:strategy.id,goal:agent.run?.goal??agent.goal,enabled:!agent.data?.monitor?.enabled})}>{agent.data?.monitor?.enabled?'Stop monitoring':'Enable monitoring'}</button></div>
   </section>;
 }

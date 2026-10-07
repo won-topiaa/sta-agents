@@ -156,6 +156,29 @@ export const AGENT_RULES = {
       }
      ]
     },
+    "dividend": {
+     "label": "Dividend value",
+     "help": "Dividend payers that are cheap for their sector and not over-borrowed.",
+     "rebalance": "monthly",
+     "rules": [
+      {
+       "id": "pays_dividend",
+       "params": {
+        "min": 0.02
+       }
+      },
+      {
+       "id": "cheaper_than_sector",
+       "params": {}
+      },
+      {
+       "id": "low_debt",
+       "params": {
+        "max": 2
+       }
+      }
+     ]
+    },
     "custom": {
      "label": "Custom",
      "help": "Start from no rules and add your own.",
@@ -548,6 +571,126 @@ export const AGENT_RULES = {
     "lookback": 5,
     "rule": "above",
     "value": "$min"
+   }
+  },
+  "liquid_only": {
+   "label": "Liquid stocks only",
+   "help": "Holds only stocks that traded at least {min} a day on average over the last 20 days.",
+   "styles": [
+    "technical",
+    "value"
+   ],
+   "params": {
+    "min": {
+     "options": [
+      6,
+      7,
+      8,
+      9
+     ],
+     "default": 7,
+     "display": "dollars_log10"
+    }
+   },
+   "filter": {
+    "signal": "dollar_volume",
+    "lookback": 5,
+    "rule": "above",
+    "value": "$min"
+   }
+  },
+  "volume_surge": {
+   "label": "Rising volume",
+   "help": "Holds only stocks whose 20-day average volume is at least {min} above their 120-day average.",
+   "styles": [
+    "technical"
+   ],
+   "params": {
+    "min": {
+     "min": 0.1,
+     "max": 1,
+     "step": 0.1,
+     "default": 0.3,
+     "display": "percent"
+    }
+   },
+   "filter": {
+    "signal": "volume_surge",
+    "lookback": 5,
+    "rule": "above",
+    "value": "$min"
+   }
+  },
+  "pays_dividend": {
+   "label": "Pays a dividend",
+   "help": "Holds only companies that paid dividends worth at least {min} of their market value over the last twelve months.",
+   "styles": [
+    "value"
+   ],
+   "params": {
+    "min": {
+     "min": 0.005,
+     "max": 0.06,
+     "step": 0.005,
+     "default": 0.02,
+     "display": "percent"
+    }
+   },
+   "filter": {
+    "signal": "dividend_yield",
+    "lookback": 5,
+    "rule": "above",
+    "value": "$min"
+   }
+  },
+  "cheap_ebitda": {
+   "label": "Cheap on EBITDA",
+   "help": "Keeps the {keep} of companies with the lowest enterprise value to EBITDA.",
+   "styles": [
+    "value"
+   ],
+   "params": {
+    "keep": {
+     "min": 0.2,
+     "max": 0.8,
+     "step": 0.1,
+     "default": 0.5,
+     "display": "percent"
+    }
+   },
+   "filter": {
+    "signal": "ebitda_yield",
+    "lookback": 5,
+    "rule": "top_fraction",
+    "value": "$keep"
+   }
+  },
+  "cheaper_than_sector": {
+   "label": "Cheaper than its sector",
+   "help": "Holds only companies with a lower P/E than the median company in their sector.",
+   "styles": [
+    "value"
+   ],
+   "params": {},
+   "filter": {
+    "signal": "earnings_yield_vs_sector",
+    "lookback": 5,
+    "rule": "above",
+    "value": 0
+   }
+  },
+  "cheaper_book_than_sector": {
+   "label": "Cheaper on book than its sector",
+   "help": "Holds only companies with a lower P/B than the median company in their sector.",
+   "styles": [
+    "value"
+   ],
+   "params": {},
+   "filter": {
+    "signal": "book_to_price_vs_sector",
+    "lookback": 5,
+    "rule": "above",
+    "value": 0
    }
   }
  },

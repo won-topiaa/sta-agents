@@ -9,12 +9,12 @@ import json
 import math
 import pathlib
 from evaluate import load_prices, assess
-from xtxc_agent.core.strategy_design import design_messages, validate_candidates, choose, design_checks
+from xtxc_agent.core.strategy_design import design_messages, validate_candidates, choose, design_checks, describe
 from xtxc_agent.research import sandbox
 from xtxc_agent.research.backtest import report_curve, _resolve_period, HOLDOUT_DAYS
 from xtxc_agent.research.strategy_lang import scaled, design_hash
 from xtxc_agent.research import agent_profile
-from xtxc_agent.research import fundamentals
+from xtxc_agent.research import fundamentals, volume
 from xtxc_agent.research.strategy_lang import DesignError
 
 
@@ -47,12 +47,30 @@ def with_fundamentals(prices, snapshot, root, tickers):
     usable = sorted(t for t in companies if t in docs)
     if not usable:
         return prices, snapshot
-    closes, _ = load_prices(root, usable, column='close')
-    prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable}, set(usable))
-    return prices, {**snapshot, 'fundamentals': {**meta, 'tickers': usable},
+    # Sector medians use every released company of the same sectors, not only the requested stocks.
+    sectors = meta.get('sectors', {})
+    released = json.loads((pathlib.Path(root) / 'prices' / 'quant_release.json').read_text())['tickers']
+    wanted = {sectors[t] for t in usable if sectors.get(t)}
+    peers = sorted(t for t in docs if t not in companies and t not in NOT_COMPANIES and sectors.get(t) in wanted and t in released)
+    closes, _ = load_prices(root, usable + peers, column='close', common=False)
+    prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable + peers}, set(usable), sectors)
+    old = 'Adjusted history is not a point-in-time fundamentals dataset.'
+    snapshot = {**snapshot, 'limitations': [x for x in snapshot.get('limitations', []) if x != old]}
+    return prices, {**snapshot, 'fundamentals': {**meta, 'tickers': usable, 'sectors': {t: sectors[t] for t in usable if t in sectors},
+                                                  'sectorPeers': len(peers)},
                     'limitations': [*snapshot.get('limitations', []),
                                     'Company fundamentals are SEC EDGAR XBRL facts, usable from the session after their filing date; '
                                     'foreign IFRS filers, funds and some multi-class issuers have none.']}
+
+
+def with_volume(prices, root, tickers):
+    """Add "<TICKER>::volume_surge" / "::dollar_volume" columns from the same verified release (rows <= t only)."""
+    try:
+        closes, _ = load_prices(root, tickers, column='close')
+        volumes, _ = load_prices(root, tickers, column='volume')
+    except (ValueError, KeyError):
+        return prices
+    return volume.attach(prices, closes, volumes)
 
 
 def rebalance_of(agent):
@@ -96,6 +114,7 @@ def evaluate_designs(request, root):
         designs['candidates'] = merged
     prices, snapshot = load_prices(root, sorted(set(tickers+['QQQ','SPY'])))
     prices, snapshot = with_fundamentals(prices, snapshot, root, tickers)
+    prices = with_volume(prices, root, tickers)
     horizon = max(5, round(g['horizonDays']*252/365))
     if len(prices) < max(756, 3*horizon+379):
         raise ValueError('WAITING_DATA: Insufficient common sessions for the requested horizon.')
@@ -161,7 +180,8 @@ def evaluate_designs(request, root):
             'recommendedOnTraining':index==chosen,'designChecks':checks,
             'robustness':[r['metrics'] for r in robustness['result']['runs']],
             'robustnessIsolation':robustness['isolation'],
-            'agentChecks':agent_checks,'modelDesign':candidate.get('model_design',candidate['design'])})
+            'agentChecks':agent_checks,'modelDesign':candidate.get('model_design',candidate['design']),
+            'howItPicks':describe(candidate['design'])})
     eligible=sum(c['verdict']=='ELIGIBLE' for c in candidates)
     return {'schema':'xtxc.research-evaluation/v1','dataset':snapshot,'candidates':candidates,
             'agent':{'id':agent['id'],'revision':agent['revision'],'name':agent['name'],'style':agent['style'],
@@ -169,5 +189,7 @@ def evaluate_designs(request, root):
             'decision':'REVIEW' if eligible else 'DECLINED',
             'explanation':f'{eligible} independently tested designs support review under your limits.' if eligible else
                 'None of the tested designs supports your target and risk limits. No trade is approved.',
-            'method':'PR07 restricted strategy DSL; isolated backtests; future-data perturbation; held-out horizons and doubled-cost stress.',
+            'method':'The AI writes each strategy in a typed strategy language (no code). Code adds the agent rules, then backtests every '
+                     'design in an isolated process on point-in-time prices and SEC filings: selection on training years only, '
+                     'held-out horizons, doubled costs, a future-data perturbation check and lookback stability.',
             'engineVersion':'sta-pr07-dsl-bridge/1','computedAt':dt.datetime.now(dt.timezone.utc).isoformat()}

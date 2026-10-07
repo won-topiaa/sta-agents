@@ -29,6 +29,11 @@ Signals (per stock, from adjusted closes up to the decision day; a stock without
                              (-2 is the lower band of a 2-standard-deviation band)
   ma_cross(fast, lookback)   ``fast``-day average / ``lookback``-day average - 1 (above 0: the short average is on top,
                              i.e. a "golden cross" state)
+  volume_surge               20-day average volume / 120-day average volume - 1 (trading activity picking up)
+  dollar_volume              log10 of the 20-day average traded value in dollars (7 = $10M a day)
+Company fundamentals (research/fundamentals.py, as filed by the decision day): earnings_yield, book_to_price, fcf_yield,
+  roe, debt_to_equity, revenue_growth, dividend_yield, ebitda_yield (EBITDA / enterprise value), and
+  earnings_yield_vs_sector / book_to_price_vs_sector (the company's value minus its sector's median that day).
 Score   sum of weight x cross-sectional z-score of each signal (among the stocks that passed the filters).
 Filters ``rule``: "above" / "below" a ``value`` of the raw signal, or "top_fraction" / "bottom_fraction" (keep that
         share of the stocks, by the signal; at least one stock). ``value`` is -1..1 except rsi (0..100) and zscore (-5..5).
@@ -48,9 +53,14 @@ import math
 import numpy as np
 
 PRICE_SIGNALS = ("momentum", "volatility", "trend", "drawdown", "sharpe", "rsi", "zscore", "ma_cross")
-# Company fundamentals as of the decision day (research/fundamentals.py); ``lookback`` does not apply (stored as 5).
-FUNDAMENTAL_SIGNALS = ("earnings_yield", "book_to_price", "fcf_yield", "roe", "debt_to_equity", "revenue_growth")
-SIGNALS = PRICE_SIGNALS + FUNDAMENTAL_SIGNALS
+# Trading activity, precomputed per day from rows <= t (research/volume.py).
+VOLUME_SIGNALS = ("volume_surge", "dollar_volume")
+# Company fundamentals as of the decision day (research/fundamentals.py).
+FUNDAMENTAL_SIGNALS = ("earnings_yield", "book_to_price", "fcf_yield", "roe", "debt_to_equity", "revenue_growth",
+                       "dividend_yield", "ebitda_yield", "earnings_yield_vs_sector", "book_to_price_vs_sector")
+# Read from "<TICKER>::<signal>" columns of the price frame; ``lookback`` does not apply (stored as 5).
+COLUMN_SIGNALS = VOLUME_SIGNALS + FUNDAMENTAL_SIGNALS
+SIGNALS = PRICE_SIGNALS + COLUMN_SIGNALS
 RULES = ("above", "below", "top_fraction", "bottom_fraction")
 WEIGHTINGS = ("equal", "rank", "inverse_volatility")
 MARKET_TICKERS = ("QQQ", "SPY")
@@ -60,7 +70,8 @@ MAX_TERMS, MAX_FILTERS, MAX_TOP_N = 4, 3, 20
 MAX_TOTAL_FILTERS = 9
 # raw-value range a filter may compare against; every other signal is a fraction (-1..1)
 FILTER_VALUE = {"rsi": (0.0, 100.0), "zscore": (-5.0, 5.0), "book_to_price": (0.0, 10.0), "roe": (-2.0, 2.0),
-                "debt_to_equity": (0.0, 20.0), "revenue_growth": (-1.0, 5.0)}
+                "debt_to_equity": (0.0, 20.0), "revenue_growth": (-1.0, 5.0), "volume_surge": (-1.0, 5.0),
+                "dollar_volume": (3.0, 12.0)}
 INV_VOL_LOOKBACK = 63
 
 
@@ -94,9 +105,9 @@ def _signal(d, name) -> dict:
     if d.get("signal") not in SIGNALS:
         raise DesignError(f"{name}.signal must be one of {list(SIGNALS)}")
     out = {"signal": d["signal"], "lookback": _int(d.get("lookback", 5), f"{name}.lookback", *LOOKBACK)}
-    if d["signal"] in FUNDAMENTAL_SIGNALS:
+    if d["signal"] in COLUMN_SIGNALS:
         if d.get("skip") not in (0, None) or "fast" in d:
-            raise DesignError(f"{name}: fundamental signals take no skip or fast")
+            raise DesignError(f"{name}: {d['signal']} takes no skip or fast")
         return {"signal": d["signal"], "lookback": 5}
     if d["signal"] == "momentum":
         out["skip"] = _int(d.get("skip", 0), f"{name}.skip", *SKIP)
@@ -170,6 +181,11 @@ def fundamental_signals(design: dict) -> set[str]:
     return {t["signal"] for t in d["score"] + d["filters"] if t["signal"] in FUNDAMENTAL_SIGNALS}
 
 
+def column_signals(design: dict) -> set[str]:
+    d = normalize_design(design)
+    return {t["signal"] for t in d["score"] + d["filters"] if t["signal"] in COLUMN_SIGNALS}
+
+
 def market_tickers(design: dict) -> list[str]:
     ro = normalize_design(design).get("risk_off")
     return [ro["ticker"]] if ro else []
@@ -178,8 +194,8 @@ def market_tickers(design: dict) -> list[str]:
 # ------------------------------------------------------------------ evaluation (rows <= t only)
 def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | None = None) -> np.ndarray:
     """Signal per column of ``arr`` (rows = days up to the decision day). NaN when the window is incomplete.
-    Fundamental signals read the last row of ``fund[signal]`` (same columns as ``arr``): the value as of that day."""
-    if sig["signal"] in FUNDAMENTAL_SIGNALS:
+    Column signals read the last row of ``fund[signal]`` (same columns as ``arr``): the value as of that day."""
+    if sig["signal"] in COLUMN_SIGNALS:
         f = (fund or {}).get(sig["signal"])
         if f is None or f.shape[0] == 0:
             return np.full(arr.shape[1], np.nan)
@@ -296,7 +312,7 @@ def scaled(design: dict, factor: float) -> dict:
         return max(LOOKBACK[0], min(LOOKBACK[1], int(round(x["lookback"] * factor))))
 
     def periods(x):
-        if x["signal"] in FUNDAMENTAL_SIGNALS:
+        if x["signal"] in COLUMN_SIGNALS:
             return x
         out = {**x, "lookback": s(x)}
         if "fast" in x:   # the short average stays shorter than the long one

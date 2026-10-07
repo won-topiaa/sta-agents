@@ -153,3 +153,10 @@ test('rule suggestions must quote the owner and stay inside the catalog',()=>{
   assert.deepEqual(out.unsupported,['cheap P/E ratios']);
   assert.throws(()=>resolveSuggestions({rules:[],code:'x'},text,'technical'));
 });
+test('a phrase that backs a suggested rule is never also listed as not expressible',()=>{
+  const text='I like companies that pay steady dividends and avoid heavily indebted firms. I follow the news.';
+  const r=resolveSuggestions({rules:[{id:'pays_dividend',evidence:'pay steady dividends'},{id:'low_debt',evidence:'avoid heavily indebted firms'}],
+    unsupported:['I like companies that pay steady dividends','avoid heavily indebted firms','I follow the news']},text,'value');
+  assert.deepEqual(r.suggestions.map(s=>s.id),['pays_dividend','low_debt']);
+  assert.deepEqual(r.unsupported,['I follow the news']);
+});

@@ -11,16 +11,17 @@ import { ensureResearchSession, researchPrincipalOf, isEvmWallet } from './resea
 import { useMarketPrices } from './use-stock-workspace-data';
 import { StockLogo } from './stock-logo';
 import './research-workspace.css';
-import { useResearchAgent, ResearchRunControls, ResearchResults, ResearchPlanExecution } from './research-agent-panel';
+import { useResearchAgent, ResearchRunControls, ResearchResults, ResearchPlanExecution, runActive } from './research-agent-panel';
 import {ResearchIntakeCard} from './research-intake-card';
-import {useAgents,AgentBar,AgentEditor} from './research-agent-profile';
+import {useAgents,AgentBar,AgentEditor,type AgentStart} from './research-agent-profile';
+import './research-journey.css';
 import {useAgentic,AgenticConnect} from './research-bsc-execution';
 import type {AgentProfile} from '@/lib/research-agent-profile.mjs';
 import type {ResearchIntake} from '@/lib/research-intake.mjs';
 
 const StockPriceChart = dynamic(() => import('./stock-price-chart').then(m => m.StockPriceChart), { loading: () => <div className="rw-chart-loading">Loading chart…</div> });
 const tabs = ['Overview','Backtest','Holdings','Sources','Execution'] as const;
-const tabLabels = { Overview:'Market', Backtest:'Results', Holdings:'Holdings', Sources:'Sources', Execution:'Activity' };
+const tabLabels = { Overview:'Market', Backtest:'Results', Holdings:'Holdings', Sources:'Sources', Execution:'Trades' };
 type ReportTab = typeof tabs[number];
 type Props = { holdingsNote?: string; wallet: string | null; directory: StockDirectoryRow[]; portfolio: PortfolioResponse | null; balanceError: string | null; orders: ObservedOrder[]; historyError: string | null; onConnect: () => Promise<void>; onSelect: (id: string) => void; onRefresh: () => void; onHistory: () => Promise<void> };
 const endpoint = '/api/v1/stocklana/research';
@@ -60,9 +61,10 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
   // The user's own agent: bound to a saved strategy, or chosen for the next new research.
   const agents = useAgents(wallet);
   // AccountWorkspace is keyed by wallet and mounted on the client after connection.
+  // 'none' records an explicit "No agent"; with no choice yet, new research uses the owner's first agent.
   const [activeAgent,setActiveAgent] = useState<string|null>(()=>{try{return wallet?localStorage.getItem(agentKey(wallet)):null;}catch{return null;}});
-  const [agentEditor,setAgentEditor] = useState<{open:boolean;agent:AgentProfile|null}>({open:false,agent:null});
-  const knownActive = agents.agents && activeAgent && !agents.agents.some(a=>a.id===activeAgent) ? null : activeAgent;
+  const [agentEditor,setAgentEditor] = useState<{open:boolean;agent:AgentProfile|null;start?:AgentStart|null}>({open:false,agent:null});
+  const knownActive = activeAgent==='none' ? null : activeAgent && (!agents.agents || agents.agents.some(a=>a.id===activeAgent)) ? activeAgent : agents.agents?.[0]?.id ?? null;
   const boundAgentId = strategy ? strategy.agentId ?? null : knownActive;
   const boundAgent = agents.agents?.find(a=>a.id===boundAgentId) ?? null;
   const stable = wallet && isEvmWallet(wallet) ? 'USDT' : 'USDC';
@@ -108,7 +110,14 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
     return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};
   },[load,selected]);
   useEffect(()=>{if(chartUniverse?.length&&!chartUniverse.includes(focus))setFocus(chartUniverse[0]);},[chartUniverse,focus]);
-  useEffect(()=>{messages.current?.scrollTo({top:messages.current.scrollHeight,behavior:'instant'});},[selected,strategy?.messages.length]);
+  // A strategy opens at its latest message; the start screen opens at its top.
+  useEffect(()=>{messages.current?.scrollTo({top:selected?messages.current.scrollHeight:0,behavior:'instant'});},[selected,strategy?.messages.length]);
+  // Where this strategy stands, from data loaded for it: drives the step bar, the next-step card and the first tab shown.
+  const fresh=Boolean(strategy&&agent.dataId===strategy.id),plans=fresh?agent.data?.plans??[]:[],lastRun=fresh?agent.run:undefined;
+  const fitting=lastRun?.result?.candidates.filter(c=>c.verdict==='ELIGIBLE').length??0;
+  const openPlan=plans.find(p=>['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)),donePlan=plans.find(p=>p.status==='COMPLETE');
+  const [opened,setOpened]=useState<string|null>(null);
+  if(strategy&&fresh&&opened!==strategy.id){setOpened(strategy.id);if(openPlan)setTab('Execution');else if(lastRun?.result)setTab('Backtest');}
   function select(id:string){
     interpretation.current++;setIntake(null);intakeRun.current=null;
     setPinned([]);setPickerOpen(false);
@@ -138,7 +147,7 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
   function openNew(){
     if(selected)notes.current.set(selected,note);
     interpretation.current++;generation.current++;controller.current?.abort();
-    setSelected(null);setEdit(null);setIntake(null);setNote('');setPinned([]);setPickerOpen(false);setError(null);setLoading(false);setMobile('chat');setListOpen(false);intakeRun.current=null;
+    setSelected(null);setEdit(null);setIntake(null);setNote('');setPinned([]);setPickerOpen(false);setError(null);setLoading(false);setMobile('chat');setListOpen(false);setTab('Overview');intakeRun.current=null;
     const url=new URL(window.location.href);url.searchParams.delete('workspace');url.searchParams.delete('create');url.hash='';window.history.replaceState(null,'',url);
     requestAnimationFrame(()=>document.getElementById('research-note')?.focus());
   }
@@ -160,8 +169,8 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
       await save({operation:'UPDATE',id:strategy.id,revision:strategy.revision,brief:id?{...rest,agentId:id}:rest});
       return;
     }
-    setActiveAgent(id);
-    if(wallet)try{ if(id)localStorage.setItem(agentKey(wallet),id); else localStorage.removeItem(agentKey(wallet)); }catch{}
+    setActiveAgent(id??'none');
+    if(wallet)try{ localStorage.setItem(agentKey(wallet),id??'none'); }catch{}
   }
   async function runIntake(){
     if(!intake||!wallet||intakeFlight.current)return;intakeFlight.current=true;
@@ -200,6 +209,30 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
   const reportedHoldings = useMemo(()=>portfolio?.holdings.filter(h=>strategy?.instruments.includes(h.instrument))??[],[portfolio,strategy]);
   const heldStocks=useMemo(()=>balanceError?[]:[...new Set((portfolio?.holdings??[]).filter(h=>BigInt(h.atoms)>0n&&directory.some(r=>r.instrument===h.instrument)).map(h=>h.instrument))],[portfolio,balanceError,directory]);
   const togglePin=(ticker:string)=>setPinned(items=>items.includes(ticker)?items.filter(x=>x!==ticker):items.length<64?[...items,ticker]:items);
+  const show=(t:ReportTab)=>()=>{setTab(t);setMobile('report');};
+  const needsAgent=Boolean(agents.agents&&!agents.agents.length&&!strategy);
+  // An expired or revoked plan sends the owner back to approving a strategy.
+  const approved=Boolean(openPlan||donePlan);
+  const current=!wallet||locked||needsAgent?0:!strategy?1:!lastRun?.result?2:!approved?3:!donePlan?4:5;
+  const done=[Boolean(boundAgent),Boolean(strategy),Boolean(lastRun?.result),approved,Boolean(donePlan)];
+  const steps:JourneyStep[]=(['Agent','Request','Results','Approve','Trade'] as const).map((label,i)=>({label,state:done[i]?'done':i===current?'now':'todo',go:i===2||i===3?show('Backtest'):i===4&&plans.length?show('Execution'):undefined}));
+  const tradesDone=openPlan?openPlan.steps.filter(s=>s.phase==='RECONCILED').length:0;
+  // Holdings targets: the brief's own weights (an imported portfolio), else the approved plan's strategy.
+  const plannedCandidate=lastRun?.result?.candidates.find(c=>c.id===(openPlan??donePlan)?.candidateId);
+  const targets=strategy?.weights.length?{weights:strategy.weights,cashBps:strategy.cashBps??0,fromPlan:false}:plannedCandidate?{weights:plannedCandidate.weights,cashBps:plannedCandidate.cashBps,fromPlan:true}:null;
+  const next:NextStep|null=!wallet?{text:'Connect your wallet to start',detail:'Your agent and research stay private to your wallet.',action:{label:'Connect',run:()=>void onConnect()}}
+    :locked?{text:'Sign in with your wallet',detail:'One signature to open your workspace. No transaction.',action:{label:signing?'Approve in wallet…':'Sign in',run:()=>void unlock()}}
+    :needsAgent?{text:'Create your agent first',detail:'Pick a starting style below. You can change everything later.'}
+    :!strategy?intake?{text:'Check your request, then run research',detail:'Nothing is bought during research.'}:{text:'Describe your goal',detail:'Type it in the box below, or pick an example.',action:{label:'Write request',run:()=>document.getElementById('research-note')?.focus()}}
+    :!fresh?null
+    :!lastRun?{text:'Run research to test strategies',detail:'Set the target below, or run with the defaults.',action:{label:'Run research',run:()=>{show('Backtest')();void agent.start();}}}
+    :runActive(lastRun)?{text:'Researching…',detail:'Usually about a minute. You can keep browsing.',action:{label:'View progress',run:show('Backtest')}}
+    :!lastRun.result?{text:'Research needs attention',detail:lastRun.error??'Open Results for details.',action:{label:'See details',run:show('Backtest')}}
+    :openPlan?{text:'Confirm your trades',detail:`${tradesDone} of ${openPlan.legs.length} done · ${openPlan.agent?.approval==='AUTO_WITHIN_LIMITS'?'your agent trades within your limits':'each trade needs your wallet'}`,action:{label:'Go to trades',run:show('Execution')}}
+    :donePlan?{text:'All trades done',detail:'Receipts are listed under Trades.',action:{label:'View trades',run:show('Execution')}}
+    :plans.length?{text:'This plan has ended',detail:'Run research again for a new plan.',action:{label:'Review results',run:show('Backtest')}}
+    :fitting?{text:`${fitting} strateg${fitting===1?'y fits':'ies fit'} your limits`,detail:'Compare them and approve one. Nothing is bought yet.',action:{label:'Review results',run:show('Backtest')}}
+    :{text:'No strategy fit your limits',detail:'See why, then adjust the target, period or stocks.',action:{label:'See why',run:show('Backtest')}};
 
   return <main className={`rw-root rw-mobile-${mobile}`}>
     <h1 className="rw-sr">Research</h1>
@@ -217,14 +250,15 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
       {listOpen&&<button className="rw-mobile-scrim" aria-label="Close strategy list" onClick={()=>setListOpen(false)}/>}
       <section className="rw-conversation" aria-label="Strategy conversation">
         <header className="rw-pane-heading"><div><Glyph name="thread"/><b>{strategy?.name??'New strategy'}</b></div>{strategy&&<button className="rw-icon" aria-label="Edit research brief" onClick={openEdit}><Glyph name="edit"/></button>}</header>
+        <Journey steps={steps} next={next}/>
         <div className="rw-messages" ref={messages}>
-          {wallet&&!locked&&<AgentBar agents={agents.agents} selectedId={boundAgentId} boundToStrategy={Boolean(strategy)} disabled={busy||interpreting||agent.running} onSelect={id=>void selectAgent(id)} onEdit={a=>{agents.setError(null);setAgentEditor({open:true,agent:a});}} onCreate={()=>{agents.setError(null);setAgentEditor({open:true,agent:null});}} extra={a=>a.approval==='AUTO_WITHIN_LIMITS'&&wallet&&isEvmWallet(wallet)?<AgentAgentic wallet={wallet}/>:null}/>}
+          {wallet&&!locked&&<AgentBar agents={agents.agents} selectedId={boundAgentId} boundToStrategy={Boolean(strategy)} disabled={busy||interpreting||agent.running} onSelect={id=>void selectAgent(id)} onEdit={a=>{agents.setError(null);setAgentEditor({open:true,agent:a});}} onCreate={start=>{agents.setError(null);setAgentEditor({open:true,agent:null,start:start??null});}} extra={a=>a.approval==='AUTO_WITHIN_LIMITS'&&wallet&&isEvmWallet(wallet)?<AgentAgentic wallet={wallet}/>:null}/>}
           {strategy?<>
             <div className="rw-date-divider"><span>{date(strategy.createdAt)}</span></div>
             <article className="rw-message"><div className="rw-message-by"><span className="rw-avatar">You</span><span>Research brief</span><small>v{strategy.revision}</small></div><p>{strategy.objective}</p><div className="rw-brief-tags"><span>{amount(strategy.budget)} budget</span>{strategy.instruments.map(i=><button key={i} onClick={()=>{setFocus(i);setTab('Overview');setMobile('report');}}>{i}</button>)}</div></article>
             <ResearchRunControls agent={agent} strategy={strategy} onResults={()=>{setTab('Backtest');setMobile('report');}}/>
             {strategy.messages.map(n=><article className="rw-message rw-note" key={n.id}><div className="rw-message-by"><span className="rw-avatar">You</span><span>Research note</span><small>{date(n.createdAt)}</small></div><p>{n.text}</p></article>)}
-          </>:!intake&&<div className="rw-start"><span className="rw-eyebrow">XTXC RESEARCH</span><h2>Start with an idea.</h2><p>A budget, a goal, or a few stocks.<br/>Describe it below. We’ll test the strategy.</p><div className="rw-suggestions"><button className="rw-starter" onClick={()=>chooseExample(`반도체로 100 ${stable}, 1년에 5% 목표로 연구해줘`)}>Semiconductors · 5% / year <Glyph name="arrow"/></button><button className="rw-starter" onClick={()=>chooseExample(`Compare NVDA, AMD and QQQ with 100 ${stable}, a 5% target over 1 year and a 15% maximum loss.`)}>Compare a few stocks <Glyph name="arrow"/></button></div><div className="rw-journey" aria-label="Research steps"><span>01 Research</span><span>02 Compare</span><span>03 Approve</span></div>{locked&&<button className="rw-link" disabled={busy} onClick={()=>void unlock()}>Sign in to see saved strategies</button>}</div>}
+          </>:!intake&&<div className="rw-start"><span className="rw-eyebrow">XTXC RESEARCH</span>{boundAgent?<><h2>{boundAgent.name} is ready.</h2><p>Describe a goal below. It designs strategies with its rules, and code tests each one on past prices.</p></>:<><h2>Start with an idea.</h2><p>A budget, a goal, or a few stocks.<br/>Describe it below. We’ll test the strategy.</p></>}<div className="rw-suggestions"><button className="rw-starter" onClick={()=>chooseExample(`반도체로 100 ${stable}, 1년에 5% 목표로 연구해줘`)}>Semiconductors · 5% / year <Glyph name="arrow"/></button><button className="rw-starter" onClick={()=>chooseExample(`Compare NVDA, AMD and QQQ with 100 ${stable}, a 5% target over 1 year and a 15% maximum loss.`)}>Compare a few stocks <Glyph name="arrow"/></button></div>{!boundAgent&&<ol className="sx-how" aria-label="How it works"><li><b>Your agent</b><span>An investing style, rules and risk limits, saved once.</span></li><li><b>Research</b><span>It designs strategies. Code tests each one on past prices, after costs.</span></li><li><b>You approve</b><span>Nothing is bought until you approve a plan and confirm its trades.</span></li></ol>}{locked&&<button className="rw-link" disabled={busy} onClick={()=>void unlock()}>Sign in to see saved strategies</button>}</div>}
           {interpreting&&<p className="rw-caption" aria-live="polite">Reading your request…</p>}
           {intake&&<ResearchIntakeCard agent={boundAgent} asset={wallet&&isEvmWallet(wallet)?'USDT':'USDC'} draft={intake} setDraft={v=>{setIntake(v);runRequest.current=crypto.randomUUID();}} busy={busy||interpreting} onRun={()=>void runIntake()} onCancel={()=>setIntake(null)} onEdit={()=>{setForm(intake.brief);intakeEdit.current=true;setStockSearch('');modal.current?.showModal();}}/>}
         </div>
@@ -240,7 +274,7 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
       </section>
       <div className="rw-resizer" role="separator" aria-label="Resize conversation" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={440} aria-valuenow={chatWidth} tabIndex={0} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setChatWidth(v=>Math.min(440,Math.max(320,v+(e.key==='ArrowRight'?16:-16))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))resize(e.clientX);}} onPointerUp={e=>e.currentTarget.releasePointerCapture(e.pointerId)}/>
       <section className="rw-report" aria-label="Research report">
-        <div className="rw-tabs" role="tablist" aria-label="Report sections" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=(tabs.indexOf(tab)+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;setTab(tabs[i]);document.getElementById(`rw-tab-${tabs[i]}`)?.focus();}}}>{tabs.map(t=><button key={t} role="tab" id={`rw-tab-${t}`} aria-controls="rw-report-panel" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}>{tabLabels[t]}</button>)}</div>
+        <div className="rw-tabs" role="tablist" aria-label="Report sections" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const i=(tabs.indexOf(tab)+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;setTab(tabs[i]);document.getElementById(`rw-tab-${tabs[i]}`)?.focus();}}}>{tabs.map(t=><button key={t} role="tab" id={`rw-tab-${t}`} aria-controls="rw-report-panel" aria-selected={tab===t} tabIndex={tab===t?0:-1} onClick={()=>setTab(t)}>{tabLabels[t]}{((t==='Backtest'&&fitting>0&&!approved)||(t==='Execution'&&openPlan))&&<i className="sx-dot" aria-label="needs your attention"/>}</button>)}</div>
         <div className="rw-report-scroll" role="tabpanel" id="rw-report-panel" aria-labelledby={`rw-tab-${tab}`} tabIndex={0}>
           {tab==='Overview'&&<>
             <div className="rw-market-head"><div>{market&&<StockLogo market={directoryMarket(market)}/>}<div><b>{market?.name??'Choose a stock'}</b><small>{market?.instrument} · Stock</small></div></div><select aria-label="Research chart stock" value={market?.instrument??''} onChange={e=>setFocus(e.target.value)}>{directory.filter(r=>!chartUniverse||chartUniverse.includes(r.instrument)).map(r=><option key={r.instrument} value={r.instrument}>{r.instrument}</option>)}</select></div>
@@ -248,16 +282,18 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
             <div className="rw-chart-foot">{market&&<button className="rw-link" onClick={()=>onSelect(market.instrument)}>Trade {market.instrument} <Glyph name="arrow"/></button>}</div>
             {strategy&&<dl className="rw-metrics"><div><dt>Budget</dt><dd>{amount(strategy.budget)}</dd></div><div><dt>Stocks</dt><dd>{strategy.instruments.length}</dd></div><div><dt>Research</dt><dd className="rw-small-value">{agent.running?'Running':agent.run?.result?'Results ready':'Draft'}</dd></div></dl>}
           </>}
-          {tab==='Backtest'&&<ResearchResults agent={agent} onActivity={()=>setTab('Execution')}/>}
-          {tab==='Holdings'&&<><SectionTitle label="ALLOCATION" title="Targets & wallet holdings"/><p className="rw-description">Target weights are research inputs. Your wallet holdings remain separate.</p>{strategy?.weights.length?<><div className="rw-allocation-bar" aria-label="Target allocation">{strategy.weights.map((w,i)=><span key={w.instrument} style={{flex:w.weightBps,opacity:1-i*.035}} title={`${w.instrument} ${w.weightBps/100}%`}/>)}{Boolean(strategy.cashBps)&&<span style={{flex:strategy.cashBps!,background:'#424848'}} title={`Cash ${strategy.cashBps!/100}%`}/>}</div><div className="rw-table"><div className="rw-table-head"><span>Stock</span><span>Target</span><span>Wallet tokens</span></div>{strategy.weights.map(w=><div key={w.instrument}><b>{w.instrument}</b><span>{w.weightBps/100}%</span><span>{portfolio&&!balanceError?(portfolio.holdings.filter(h=>h.instrument===w.instrument).map(h=>`${exactTokenAmount(h.atoms,h.rawDecimals)} ${h.symbol}`).join(' · ')||'0'):'—'}</span></div>)}{Boolean(strategy.cashBps)&&<div><b>Cash</b><span>{strategy.cashBps!/100}%</span><span>—</span></div>}</div></>:<p className="rw-inline-empty">No target weights set. Import a saved portfolio to start with an allocation.</p>}
+          {tab==='Backtest'&&<ResearchResults agent={agent} budget={strategy?.budget} autoTrade={boundAgent?.approval==='AUTO_WITHIN_LIMITS'} onActivity={()=>setTab('Execution')}/>}
+          {tab==='Holdings'&&<><SectionTitle label="ALLOCATION" title="Targets & wallet holdings"/><p className="rw-description">Target weights are research inputs. Your wallet holdings remain separate.</p>{targets?<>{targets.fromPlan&&<p className="rw-caption">From your approved plan{plannedCandidate?` · ${plannedCandidate.name}`:''}</p>}<><div className="rw-allocation-bar" aria-label="Target allocation">{targets.weights.map((w,i)=><span key={w.instrument} style={{flex:w.weightBps,opacity:1-i*.035}} title={`${w.instrument} ${w.weightBps/100}%`}/>)}{targets.cashBps>0&&<span style={{flex:targets.cashBps,background:'#424848'}} title={`Cash ${targets.cashBps/100}%`}/>}</div><div className="rw-table"><div className="rw-table-head"><span>Stock</span><span>Target</span><span>Wallet tokens</span></div>{targets.weights.map(w=><div key={w.instrument}><b>{w.instrument}</b><span>{w.weightBps/100}%</span><span>{portfolio&&!balanceError?(portfolio.holdings.filter(h=>h.instrument===w.instrument).map(h=>`${exactTokenAmount(h.atoms,h.rawDecimals)} ${h.symbol}`).join(' · ')||'0'):'—'}</span></div>)}{targets.cashBps>0&&<div><b>Cash</b><span>{targets.cashBps/100}%</span><span>—</span></div>}</div></></>:<p className="rw-inline-empty">No targets yet. Approve a strategy under Results, or import a saved portfolio, to set an allocation.</p>}
             {holdingsNote?<p className="rw-inline-empty">{holdingsNote}</p>:<><div className="rw-section-heading"><h3>Connected wallet</h3><button className="rw-link" onClick={onRefresh}>Refresh <Glyph name="refresh"/></button></div>{!wallet?<button className="rw-button" onClick={()=>void onConnect()}>Connect wallet</button>:balanceError?<p className="rw-inline-empty">Balances need refreshing.</p>:!portfolio?<p className="rw-inline-empty">Reading balances…</p>:<><p className="rw-caption">Observed {date(portfolio.observedAt)} · {strategy?'Stocks in this strategy':'Your stock tokens'}</p><div className="rw-wallet-holdings">{(strategy?reportedHoldings:portfolio.holdings).filter(h=>BigInt(h.atoms)>0n).map(h=><button key={h.mint} onClick={()=>onSelect(h.instrument)}><span><b>{h.instrument}</b><small>{h.symbol} · {h.issuer}</small></span><strong>{exactTokenAmount(h.atoms,h.rawDecimals)}</strong><Glyph name="arrow"/></button>)}{!(strategy?reportedHoldings:portfolio.holdings).some(h=>BigInt(h.atoms)>0n)&&<p className="rw-inline-empty">No matching stock tokens in this wallet.</p>}{portfolio.cash?.map(c=><div className="rw-cash" key={c.symbol}><span>{c.symbol}</span><b>{exactTokenAmount(c.atoms,c.decimals)}</b></div>)}</div></>}</>}</>}
-          {tab==='Sources'&&<><SectionTitle label="PROVENANCE" title="Sources & observations"/><p className="rw-description">Market references and wallet records, with their observation times.</p><div className="rw-source-list"><Source title="Stock universe" type="XTXC catalog" detail={`${directory.length} listed instruments · exact token identities retained`}/><Source title={`${market?.instrument??'Stock'} price`} type={observation?.source??'No observation'} detail={observation?`${observation.observedAt ? date(observation.observedAt):'Timestamp unavailable'}${observation.stale?' · Last observed':''}`:'Select a stock to request price context.'}/><Source title="Reference chart" type="TradingView / token history" detail="Reference visualization only; not imported as a research or backtest dataset."/><Source title="Wallet holdings" type="Solana account observation" detail={portfolio?`Slot ${portfolio.stateSlot.toLocaleString()} · ${date(portfolio.observedAt)}`:'Connect your wallet to read its actual balances.'}/><Source title="Research history" type={agent.run?.result?`Verified release · ${agent.run.result.dataset.asOf}`:'Not attached'} detail={agent.run?.result?`Dataset ${agent.run.result.dataset.id}. ${agent.run.result.dataset.limitations.join(' ')}`:'Run research to attach a versioned price dataset.'}/>{agent.run?.result&&<Source title="AI research designer" type={`${agent.run.result.model.provider} · ${agent.run.result.model.model}`} detail={agent.run.result.proposal.rationale}/>}</div></>}
-          {tab==='Execution'&&<><SectionTitle label="EXECUTION" title="Plans & trade records"/>{strategy&&<ResearchPlanExecution key={strategy.id} agent={agent} wallet={wallet} strategy={strategy} onRefresh={onRefresh}/>}{strategy&&<div className="rw-trade-links">{strategy.instruments.map(i=><button className="rw-button" key={i} onClick={()=>onSelect(i)}>Trade {i}<Glyph name="arrow"/></button>)}</div>}<div className="rw-section-heading"><h3>Wallet activity</h3><button className="rw-link" onClick={()=>void onHistory()}>Refresh <Glyph name="refresh"/></button></div><p className="rw-caption">Account-wide records. These trades are not attributed to this strategy.</p>{historyError&&<p className="rw-inline-empty">Sign in to refresh recorded orders.</p>}{orders.length?<div className="rw-orders">{orders.slice(0,30).map(o=><article key={o.preparedId}><div><b>{o.kind==='BASKET'?'Basket':o.side==='SELL'?'Stock sale':'Stock purchase'}</b><span className={o.receiptVerified?'rw-verified':''}>{o.receiptVerified?'Receipt verified':orderLabel(o.phase)}</span></div><small>{o.preparedId}</small>{/^[1-9A-HJ-NP-Za-km-z]{64,100}$/.test(o.signature)&&<a href={`https://solscan.io/tx/${o.signature}`} target="_blank" rel="noopener noreferrer">View mainnet transaction <Glyph name="arrow"/></a>}</article>)}</div>:<p className="rw-inline-empty">No recorded trades loaded.</p>}<p className="rw-caption">Devnet plan receipts will be shown separately from mainnet trade receipts.</p></>}
+          {tab==='Sources'&&<><SectionTitle label="PROVENANCE" title="Sources & observations"/><p className="rw-description">Market references and wallet records, with their observation times.</p><div className="rw-source-list"><Source title="Stock universe" type="XTXC catalog" detail={`${directory.length} listed instruments · exact token identities retained`}/><Source title={`${market?.instrument??'Stock'} price`} type={observation?.source??'No observation'} detail={observation?`${observation.observedAt ? date(observation.observedAt):'Timestamp unavailable'}${observation.stale?' · Last observed':''}`:'Select a stock to request price context.'}/><Source title="Reference chart" type="TradingView / token history" detail="Reference visualization only; not imported as a research or backtest dataset."/>{wallet&&isEvmWallet(wallet)?<Source title="Wallet holdings" type="BNB Chain wallet" detail="Balances are read on the Portfolio page. Trades from this research are listed under Trades, with BscScan receipts."/>:<Source title="Wallet holdings" type="Solana account observation" detail={portfolio?`Slot ${portfolio.stateSlot.toLocaleString()} · ${date(portfolio.observedAt)}`:'Connect your wallet to read its actual balances.'}/>}<Source title="Research history" type={agent.run?.result?`Verified release · ${agent.run.result.dataset.asOf}`:'Not attached'} detail={agent.run?.result?`Dataset ${agent.run.result.dataset.id}. ${agent.run.result.dataset.limitations.join(' ')}`:'Run research to attach a versioned price dataset.'}/>{agent.run?.result&&<Source title="AI research designer" type={`${agent.run.result.model.provider} · ${agent.run.result.model.model}`} detail={agent.run.result.proposal.rationale}/>}</div></>}
+          {tab==='Execution'&&<><SectionTitle label="EXECUTION" title="Plans & trades"/>{strategy?<ResearchPlanExecution key={strategy.id} agent={agent} wallet={wallet} strategy={strategy} onRefresh={onRefresh}/>:<p className="rw-inline-empty">Open a strategy to see its plans and trades.</p>}{strategy&&<div className="sx-trade-links"><span>Trade a stock yourself</span>{strategy.instruments.map(i=><button className="rw-link" key={i} onClick={()=>onSelect(i)}>{i}<Glyph name="arrow"/></button>)}</div>}
+            {/* BNB Chain trades and receipts are shown in the plan above; the account-wide order history is the Solana exchange's. */}
+            {!(wallet&&isEvmWallet(wallet))&&<><div className="rw-section-heading"><h3>Wallet activity</h3><button className="rw-link" onClick={()=>void onHistory()}>Refresh <Glyph name="refresh"/></button></div><p className="rw-caption">Account-wide records. These trades are not attributed to this strategy.</p>{historyError&&<p className="rw-inline-empty">Sign in to refresh recorded orders.</p>}{orders.length?<div className="rw-orders">{orders.slice(0,30).map(o=><article key={o.preparedId}><div><b>{o.kind==='BASKET'?'Basket':o.side==='SELL'?'Stock sale':'Stock purchase'}</b><span className={o.receiptVerified?'rw-verified':''}>{o.receiptVerified?'Receipt verified':orderLabel(o.phase)}</span></div><small>{o.preparedId}</small>{/^[1-9A-HJ-NP-Za-km-z]{64,100}$/.test(o.signature)&&<a href={`https://solscan.io/tx/${o.signature}`} target="_blank" rel="noopener noreferrer">View mainnet transaction <Glyph name="arrow"/></a>}</article>)}</div>:<p className="rw-inline-empty">No recorded trades loaded.</p>}<p className="rw-caption">Devnet plan receipts will be shown separately from mainnet trade receipts.</p></>}</>}
         </div>
         {strategy&&<footer className="rw-report-footer"><span><Glyph name="lock"/> Private research</span><span>Saved {date(strategy.updatedAt)}</span></footer>}
       </section>
     </div>
-    {agentEditor.open&&<AgentEditor key={agentEditor.agent?`${agentEditor.agent.id}:${agentEditor.agent.revision}`:'new'} initial={agentEditor.agent} controller={agents} onClose={()=>setAgentEditor({open:false,agent:null})} onSaved={a=>{if(!agentEditor.agent)void selectAgent(a.id);}}/>}
+    {agentEditor.open&&<AgentEditor key={agentEditor.agent?`${agentEditor.agent.id}:${agentEditor.agent.revision}`:`new:${agentEditor.start?.preset??''}`} initial={agentEditor.agent} start={agentEditor.start} bnb={Boolean(wallet&&isEvmWallet(wallet))} controller={agents} onClose={()=>setAgentEditor({open:false,agent:null})} onSaved={a=>{if(!agentEditor.agent)void selectAgent(a.id);}}/>}
     <dialog ref={modal} className="rw-modal" aria-labelledby="rw-form-title" onCancel={e=>{if(busy)e.preventDefault();}}>
       <form onSubmit={e=>{e.preventDefault();void submitBrief();}}>
         <div className="rw-modal-heading"><h2 id="rw-form-title">{edit?'Edit strategy':'New strategy'}</h2><button type="button" className="rw-icon" aria-label="Close strategy form" disabled={busy} onClick={()=>modal.current?.close()}><Glyph name="close"/></button></div>
@@ -282,5 +318,15 @@ function Empty({icon,title,detail,children}:{icon:string;title:string;detail:str
 function Glyph({name}:{name:string}){
   const paths:Record<string,ReactNode>={plus:<path d="M12 5v14M5 12h14"/>,arrow:<path d="M5 12h14m-5-5 5 5-5 5"/>,chevron:<path d="m7 10 5 5 5-5"/>,close:<path d="m6 6 12 12M6 18 18 6"/>,search:<><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></>,lock:<><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></>,document:<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8M8 17h5"/></>,thread:<path d="M20 11a8 8 0 0 1-8 8H5l-3 2V11a9 9 0 0 1 18 0ZM7 9h8M7 13h5"/>,check:<path d="m5 12 4 4L19 6"/>,edit:<><path d="m14 5 5 5M4 20l5-1L20 8a3 3 0 0 0-5-5L4 14v6Z"/></>,chart:<path d="M4 4v16h16M7 14l4-5 4 3 5-7"/>,list:<path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/>,refresh:<><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></>};
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]??paths.document}</svg>;
+}
+type JourneyStep={label:string;state:'done'|'now'|'todo';go?:()=>void};
+type NextStep={text:string;detail?:string;action?:{label:string;run:()=>void}};
+// Agent → request → results → approval → trades, with the one thing to do next.
+function Journey({steps,next}:{steps:JourneyStep[];next:NextStep|null}){
+  return <div className="sx-journey">
+    <ol aria-label="Progress">{steps.map((s,i)=>{const mark=<><span className="sx-mark">{s.state==='done'?<Glyph name="check"/>:i+1}</span>{s.label}</>;
+      return <li key={s.label} className={`sx-${s.state}`} aria-current={s.state==='now'?'step':undefined}>{s.go?<button type="button" onClick={s.go}>{mark}</button>:<span>{mark}</span>}</li>;})}</ol>
+    {next&&<div className="sx-next" aria-live="polite"><div><b>{next.text}</b>{next.detail&&<small>{next.detail}</small>}</div>{next.action&&<button type="button" className="rw-button rw-primary" onClick={next.action.run}>{next.action.label}</button>}</div>}
+  </div>;
 }
 function AgentAgentic({wallet}:{wallet:string}){const agentic=useAgentic(wallet);return <AgenticConnect agentic={agentic}/>;}

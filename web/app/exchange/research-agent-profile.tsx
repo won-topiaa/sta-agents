@@ -13,6 +13,7 @@ const api='/api/v1/stocklana/research/agents';
 const pct=(bps:number)=>`${(bps/100).toLocaleString('en-US',{maximumFractionDigits:1})}%`;
 export function formatParam(spec:AgentParamSpec,value:number){
   if(spec.display==='percent')return `${Math.round(value*1000)/10}%`;
+  if(spec.display==='dollars_log10'){const d=10**value;return d>=1e9?`$${d/1e9}B`:`$${d/1e6}M`;}
   return String(value);
 }
 export function ruleText(rule:AgentRule){
@@ -50,33 +51,53 @@ export function useAgents(wallet:string|null){
 }
 export type AgentsController=ReturnType<typeof useAgents>;
 
-export function AgentBar({agents,selectedId,boundToStrategy,disabled,onSelect,onEdit,onCreate,extra}:{agents:AgentProfile[]|null;selectedId:string|null;boundToStrategy:boolean;disabled:boolean;onSelect:(id:string|null)=>void;onEdit:(a:AgentProfile)=>void;onCreate:()=>void;extra?:(agent:AgentProfile)=>React.ReactNode}){
+export type AgentStart={style:string;preset:string};
+const QUICK_STARTS:AgentStart[]=[{style:'technical',preset:'trend'},{style:'technical',preset:'dip'},{style:'value',preset:'deep_value'}];
+const presetLabel=(style:string,preset:string)=>AGENT_RULES.styles[style]?.presets[preset]?.label??preset;
+export function ApprovalMark({approval}:{approval:AgentProfile['approval']}){
+  return <span className={`ap-approval ${approval==='AUTO_WITHIN_LIMITS'?'ap-auto':''}`}><svg viewBox="0 0 24 24" aria-hidden="true">{approval==='AUTO_WITHIN_LIMITS'?<path d="M13 3 5 14h6l-1 7 8-11h-6l1-7Z"/>:<><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>}</svg>{approvalText[approval]}</span>;
+}
+export function AgentBar({agents,selectedId,boundToStrategy,disabled,onSelect,onEdit,onCreate,extra}:{agents:AgentProfile[]|null;selectedId:string|null;boundToStrategy:boolean;disabled:boolean;onSelect:(id:string|null)=>void;onEdit:(a:AgentProfile)=>void;onCreate:(start?:AgentStart)=>void;extra?:(agent:AgentProfile)=>React.ReactNode}){
   const agent=agents?.find(a=>a.id===selectedId)??null;
+  // Compact by default; the plain-language rules and limits open on request.
+  const [open,setOpen]=useState(false);
   if(!agents)return null;
-  if(!agents.length)return <section className="ap-bar ap-empty" aria-label="Your agent"><div><b>Research with your own agent</b><p>Give it an investing style and rules. Every strategy it designs keeps them.</p></div><button className="rw-button" disabled={disabled} onClick={onCreate}>Create agent</button></section>;
+  if(!agents.length)return <section className="ap-bar ap-empty" aria-label="Your agent">
+    <div><b>Create your investing agent</b><p>Pick a style to start. Code holds every strategy your agent designs to its rules and limits, and nothing is bought without your approval.</p></div>
+    <div className="ap-quick">{QUICK_STARTS.map(q=><button key={q.preset} type="button" disabled={disabled} onClick={()=>onCreate(q)}><b>{presetLabel(q.style,q.preset)}</b><small>{AGENT_RULES.styles[q.style]?.presets[q.preset]?.help}</small></button>)}</div>
+    <button className="rw-link" disabled={disabled} onClick={()=>onCreate()}>Or build one from scratch</button>
+  </section>;
   return <section className="ap-bar" aria-label="Your agent">
     <div className="ap-bar-head">
       <span className="ap-avatar" aria-hidden="true">{(agent?.name??'—').slice(0,1).toUpperCase()}</span>
-      <label className="ap-select"><span className="rw-sr">Agent for {boundToStrategy?'this strategy':'new research'}</span>
-        <select value={selectedId??''} disabled={disabled} onChange={e=>e.target.value==='__new'?onCreate():onSelect(e.target.value||null)}>
-          <option value="">No agent</option>{agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}<option value="__new">New agent…</option>
-        </select></label>
+      <div className="ap-who"><small>{boundToStrategy?'Agent for this strategy':'Your agent'}</small>
+        <label className="ap-select"><span className="rw-sr">Agent for {boundToStrategy?'this strategy':'new research'}</span>
+          <select value={selectedId??''} disabled={disabled} onChange={e=>e.target.value==='__new'?onCreate():onSelect(e.target.value||null)}>
+            <option value="">No agent</option>{agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}<option value="__new">New agent…</option>
+          </select></label></div>
+      {agent&&<button className="rw-link" aria-expanded={open} onClick={()=>setOpen(!open)}>{open?'Less':'Rules'}</button>}
       {agent&&<button className="rw-link" disabled={disabled} onClick={()=>onEdit(agent)}>Edit</button>}
     </div>
     {agent?<>
-      <p className="ap-bar-meta">{AGENT_RULES.styles[agent.style]?.label} · {AGENT_RULES.styles[agent.style]?.presets[agent.preset]?.label} · {agent.rebalance==='weekly'?'Weekly':'Monthly'} rebalance</p>
-      <div className="ap-chips">{agent.rules.length?agent.rules.map(r=><span key={r.id} title={ruleText(r)}>{ruleLabel(r.id)}</span>):<span>No enforced rules</span>}</div>
-      <p className="ap-bar-limits">Max {pct(agent.risk.maxWeightBps)} per stock · cash ≥ {pct(agent.risk.minCashBps)} · loss ≤ {pct(agent.risk.maxDrawdownBps)} · <b>{approvalText[agent.approval]}</b></p>
+      <p className="ap-bar-meta">{AGENT_RULES.styles[agent.style]?.label} · {presetLabel(agent.style,agent.preset)} · {agent.rebalance==='weekly'?'Weekly':'Monthly'} rebalance</p>
+      {open?<>
+        {agent.rules.length?<ul className="ap-rule-list" aria-label="Rules enforced by code">{agent.rules.map(r=><li key={r.id}><b>{ruleLabel(r.id)}</b><span>{ruleText(r)}</span></li>)}</ul>:<p className="ap-hint">No rules yet. Add some with Edit.</p>}
+        <dl className="ap-limits"><div><dt>Per stock</dt><dd>≤ {pct(agent.risk.maxWeightBps)}</dd></div><div><dt>Cash</dt><dd>≥ {pct(agent.risk.minCashBps)}</dd></div><div><dt>Max. loss</dt><dd>{pct(agent.risk.maxDrawdownBps)}</dd></div></dl>
+      </>:<div className="ap-chips">{agent.rules.length?agent.rules.map(r=><span key={r.id} title={ruleText(r)}>{ruleLabel(r.id)}</span>):<span>No enforced rules</span>}</div>}
+      <ApprovalMark approval={agent.approval}/>
       {extra?.(agent)}
-    </>:<p className="ap-bar-meta">{boundToStrategy?'This strategy researches without an agent.':'New research runs without an agent.'}</p>}
+    </>:<p className="ap-bar-meta">{boundToStrategy?'This strategy researches without an agent.':'New research runs without an agent, so no style or rules are enforced.'}</p>}
   </section>;
 }
 
 type Draft=AgentProfileBody;
 // Mounted only while open (keyed by agent and revision), so every opening starts from the saved agent.
-export function AgentEditor({initial,controller,onClose,onSaved}:{initial:AgentProfile|null;controller:AgentsController;onClose:()=>void;onSaved:(a:AgentProfile)=>void}){
-  const dialog=useRef<HTMLDialogElement>(null),requestId=useRef('');
-  const [draft,setDraft]=useState<Draft>(()=>initial?profileBody(initial):presetBody('My agent'));
+const EDITOR_STEPS=['Style','Rules','Limits & approval'] as const;
+export function AgentEditor({initial,start,bnb=false,controller,onClose,onSaved}:{initial:AgentProfile|null;start?:AgentStart|null;bnb?:boolean;controller:AgentsController;onClose:()=>void;onSaved:(a:AgentProfile)=>void}){
+  const dialog=useRef<HTMLDialogElement>(null),requestId=useRef(''),body=useRef<HTMLDivElement>(null);
+  const [draft,setDraft]=useState<Draft>(()=>initial?profileBody(initial):presetBody('My agent',start?.style,start?.preset));
+  const [step,setStep]=useState(0),last=EDITOR_STEPS.length-1;
+  const go=(n:number)=>{setStep(n);body.current?.scrollTo({top:0});};
   const [suggestions,setSuggestions]=useState<{suggestions:RuleSuggestion[];unsupported:string[]}|null>(null),[suggesting,setSuggesting]=useState(false),[suggestError,setSuggestError]=useState<string|null>(null);
   useEffect(()=>{const d=dialog.current;requestId.current=crypto.randomUUID();if(d&&!d.open)d.showModal();return()=>d?.close();},[]);
   const style=AGENT_RULES.styles[draft.style],lim=AGENT_RULES.limits;
@@ -97,10 +118,17 @@ export function AgentEditor({initial,controller,onClose,onSaved}:{initial:AgentP
   }
   async function submit(){const saved=await controller.save(draft,initial,requestId.current);if(saved){onSaved(saved);onClose();}}
   const risk=(k:keyof Draft['risk'],label:string,min:number,max:number)=><label>{label}<input type="number" min={min} max={max} step="0.5" value={draft.risk[k]/100} onChange={e=>set({risk:{...draft.risk,[k]:Math.round(Number(e.target.value)*100)}})}/></label>;
+  const summary=<section className="ap-summary" aria-label="Agent summary"><b>What {draft.name.trim()||'your agent'} does</b><ul>
+    {draft.rules.map(r=><li key={r.id}>{ruleText(r)}</li>)}
+    <li>Puts at most {pct(draft.risk.maxWeightBps)} in one stock, keeps at least {pct(draft.risk.minCashBps)} in cash and aims to lose no more than {pct(draft.risk.maxDrawdownBps)}.</li>
+    <li>Rebalances {draft.rebalance}.</li><li>{draft.approval==='PER_TRADE'?'Asks you to confirm every trade.':bnb?'Trades on its own through your Binance Agentic Wallet, within the limits you set in Binance.':'Trades on its own through your agent wallet, within its limits.'}</li></ul></section>;
   return <dialog ref={dialog} className="rw-modal ap-modal" aria-labelledby="ap-title" onCancel={e=>{e.preventDefault();if(!controller.busy)onClose();}}>
-    <form onSubmit={e=>{e.preventDefault();void submit();}}>
+    {/* A new agent is created step by step; Enter moves to the next step until the last one. */}
+    <form onSubmit={e=>{e.preventDefault();if(!initial&&step<last)go(step+1);else void submit();}}>
       <div className="rw-modal-heading"><h2 id="ap-title">{initial?'Edit agent':'New agent'}</h2><button type="button" className="rw-icon" aria-label="Close agent editor" disabled={controller.busy} onClick={onClose}>×</button></div>
-      <div className="rw-modal-body ap-body">
+      <ol className="ap-steps">{EDITOR_STEPS.map((s,i)=><li key={s}><button type="button" aria-current={step===i?'step':undefined} className={i<step?'ap-step-done':''} onClick={()=>go(i)}><span>{i<step?'✓':i+1}</span>{s}</button></li>)}</ol>
+      <div className="rw-modal-body ap-body" ref={body}>
+        {step===0&&<>
         <label className="ap-field">Name<input required maxLength={lim.name_chars} value={draft.name} onChange={e=>set({name:e.target.value})}/></label>
 
         <fieldset className="ap-group"><legend>Investing style</legend><div className="ap-cards">
@@ -109,8 +137,11 @@ export function AgentEditor({initial,controller,onClose,onSaved}:{initial:AgentP
 
         {style&&<fieldset className="ap-group"><legend>Start from</legend><div className="ap-presets" role="group">
           {Object.entries(style.presets).map(([id,p])=><button type="button" key={id} aria-pressed={draft.preset===id} title={p.help} onClick={()=>choosePreset(id)}>{p.label}</button>)}
-        </div><small className="ap-hint">{style.presets[draft.preset]?.help}</small></fieldset>}
+        </div><small className="ap-hint">{style.presets[draft.preset]?.help}</small>
+          {draft.rules.length>0&&<ul className="ap-rule-list ap-preview" aria-label="Rules in this starting point">{draft.rules.map(r=><li key={r.id}><b>{ruleLabel(r.id)}</b><span>{ruleText(r)}</span></li>)}</ul>}</fieldset>}
+        </>}
 
+        {step===1&&<>
         <fieldset className="ap-group"><legend>Rules <span>{draft.rules.length}/{lim.rules} · filters {filters}/{lim.filters}</span></legend>
           <p className="ap-hint">Code adds these to every strategy your agent designs. The model cannot drop or loosen them.</p>
           <div className="ap-rules">{Object.entries(AGENT_RULES.rules).filter(([,r])=>r.styles.includes(draft.style)).map(([id,spec])=>{
@@ -133,11 +164,13 @@ export function AgentEditor({initial,controller,onClose,onSaved}:{initial:AgentP
           {suggestError&&<p className="ra-error" role="alert">{suggestError}</p>}
           {suggestions&&<div className="ap-suggestions" aria-live="polite">
             {suggestions.suggestions.length===0&&<p className="ap-hint">No rule in the list matches this description.</p>}
-            {suggestions.suggestions.map(s=>{const added=active.get(s.id);return <div key={s.id}><span><b>{ruleLabel(s.id)}</b><small>{ruleText(s)}</small><q>{s.evidence}</q></span><button type="button" className="rw-link" disabled={Boolean(added&&JSON.stringify(added.params)===JSON.stringify(s.params))} onClick={()=>addSuggestion(s)}>{added?'Use these settings':'Add'}</button></div>;})}
+            {suggestions.suggestions.map(s=>{const added=active.get(s.id);return <div key={s.id}><span><b>{ruleLabel(s.id)}</b><small>{ruleText(s)}</small><q>{s.evidence}</q></span><button type="button" className="rw-link" disabled={Boolean(added&&JSON.stringify(added.params)===JSON.stringify(s.params))} onClick={()=>addSuggestion(s)}>{!added?'Add':JSON.stringify(added.params)===JSON.stringify(s.params)?'Added ✓':'Use these settings'}</button></div>;})}
             {suggestions.unsupported.length>0&&<p className="ap-hint">Not expressible as a rule yet: {suggestions.unsupported.map(u=>`“${u}”`).join(', ')}</p>}
           </div>}
         </fieldset>
+        </>}
 
+        {step===2&&<>
         <fieldset className="ap-group"><legend>Risk limits</legend><div className="ap-risk">{risk('maxWeightBps','Per stock · max %',1,100)}{risk('minCashBps','Cash · min %',0,95)}{risk('maxDrawdownBps','Loss · max %',1,80)}</div>
           <small className="ap-hint">Research targets can be stricter than these, never looser.</small></fieldset>
 
@@ -145,11 +178,16 @@ export function AgentEditor({initial,controller,onClose,onSaved}:{initial:AgentP
 
         <fieldset className="ap-group"><legend>Trade approval</legend><div className="ap-cards">
           <label className="ap-card"><input type="radio" name="ap-approval" checked={draft.approval==='PER_TRADE'} onChange={()=>set({approval:'PER_TRADE'})}/><b>Approve every trade <span className="ap-tag">Recommended</span></b><small>Your wallet asks you to sign each purchase or sale.</small></label>
-          <label className="ap-card"><input type="radio" name="ap-approval" checked={draft.approval==='AUTO_WITHIN_LIMITS'} onChange={()=>set({approval:'AUTO_WITHIN_LIMITS'})}/><b>Trade on its own within limits</b><small>After you approve a plan once, your agent wallet executes exactly that plan. You can stop it at any time.</small></label>
+          <label className="ap-card"><input type="radio" name="ap-approval" checked={draft.approval==='AUTO_WITHIN_LIMITS'} onChange={()=>set({approval:'AUTO_WITHIN_LIMITS'})}/><b>Trade on its own within limits</b><small>{bnb?'After you approve a plan once, your Binance Agentic Wallet executes exactly that plan, within the daily limit and tokens you allow in the Binance app. You can stop it at any time.':'After you approve a plan once, your agent wallet executes exactly that plan. You can stop it at any time.'}</small></label>
         </div></fieldset>
+        {summary}
+        </>}
         {controller.error&&<p className="rw-form-error" role="alert">{controller.error}</p>}
       </div>
-      <div className="rw-modal-footer"><span>Rules shape research. Trades still need your approval.</span><button type="submit" className="rw-button rw-primary" disabled={controller.busy||!draft.name.trim()}>{controller.busy?'Saving…':initial?'Save changes':'Create agent'}</button></div>
+      <div className="rw-modal-footer"><span>{step===last?'Rules shape research. Trades still need your approval.':`Step ${step+1} of ${EDITOR_STEPS.length}`}</span>
+        <div className="ap-footer-actions">{step>0&&<button type="button" className="rw-button" onClick={()=>go(step-1)}>Back</button>}
+          {step<last&&<button type="button" className={`rw-button ${initial?'':'rw-primary'}`} disabled={!draft.name.trim()} onClick={()=>go(step+1)}>Next</button>}
+          {(initial||step===last)&&<button type="submit" className="rw-button rw-primary" disabled={controller.busy||!draft.name.trim()}>{controller.busy?'Saving…':initial?'Save changes':'Create agent'}</button>}</div></div>
     </form>
   </dialog>;
 }

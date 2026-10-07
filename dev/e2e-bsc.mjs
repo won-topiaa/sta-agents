@@ -16,18 +16,26 @@ async function call(method,path,body){
 }
 const log=(...a)=>console.log(new Date().toISOString().slice(11,19),...a);
 const issued=new Date(),expires=new Date(issued.getTime()+5*60_000);
-const message=['Skew Stocklana','Sign in to trade on Skew.','',`URI: ${ORIGIN}`,'Version: 1','Chain: BNB Smart Chain (eip155:56)',`Address: ${account.address}`,
+const message=['XTXC','Sign in to XTXC research on BNB Chain.','',`URI: ${ORIGIN}`,'Version: 1','Chain: BNB Smart Chain (eip155:56)',`Address: ${account.address}`,
   `Nonce: ${randomUUID().replaceAll('-','')}`,`Issued At: ${issued.toISOString()}`,`Expiration Time: ${expires.toISOString()}`].join('\n');
 const session=await call('POST','/api/v1/requester-sessions',{operation:'EVM_SESSION',address:account.address,message,signature:await account.signMessage({message})});
 log('session',session.address===principal?'ok':'MISMATCH',principal);
-const VALUE=process.env.E2E_STYLE==='value';
-const profile=VALUE?{name:'E2E deep value',style:'value',preset:'deep_value',rules:[{id:'cheap_earnings',params:{keep:0.5}},{id:'cash_generating'},{id:'low_debt',params:{max:2}}],
+if(process.env.E2E_INTERPRET){const {draft}=await call('POST','/api/v1/stocklana/research/interpret',{text:process.env.E2E_INTERPRET});
+  log('interpret',draft.universeSource,draft.executionChain,draft.brief.instruments.join(','),'missing',draft.missing.join(',')||'-');}
+const STYLE=process.env.E2E_STYLE??'technical',VALUE=STYLE==='value'||STYLE==='dividend';
+const profile=STYLE==='dividend'?{name:'E2E dividend',style:'value',preset:'dividend',rules:[{id:'pays_dividend',params:{min:0.015}},{id:'cheaper_than_sector'},{id:'liquid_only',params:{min:7}}],
+    philosophy:'I want dependable dividend payers that are cheaper than their peers.',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:4000},rebalance:'monthly',approval:'PER_TRADE'}
+  :STYLE==='volume'?{name:'E2E volume',style:'technical',preset:'custom',rules:[{id:'liquid_only',params:{min:8}},{id:'volume_surge',params:{min:0.2}},{id:'uptrend_only',params:{days:50}}],
+    philosophy:'',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'weekly',approval:'PER_TRADE'}
+  :VALUE?{name:'E2E deep value',style:'value',preset:'deep_value',rules:[{id:'cheap_earnings',params:{keep:0.5}},{id:'cash_generating'},{id:'low_debt',params:{max:2}}],
     philosophy:'I buy profitable companies when they are cheap relative to their earnings.',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:4000},rebalance:'monthly',approval:'PER_TRADE'}
   :{name:'E2E trend',style:'technical',preset:'trend',rules:[{id:'uptrend_only',params:{days:200}},{id:'strong_momentum',params:{keep:0.5}},{id:'market_guard',params:{exposure:0.5}}],
     philosophy:'',risk:{maxWeightBps:4000,minCashBps:1000,maxDrawdownBps:3500},rebalance:'monthly',approval:'PER_TRADE'};
 const {agent}=await call('POST','/api/v1/stocklana/research/agents',{operation:'CREATE',requestId:randomUUID(),profile});
 log('agent',agent.id,agent.revision,agent.rules.map(r=>r.id).join(','));
-const created=await call('POST','/api/v1/stocklana/research',{operation:'CREATE',requestId:randomUUID(),brief:VALUE?{name:'E2E value on BSC',objective:'Find undervalued, cash-generating large companies for one year with 30 USDT.',budget:'30',instruments:['AAPL','MSFT','NVDA','AMD','INTC','MU','KO','PEP','PG','WMT','MCD','JPM','LLY','UNH','CVX','IBM','ORCL','F','GOOGL','META','AMZN'].filter(t=>true),weights:[],cashBps:null,agentId:agent.id}
+const created=await call('POST','/api/v1/stocklana/research',{operation:'CREATE',requestId:randomUUID(),brief:STYLE==='dividend'?{name:'E2E dividends on BSC',objective:'Find cheap, dependable dividend payers for one year with 30 USDT.',budget:'30',instruments:['KO','PEP','PG','WMT','HD','LOW','MCD','JPM','XOM','CVX','IBM','UNH','ABBV','SO','NEE','WM'],weights:[],cashBps:null,agentId:agent.id}
+  :STYLE==='volume'?{name:'E2E volume on BSC',objective:'Research liquid stocks with rising volume for one year with 30 USDT.',budget:'30',instruments:['NVDA','AMD','AVGO','MU','AAPL','MSFT','AMZN','META','TSLA','PLTR','GOOGL','NFLX'],weights:[],cashBps:null,agentId:agent.id}
+  :VALUE?{name:'E2E value on BSC',objective:'Find undervalued, cash-generating large companies for one year with 30 USDT.',budget:'30',instruments:['AAPL','MSFT','NVDA','AMD','INTC','MU','KO','PEP','PG','WMT','MCD','JPM','LLY','UNH','CVX','IBM','ORCL','F','GOOGL','META','AMZN'].filter(t=>true),weights:[],cashBps:null,agentId:agent.id}
   :{name:'E2E chips on BSC',objective:'Research AI chip stocks for one year with 30 USDT.',budget:'30',instruments:['NVDA','AMD','AVGO','MU','TSM'],weights:[],cashBps:null,agentId:agent.id}});
 const strategy=created.strategy;log('strategy',strategy.id,strategy.agentId===agent.id?'bound to agent':'NOT BOUND');
 const {runId}=await call('POST','/api/v1/stocklana/research/agent',{operation:'RUN',strategyId:strategy.id,requestId:randomUUID(),

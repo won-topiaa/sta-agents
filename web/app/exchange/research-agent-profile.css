@@ -79,3 +79,64 @@
 .ap-agentic span{flex:1;min-width:200px}
 .ap-agentic p{margin:0}
 .ap-agentic a,.ap-bar-limits a{color:#e6e6e6;text-decoration:underline}
+
+/* Agent card: who, rules in plain words, limits, approval mode. */
+.ap-bar{font-size:12.5px;padding:14px 15px}
+.ap-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.ap-who small{font-size:10.5px;color:#8f8f8f;letter-spacing:.2px}
+.ap-avatar{width:30px;height:30px;font-size:13px}
+.ap-select select{font-size:14px}
+.ap-bar-meta{font-size:12px;color:#b3b3b3}
+.ap-chips span{font-size:11px;padding:3px 8px;color:#d6d6d6}
+.ap-bar-limits{font-size:11.5px;color:#a3a3a3}
+.ap-rule-list{list-style:none;margin:11px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ap-rule-list li{display:grid;grid-template-columns:14px 1fr;column-gap:8px;row-gap:1px}
+.ap-rule-list li::before{content:"";grid-row:span 2;width:6px;height:10px;margin:3px 0 0 3px;border:solid #a9e0b2;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.ap-rule-list b{font-size:12px;font-weight:550;color:#ececec}
+.ap-rule-list span{font-size:11.5px;line-height:1.45;color:#a5a5a5}
+.ap-preview{margin-top:12px;padding:11px 12px;border:1px solid #2e2e2e;border-radius:8px;background:#121212}
+.ap-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:12px 0 0}
+.ap-limits div{border:1px solid #2f2f2f;border-radius:6px;padding:7px 8px;background:#161616;min-width:0}
+.ap-limits dt{font-size:10.5px;color:#959595}
+.ap-limits dd{margin:3px 0 0;font-size:13px;font-weight:550;color:#ededed;font-variant-numeric:tabular-nums}
+.ap-approval{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font-size:11.5px;color:#d9d9d9;border:1px solid #363636;border-radius:999px;padding:4px 10px 4px 8px;background:#171717}
+.ap-approval svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ap-approval.ap-auto{color:#f3d9a4;border-color:#5a4a2a}
+.ap-empty{flex-direction:column;align-items:stretch;gap:12px}
+.ap-empty b{font-size:14px}
+.ap-empty p{font-size:12px;color:#a8a8a8}
+.ap-quick{display:flex;flex-direction:column;gap:6px}
+.rw-root .ap-quick button{display:flex;flex-direction:column;gap:2px;text-align:left;border:1px solid #363636;border-radius:8px;padding:10px 12px;background:#161616;color:#ededed;cursor:pointer}
+.rw-root .ap-quick button:hover{border-color:#8a8a8a;background:#1c1c1c}
+.ap-quick b{font-size:12.5px;font-weight:600}
+.ap-quick small{font-size:11.5px;line-height:1.45;color:#a3a3a3}
+.ap-empty>.rw-link{align-self:flex-start;font-size:12px}
+
+/* Editor steps and the live summary on the last step. */
+.ap-steps{display:flex;gap:6px;list-style:none;margin:0;padding:12px 24px 0}
+.ap-steps li{flex:1;min-width:0}
+.rw-root .ap-steps button,.ap-steps button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 0;border:0;border-bottom:2px solid #2c2c2c;background:none;color:#8d8d8d;font-size:12px;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-steps button span{display:grid;place-items:center;flex-shrink:0;width:20px;height:20px;border-radius:50%;border:1px solid #3c3c3c;font-size:10.5px}
+.ap-steps button[aria-current=step]{color:#f2f2f2;border-bottom-color:#ededed;font-weight:600}
+.ap-steps button[aria-current=step] span{background:#ededed;color:#111;border-color:#ededed}
+.ap-steps .ap-step-done{color:#c4c4c4}
+.ap-steps .ap-step-done span{background:#203024;border-color:#3d6146;color:#a9e0b2}
+.ap-summary{border:1px solid #3a3a3a;border-radius:8px;padding:13px 14px;background:#151515}
+.ap-summary b{font-size:12.5px;font-weight:600}
+.ap-summary ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.ap-summary li{font-size:12px;line-height:1.5;color:#c4c4c4}
+.ap-footer-actions{display:flex;gap:8px;flex-shrink:0}
+.ap-group legend,.ap-field{font-size:12px}
+.ap-hint,.ap-card small,.ap-rule>small,.ap-suggest-row small,.ap-suggestions small,.ap-suggestions q{font-size:11.5px}
+.ap-card b,.ap-rule-head{font-size:13px}
+.ap-params label{font-size:11px}
+.ap-checks{font-size:12.5px}
+.ap-checks li small{font-size:11.5px}
+.ap-checks li span{font-size:10.5px}
+.ap-note{font-size:12.5px}
+.ap-note b{font-weight:600;color:#ededed}
+@media (max-width:640px){
+  .ap-steps{padding:10px 16px 0}
+  .ap-steps button{font-size:11px;gap:5px}
+  .ap-limits{grid-template-columns:repeat(3,minmax(0,1fr))}
+}

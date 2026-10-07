@@ -3,3 +3,101 @@
 .xtxc-stocks .rw-root .ra-controls .ra-primary:hover,.xtxc-stocks .rw-root .ra-results .ra-primary:hover,.xtxc-stocks .rw-root .ra-execution .ra-primary:hover{color:#111;background:#ddd}
 .ra-compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:20px}.ra-results .ra-compare button{display:grid;gap:7px;text-align:left;background:transparent;padding:13px;min-width:0;border-color:#2b2b2b}.ra-results .ra-compare button[aria-pressed=true]{background:#191919;border-color:#aaa}.ra-compare b{font-size:12px;font-weight:500}.ra-compare span,.ra-compare small{font-size:10px;color:#888;line-height:1.5}.ra-compare button[aria-pressed=true] span{color:#ddd}.ra-compare+.ra-candidate{margin-top:18px;padding-top:16px}.ra-compare+.ra-candidate .ra-curve{margin:14px 0}.ra-compare+.ra-candidate .ra-curve svg{max-height:175px}@media(max-width:600px){.ra-compare{display:flex;overflow-x:auto;scroll-snap-type:x proximity}.ra-results .ra-compare button{min-width:165px;scroll-snap-align:start}.ra-compare+.ra-candidate .ra-curve svg{max-height:145px}}
 .ra-inline-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ra-anchor,.ra-allocation-review{border-top:1px solid #292929;margin-top:20px;padding-top:18px}.ra-anchor>div:first-child{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.ra-anchor small,.ra-allocation-review small{color:#888;line-height:1.6}.ra-anchor a,.ra-trade-legs a{color:#ddd;text-underline-offset:3px;font-size:12px}.ra-anchor button{margin:0}.ra-allocation-review h4{font-size:15px;font-weight:500;margin-bottom:10px}
+
+/* Results in plain words: verdict badges, summary sentence, legend, allocation, approval box. */
+.ra-verdict{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;letter-spacing:.2px;border-radius:999px;padding:3px 9px;border:1px solid;white-space:nowrap}
+.ra-verdict::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.ra-ok{color:#a9e0b2;border-color:#2f4b33;background:#13211a}
+.ra-no{color:#f0b3a3;border-color:#5a352f;background:#241614}
+.ra-results>header .ra-verdict{margin-bottom:12px}
+.ra-results>header small{font-size:12px;color:#9a9a9a}
+.ra-results .ra-compare button{gap:8px}
+.ra-compare b{font-size:13px}
+.ra-compare .ra-verdict{justify-self:start;font-size:10.5px;padding:2px 8px}
+.ra-compare .ra-compare-num{font-size:11.5px;color:#a8a8a8}
+.ra-compare .ra-compare-num em{font-style:normal;font-size:16px;font-weight:550;color:#f0f0f0;font-variant-numeric:tabular-nums;margin-right:3px}
+.ra-compare small{font-size:11px;color:#9a9a9a}
+.ra-candidate-heading h4{font-size:17px}
+.ra-summary{font-size:13px;line-height:1.7;color:#c9c9c9;margin:12px 0 0;max-width:680px}
+.ra-summary b{color:#f2f2f2;font-weight:600;font-variant-numeric:tabular-nums}
+.ra-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:#9a9a9a;margin-bottom:8px}
+.ra-legend span{display:inline-flex;align-items:center;gap:6px}
+.ra-legend span:last-child{margin-left:auto;color:#777}
+.ra-legend i{display:inline-block;width:14px;height:2px;background:#e7e7e7}
+.ra-legend i.ra-legend-bench{background:#666}
+.ra-curve figcaption{font-size:10.5px}
+.ra-metrics dt{font-size:11.5px;color:#a3a3a3}
+.ra-metrics small{display:block;margin-top:4px;font-size:10.5px;line-height:1.45;color:#808080}
+.ra-alloc{margin:20px 0 14px}
+.ra-alloc-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px}
+.ra-alloc-bar span{background:#e3e3e3}
+.ra-alloc-bar .ra-alloc-cash{background:#3a3f3f;opacity:1}
+.ra-alloc ul{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px 18px}
+.ra-alloc li{display:flex;align-items:baseline;gap:6px;font-size:12.5px}
+.ra-alloc li b{font-weight:600}
+.ra-alloc li span{font-variant-numeric:tabular-nums;color:#d6d6d6}
+.ra-alloc li small{font-size:11px;color:#8f8f8f}
+.ra-alloc-cash-row b{color:#a9a9a9}
+.ra-alloc-note{display:block;margin-top:8px;font-size:11.5px;color:#d9c08f}
+.ra-reasons{border:1px solid #3a2c2a;border-radius:8px;padding:11px 13px;margin:12px 0;background:#181212}
+.ra-reasons b{font-size:12.5px;font-weight:600}
+.ra-reasons ul{margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.6;color:#d4b5ad}
+.ra-reasons small{display:block;margin-top:6px;font-size:11.5px;color:#a5a5a5}
+.ra-approve{display:flex;flex-direction:column;gap:12px;border:1px solid #444;border-radius:10px;padding:15px;margin:18px 0 6px;background:#161616}
+.ra-approve b{font-size:14px;font-weight:600}
+.ra-approve p{margin:5px 0 0;font-size:12.5px;line-height:1.6;color:#b9b9b9}
+.ra-results .ra-approve .ra-primary{padding:10px 16px;font-size:12.5px}
+.ra-progress{position:relative;height:3px;border-radius:2px;background:#262626;overflow:hidden;margin:14px 0 4px;max-width:420px}
+.ra-progress span{position:absolute;top:0;bottom:0;width:35%;background:#e7e7e7;border-radius:2px;animation:ra-slide 1.4s ease-in-out infinite}
+@keyframes ra-slide{0%{left:-35%}100%{left:100%}}
+@media (prefers-reduced-motion:reduce){.ra-progress span{animation:none;left:0;width:100%;opacity:.5}}
+.ra-empty-small{padding:20px 0}
+.ra-empty-small h3{font-size:17px}
+
+/* Plans: readable status, trade progress. */
+.ra-status{font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;border:1px solid #3a3a3a;color:#d6d6d6;white-space:nowrap}
+.ra-status-approved,.ra-status-partial{color:#f3d9a4;border-color:#5a4a2a;background:#1d180f}
+.ra-status-complete{color:#a9e0b2;border-color:#2f4b33;background:#13211a}
+.ra-status-revoked,.ra-status-expired{color:#a0a0a0}
+.ra-status-unknown{color:#f0b3a3;border-color:#5a352f}
+.ra-plan>p{font-size:13px;color:#cfcfcf}
+.ra-plan-progress{display:flex;align-items:center;gap:12px;margin:10px 0 4px;font-size:12px;color:#bdbdbd}
+.ra-plan-progress span{white-space:nowrap}
+.ra-plan-progress div{flex:1;height:4px;border-radius:2px;background:#262626;overflow:hidden;max-width:260px}
+.ra-plan-progress i{display:block;height:100%;background:#a9e0b2;border-radius:2px}
+.ra-candidate-heading h4 small{font-size:12px;color:#9a9a9a;text-transform:none}
+.ra-trade-legs span{font-size:13px}
+.ra-trade-legs small{font-size:11.5px;color:#a3a3a3}
+.ra-watch p{font-size:12px}
+.ra-controls button,.ra-execution button,.ra-results button{font-size:12px}
+.ra-caption{font-size:12.5px}
+
+/* BNB Chain trade steps. */
+.bsc-exec>summary{font-size:13px;font-weight:550;cursor:pointer;margin-top:14px}
+.bsc-how{margin:10px 0 4px;padding:11px 13px 11px 30px;border:1px solid #2c2c2c;border-radius:8px;background:#121212;display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.5;color:#a9a9a9}
+.bsc-how b{color:#e6e6e6;font-weight:600}
+.ra-trade-legs .bsc-leg{align-items:flex-start;padding:14px 0}
+.bsc-leg>span:first-child{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ra-trade-legs .bsc-leg-count{margin:0;font-size:10.5px;letter-spacing:.3px;text-transform:uppercase;color:#858585}
+.bsc-leg b{font-size:14px;font-weight:600}
+.bsc-track{display:flex;gap:4px;list-style:none;margin:8px 0 2px;padding:0}
+.bsc-track li{position:relative;padding-top:8px;min-width:84px;font-size:10.5px;color:#7d7d7d}
+.bsc-track li::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;border-radius:2px;background:#2a2a2a}
+.bsc-track li.done{color:#a9e0b2}
+.bsc-track li.done::before{background:#5d9a69}
+.bsc-track li.now{color:#f0f0f0;font-weight:600}
+.bsc-track li.now::before{background:#ededed}
+.bsc-action{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.ra-trade-legs .bsc-action small{margin:0;font-size:10.5px;color:#858585}
+.bsc-done{font-size:12px;font-weight:600;color:#a9e0b2}
+.bsc-leg a{font-size:12px}
+@media(max-width:600px){.bsc-track li{min-width:0;flex:1}.ra-trade-legs .bsc-leg{flex-direction:column;align-items:stretch}.bsc-action{align-items:stretch}.ra-approve .ra-inline-actions .ra-primary{width:100%}}
+.bsc-refused{display:flex;flex-direction:column;gap:3px;margin-top:8px;padding:9px 11px;border:1px solid #4a3f28;border-radius:7px;background:#1a160e;max-width:560px}
+.bsc-refused b{font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:#d9c08f}
+.bsc-refused span{font-size:12.5px;color:#ececec;font-variant-numeric:tabular-nums}
+.ra-trade-legs .bsc-refused small{margin:0;font-size:11.5px;color:#d9c08f;line-height:1.5}
+.ra-how{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:14px 0 0;padding:12px 14px;border:1px solid #2c2c2c;border-radius:8px;background:#121212;max-width:720px}
+.ra-how div{display:contents}
+.ra-how dt{font-size:11.5px;color:#959595;white-space:nowrap}
+.ra-how dd{margin:0;font-size:12.5px;line-height:1.5;color:#dcdcdc}
+@media(max-width:600px){.ra-how{grid-template-columns:1fr}.ra-how dt{margin-top:4px}}

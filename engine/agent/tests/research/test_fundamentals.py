@@ -103,3 +103,103 @@ def test_agents_keep_their_style():
     d = ap.apply(VALUE, value)
     assert {"signal": "fcf_yield", "lookback": 5, "rule": "above", "value": 0.0} in d["filters"]
     assert all(c["status"] == "pass" for c in ap.compliance(d, value))
+
+
+def _rich(shares_val=10, ni_scale=1.0):
+    """A company with income, cash flows, dividends, operating income, D&A, debt and cash."""
+    d = doc([{**r, "val": shares_val} for r in SHARES], ni=[{**r, "val": r["val"] * ni_scale} for r in doc(SHARES)["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]])
+    g = d["facts"]["us-gaap"]
+    quarters = [("2021-01-01", "2021-03-31", "2021-04-20"), ("2021-04-01", "2021-06-30", "2021-07-20"),
+                ("2021-07-01", "2021-09-30", "2021-10-20"), ("2021-10-01", "2021-12-31", "2022-02-10")]
+    for concept, v in (("PaymentsOfDividends", 2), ("OperatingIncomeLoss", 30), ("DepreciationDepletionAndAmortization", 5)):
+        g[concept] = {"units": {"USD": [q(s, e, v, f) for s, e, f in quarters]}}
+    g["LongTermDebt"] = {"units": {"USD": [{"end": "2021-12-31", "val": 50, "filed": "2022-02-10"}]}}
+    g["CashAndCashEquivalentsAtCarryingValue"] = {"units": {"USD": [{"end": "2021-12-31", "val": 20, "filed": "2022-02-10"}]}}
+    return d
+
+
+def test_dividend_and_ebitda_yields_and_the_digest_gives_the_same_panel():
+    idx = pd.bdate_range("2021-01-01", "2022-06-30")
+    close = pd.Series(10.0, index=idx)                         # market value 100
+    raw, dg = F.ticker_panel(_rich(), close), F.ticker_panel(F.digest(_rich()), close)
+    for k in raw:
+        np.testing.assert_array_equal(raw[k], dg[k])
+    day = idx.get_loc(pd.Timestamp("2022-02-11"))
+    assert raw["dividend_yield"][day] == pytest.approx(8 / 100)
+    assert raw["ebitda_yield"][day] == pytest.approx((4 * 35) / (100 + 50 - 20))
+    assert np.isnan(raw["dividend_yield"][idx.get_loc(pd.Timestamp("2022-02-10"))])   # not filed yet
+    plain = F.ticker_panel(doc(SHARES), close)                                       # reports income, pays no dividend
+    assert plain["dividend_yield"][day] == 0 and np.isnan(plain["ebitda_yield"][day])
+
+
+def test_sector_relative_values_use_every_peer_but_only_add_columns_for_researched_companies():
+    idx = pd.bdate_range("2021-01-01", "2022-06-30")
+    closes = pd.DataFrame({t: 1.0 for t in ("AAA", "P1", "P2", "BBB")}, index=idx)
+    docs = {"AAA": _rich(ni_scale=1), "P1": _rich(ni_scale=2), "P2": _rich(ni_scale=3), "BBB": _rich()}
+    sectors = {"AAA": "technology", "P1": "technology", "P2": "technology", "BBB": "energy"}
+    out = F.attach(closes[["AAA", "BBB"]], closes, docs, companies={"AAA", "BBB"}, sectors=sectors)
+    assert "P1::earnings_yield" not in out.columns and "AAA::earnings_yield_vs_sector" in out.columns
+    ey = {t: F.ticker_panel(docs[t], closes[t]) ["earnings_yield"] for t in ("AAA", "P1", "P2")}
+    day = idx.get_loc(pd.Timestamp("2022-02-11"))
+    assert out["AAA::earnings_yield_vs_sector"].iloc[day] == pytest.approx(ey["AAA"][day] - ey["P1"][day])   # median of 1x,2x,3x is 2x
+    assert out["BBB::earnings_yield_vs_sector"].isna().all()          # a sector of one: no peer median
+    assert F.sector_of("3674") == "technology" and F.sector_of("9999") is None and F.sector_of(None) is None
+    assert F.sector_of("7389", "V") == "financials" and F.sector_of("6199", "MARA") == "digital_assets"
+
+
+def test_release_stores_digests_and_rejects_tampering(tmp_path):
+    import gzip
+    import json as _json
+    tickers = {"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BRK-B", "cik_str": 2}}
+
+    def fetcher(url):
+        if url.endswith("company_tickers.json"):
+            return _json.dumps(tickers).encode()
+        if "/submissions/" in url:
+            return _json.dumps({"sic": "3674"}).encode()
+        return _json.dumps({**_rich(), "entityName": "Aaa Inc"}).encode()
+    rel = F.fetch_release(["AAA", "BRK.B", "NOPE"], tmp_path, fetcher=fetcher)
+    assert rel["missing"] == ["NOPE"] and rel["tickers"]["AAA"]["sector"] == "technology"
+    docs, meta = F.load_release(tmp_path)
+    assert docs["AAA"]["version"] == F.DIGEST_VERSION and meta["sectors"]["AAA"] == "technology"
+    assert F.derive_release(tmp_path)["release_id"] == rel["release_id"]                 # same digests from the raw facts
+    obj = tmp_path / "fundamentals" / "objects" / f"{rel['tickers']['AAA']['digest']}.digest.json.gz"
+    obj.write_bytes(gzip.compress(b'{"version": 1}'))
+    with pytest.raises(ValueError, match="hash mismatch"):
+        F.load_release(tmp_path)
+
+
+def test_volume_signals_are_trailing_and_technical():
+    from xtxc_agent.research import volume as V
+    prices = _prices()
+    vol = pd.DataFrame({c: np.where(np.arange(len(prices)) % 50 < 25, 1e6, 3e6) for c in prices.columns}, index=prices.index)
+    framed = V.attach(prices, prices, vol)
+    v = V.ticker_panel(prices["AAA"], vol["AAA"])
+    assert np.isnan(v["volume_surge"][:119]).all() and np.isfinite(v["volume_surge"][119:]).all()
+    assert v["dollar_volume"][30] == pytest.approx(np.log10((prices["AAA"] * vol["AAA"]).iloc[11:31].mean()))
+    design = {"score": [{"signal": "volume_surge", "lookback": 5, "weight": 1}, {"signal": "momentum", "lookback": 63, "weight": 1}],
+              "filters": [{"signal": "dollar_volume", "lookback": 5, "rule": "above", "value": 6}], "top_n": 2, "weighting": "equal", "risk_off": None}
+    lk = leakage_test(normalize_spec(spec(design)), framed, n_dates=5, n_backtest_dates=1, seed=4)
+    assert lk["passed"], lk["failures"]
+    assert target_weights(normalize_spec(spec(design)), framed, 400)
+    assert sl.fundamental_signals(design) == set()
+    ap.apply(design, AGENT)                                                              # technical agents may use volume
+
+
+def test_a_predecessor_registrant_keeps_the_history(tmp_path, monkeypatch):
+    import json as _json
+    old, new = _rich(), _rich()
+    new["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"] = [q("2022-01-01", "2022-03-31", 50, "2022-04-20")]
+    monkeypatch.setitem(F.PREDECESSORS, "AAA", [7])
+
+    def fetcher(url):
+        if url.endswith("company_tickers.json"):
+            return _json.dumps({"0": {"ticker": "AAA", "cik_str": 9}}).encode()
+        if "/submissions/" in url:
+            return b'{"sic": "2911"}'
+        return _json.dumps(old if "CIK0000000007" in url else new).encode()
+    rel = F.fetch_release(["AAA"], tmp_path, fetcher=fetcher)
+    assert rel["tickers"]["AAA"]["predecessors"][0]["cik"] == 7
+    docs, _ = F.load_release(tmp_path)
+    assert [r[2] for r in docs["AAA"]["flows"]["net_income"]][-1] == 140      # 20+30+40 from the old registrant + 50
+    assert F.derive_release(tmp_path)["release_id"] == rel["release_id"]

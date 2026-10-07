@@ -313,12 +313,12 @@ def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int) -> dict[st
         scores = {t: 1.0 / v for t, v in ranked}
 
     elif s["template"] == "custom":
-        from .strategy_lang import design_scores, fundamental_signals, market_tickers
+        from .strategy_lang import column_signals, design_scores, market_tickers
         market = {m: hist[m].to_numpy(dtype="float64") for m in market_tickers(p["design"]) if m in hist.columns}
-        # Point-in-time fundamentals travel as "<TICKER>::<signal>" columns of the same frame (rows <= t only).
+        # Point-in-time fundamentals and volume signals travel as "<TICKER>::<signal>" columns of the same frame (rows <= t only).
         fund = {sig: np.column_stack([hist[f"{t}::{sig}"].to_numpy(dtype="float64") if f"{t}::{sig}" in hist.columns
                                       else np.full(len(hist), np.nan) for t in tickers])
-                for sig in fundamental_signals(p["design"])}
+                for sig in column_signals(p["design"])}
         scores, exposure = design_scores(p["design"], arr, tickers, market, momentum_top_n(s["max_weight"], s["min_cash"]), fund)
         total *= exposure
 

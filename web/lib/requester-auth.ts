@@ -16,6 +16,9 @@ const CHALLENGE_TTL_SECONDS = 5 * 60;
 const STOCKLANA_STATELESS_PREFIX = "st1";
 const STOCKLANA_SIGN_IN_TITLE = "Skew Stocklana";
 const STOCKLANA_SIGN_IN_PURPOSE = "Sign in to trade on Skew.";
+// BNB Chain sign-in names the product the wallet owner sees (XTXC). The older Skew wording is still accepted so
+// clients built before the change keep working; both are sign-in only and carry no transaction authority.
+const EVM_SIGN_IN_HEADERS: readonly (readonly [string, string])[] = [["XTXC", "Sign in to XTXC research on BNB Chain."], [STOCKLANA_SIGN_IN_TITLE, STOCKLANA_SIGN_IN_PURPOSE]];
 const AUTH_SCHEMA = `
 CREATE TABLE IF NOT EXISTS requester_auth_challenges(
   challenge_id TEXT PRIMARY KEY,
@@ -155,7 +158,7 @@ export async function createStatelessEvmRequesterSession(addressValue: unknown, 
   if (typeof signatureValue !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(signatureValue)) {
     throw new RequesterAuthError("SIGNATURE_INVALID", "Wallet signature is invalid.", 422);
   }
-  assertStocklanaSignInMessage(message, address, request, EVM_SIGN_IN_CHAIN);
+  assertStocklanaSignInMessage(message, address, request, EVM_SIGN_IN_CHAIN, EVM_SIGN_IN_HEADERS);
   let valid = false;
   try { valid = await verifyMessage({ address: address as `0x${string}`, message, signature: signatureValue as `0x${string}` }); } catch { valid = false; }
   if (!valid) throw new RequesterAuthError("SIGNATURE_INVALID", "Wallet signature did not match this sign-in.", 401);
@@ -342,10 +345,11 @@ function evmPrincipalAddress(value: string): string | null {
   try { return getAddress(raw) === raw ? raw : null; } catch { return null; }
 }
 
-function assertStocklanaSignInMessage(message: string, address: string, request: Request, chainLine = "Chain: Solana"): void {
+function assertStocklanaSignInMessage(message: string, address: string, request: Request, chainLine = "Chain: Solana",
+  headers: readonly (readonly [string, string])[] = [[STOCKLANA_SIGN_IN_TITLE, STOCKLANA_SIGN_IN_PURPOSE]]): void {
   if (message.length > 2048) throw new RequesterAuthError("INVALID_REQUEST", "Wallet sign-in request is invalid.", 422);
   const lines = message.split("\n");
-  if (lines.length !== 10 || lines[0] !== STOCKLANA_SIGN_IN_TITLE || lines[1] !== STOCKLANA_SIGN_IN_PURPOSE || lines[2] !== ""
+  if (lines.length !== 10 || !headers.some(([title, purpose]) => lines[0] === title && lines[1] === purpose) || lines[2] !== ""
     || lines[3] !== `URI: ${trustedRequestOrigin(request)}` || lines[4] !== "Version: 1" || lines[5] !== chainLine
     || lines[6] !== `Address: ${address}` || !/^Nonce: [a-f0-9]{32}$/.test(lines[7] ?? "")) {
     throw new RequesterAuthError("MESSAGE_INVALID", "Wallet sign-in request is invalid.", 422);

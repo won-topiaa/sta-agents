@@ -47,12 +47,16 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     const routes=await trading.quote(client,{amount:String(amount),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:user});
     const route=(Array.isArray(routes)?routes:[]).find(r=>r.isBest)??routes?.[0];
     if(!route)throw new ExecutionCheckError('NO_ROUTE','No route for this trade now.');
-    const quote={vendor:route.vendorName,toTokenAmount:String(route.toTokenAmount),priceImpactPercent:route.priceImpactPercent,quotedAt:new Date(now()).toISOString()};
-    // Never ask a wallet to sign something that cannot succeed: gas first, then the input token.
+    const stable=sameAddress(buying?fromToken:toToken,BSC_USDT)?'USDT':'USDC';
+    const quote={vendor:route.vendorName,fromAmount:String(amount),fromSymbol:buying?stable:stock?.symbol,toTokenAmount:String(route.toTokenAmount),
+      toSymbol:buying?stock?.symbol:stable,toDecimals:buying?stock?.decimals:18,priceImpactPercent:route.priceImpactPercent,quotedAt:new Date(now()).toISOString()};
+    // Never ask a wallet to sign something that cannot succeed: gas first, then the input token. The live quote is
+    // still returned, so an unfunded wallet sees the route and price it would get.
+    const unfunded=(code,message)=>Object.assign(new ExecutionCheckError(code,message),{quote});
     const bnb=BigInt(await rpc('eth_getBalance',[user,'latest']));
-    if(bnb<minGasWei)throw new ExecutionCheckError('NO_GAS',`Add a little BNB to this wallet for network fees (at least ${Number(minGasWei)/1e18} BNB).`);
+    if(bnb<minGasWei)throw unfunded('NO_GAS',`Add a little BNB to this wallet for network fees (at least ${Number(minGasWei)/1e18} BNB).`);
     const held=BigInt(await rpc('eth_call',[{to:fromToken,data:'0x70a08231'+user.toLowerCase().slice(2).padStart(64,'0')},'latest']));
-    if(held<BigInt(amount))throw new ExecutionCheckError('NO_FUNDS',`This step needs ${(Number(BigInt(amount)/10n**12n)/1e6).toFixed(2)} of the input token; the wallet holds ${(Number(held/10n**12n)/1e6).toFixed(2)}.`);
+    if(held<BigInt(amount))throw unfunded('NO_FUNDS',`This step needs ${(Number(BigInt(amount)/10n**12n)/1e6).toFixed(2)} of the input token; the wallet holds ${(Number(held/10n**12n)/1e6).toFixed(2)}.`);
     if(await allowance(user,fromToken)<BigInt(amount)){
       // The approval names the vendor of the route it is for (required for equity tokens).
       const built=await trading.approve(client,{tokenContractAddress:fromToken,approveAmount:String(amount),vendor:route.vendorName});
@@ -104,7 +108,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     if(req.method==='POST'){const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>16000)return send(413,{error:{code:'TOO_LARGE',message:'Request too large.'}});chunks.push(c);}
       try{body=chunks.length?JSON.parse(Buffer.concat(chunks).toString()):{};}catch{return send(400,{error:{code:'BAD_JSON',message:'Invalid JSON.'}});}}
     try{send(200,{data:await handler(body,url.searchParams)});}
-    catch(e){send(e instanceof ExecutionCheckError?422:502,{error:{code:e.code??'UPSTREAM',message:String(e.message??'Gateway error').slice(0,300),httpStatus:e.httpStatus}});}
+    catch(e){send(e instanceof ExecutionCheckError?422:502,{error:{code:e.code??'UPSTREAM',message:String(e.message??'Gateway error').slice(0,300),httpStatus:e.httpStatus,...(e.quote?{quote:e.quote}:{})}});}
   });
 }
 

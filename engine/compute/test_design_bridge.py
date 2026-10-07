@@ -78,6 +78,23 @@ class BridgeTest(unittest.TestCase):
         self.assertTrue(set(w['instrument'] for w in c['weights'])<=set(body['strategy']['instruments']))
 
     @unittest.skipUnless(os.environ.get('XTXC_TEST_PRICE_ROOT'), 'requires existing verified history')
+    def test_real_history_with_sector_dividend_and_volume_rules(self):
+        body=copy.deepcopy(REQUEST)
+        body['strategy']['instruments']=['KO','PEP','PG','WMT','JPM','XOM','CVX','IBM','MCD','UNH','HD','LOW']
+        body['agent']={**AGENT,'name':'Dividend value','style':'value','preset':'dividend','rebalance':'monthly',
+                       'rules':[{'id':'pays_dividend','params':{'min':0.015}},{'id':'cheaper_than_sector'},{'id':'liquid_only','params':{'min':7}}]}
+        body['proposal']={'designs':{'candidates':[{'name':'Cheap income','idea':'Prefer cheap dividend payers on EBITDA.',
+            'design':{'score':[{'signal':'ebitda_yield','lookback':5,'weight':1},{'signal':'dividend_yield','lookback':5,'weight':0.5}],
+                      'filters':[],'top_n':4,'weighting':'equal','risk_off':None}}]}}
+        report=evaluate_designs(body,os.environ['XTXC_TEST_PRICE_ROOT'])
+        f=report['dataset']['fundamentals']
+        self.assertGreater(f['sectorPeers'],10)                                       # medians use companies outside the request
+        self.assertEqual(f['sectors']['XOM'],'energy')
+        c=report['candidates'][0]
+        self.assertTrue(all(x['status']=='pass' for x in c['agentChecks']))
+        self.assertTrue(c['leakage']['passed'])
+
+    @unittest.skipUnless(os.environ.get('XTXC_TEST_PRICE_ROOT'), 'requires existing verified history')
     def test_real_history_through_original_pr07_executor(self):
         report=evaluate_designs(REQUEST,os.environ['XTXC_TEST_PRICE_ROOT'])
         self.assertEqual(report['engineVersion'],'sta-pr07-dsl-bridge/1')
