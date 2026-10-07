@@ -21,19 +21,28 @@ Signals (per stock, as of day t)
 A release stores each company's raw ``companyfacts`` and a small *digest* derived from it (the dated series below,
 before any price is involved); research runs read only the digests.
 
-Market value = split-adjusted close x shares outstanding put on the same split basis. Yahoo closes are split-adjusted
-to today's share count, while filings report the share count of their day; share-count jumps that look like splits
-(x2..x20, or 1/2..1/20 within 6%) are applied to the earlier reports so both sides use one basis. This uses the split
-ratio, not any later financial value. Companies without US-GAAP filings (ETFs, most foreign filers) get no values.
+Market value = split-adjusted close x shares outstanding on today's split basis / ordinary shares per ADS. Yahoo
+closes are split-adjusted to today's share count, while filings report the share count of their day: each report is
+multiplied by the splits after it, taken from the price data's split events (depositary listings, and tickers without
+a price file, use share-count jumps that look like splits instead). Which count is used each day is described in
+``_shares_per_day``. This uses split ratios, never a later financial value.
+
+US filers tag us-gaap facts; foreign filers (20-F / 40-F) tag ifrs-full facts, often only for fiscal years and half
+years: twelve-month values then come from fiscal years and from first halves rolled forward. Values stay in the
+reporting currency in the digest and are converted to USD with FRED daily rates (each session at the previous
+session's rate) where they meet a USD market value; ratios inside one currency (ROE, debt to equity, growth) need no
+rate. ETFs and trusts have no company facts.
 """
 
 from __future__ import annotations
 
+import collections
 import datetime as dt
 import gzip
 import hashlib
 import json
 import math
+import os
 import time
 import warnings
 from pathlib import Path
@@ -45,18 +54,52 @@ SIGNALS = ("earnings_yield", "book_to_price", "fcf_yield", "roe", "debt_to_equit
            "dividend_yield", "ebitda_yield", "earnings_yield_vs_sector", "book_to_price_vs_sector")
 SECTOR_RELATIVE = {"earnings_yield_vs_sector": "earnings_yield", "book_to_price_vs_sector": "book_to_price"}
 MIN_SECTOR_PEERS = 3
+# Concept names from both taxonomies: US filers tag us-gaap, foreign filers (20-F / 40-F) tag ifrs-full. A name exists in
+# one taxonomy only, except ProfitLoss; the order is the priority when a company reports several.
+TAXONOMIES = ("us-gaap", "ifrs-full")
 CONCEPTS = {
-    "net_income": ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"],
-    "revenue": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "RevenuesNetOfInterestExpense"],
-    "ocf": ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
-    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PaymentsForCapitalImprovements"],
-    "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
-    "debt": ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations"],
-    "dividends": ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock", "PaymentsOfOrdinaryDividends"],
-    "operating_income": ["OperatingIncomeLoss"],
-    "dna": ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet", "Depreciation"],
-    "cash": ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
+    "net_income": ["NetIncomeLoss", "ProfitLossAttributableToOwnersOfParent", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"],
+    "revenue": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "RevenuesNetOfInterestExpense",
+                "Revenue", "RevenueFromContractsWithCustomers"],
+    "ocf": ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+            "CashFlowsFromUsedInOperatingActivities"],
+    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PaymentsForCapitalImprovements",
+              "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities", "PurchaseOfPropertyPlantAndEquipment"],
+    "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+               "EquityAttributableToOwnersOfParent", "Equity"],
+    "debt": ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations",
+             "NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings", "NoncurrentBorrowings"],
+    "dividends": ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock", "PaymentsOfOrdinaryDividends",
+                  "DividendsPaidClassifiedAsFinancingActivities", "DividendsPaidToEquityHoldersOfParentClassifiedAsFinancingActivities",
+                  "DividendsPaid"],
+    "operating_income": ["OperatingIncomeLoss", "ProfitLossFromOperatingActivities"],
+    "dna": ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet", "Depreciation",
+            "DepreciationAndAmortisationExpense", "AdjustmentsForDepreciationAndAmortisationExpense",
+            "DepreciationAmortisationAndImpairmentLossReversalOfImpairmentLossRecognisedInProfitOrLoss"],
+    "cash": ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "CashAndCashEquivalents"],
+    "eps_diluted": ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "DilutedEarningsLossPerShare",
+                    "BasicAndDilutedEarningsLossPerShare"],
 }
+# Share counts, by kind. The cover-page count is the actual count of the reporting date; multi-class issuers often
+# report only one class there (other classes are dimensional facts, absent from companyfacts), and the as-converted
+# diluted weighted count then covers every class. See _shares_per_day for how one is chosen each day.
+SHARE_SOURCES = {
+    "cover": [("dei", "EntityCommonStockSharesOutstanding")],
+    "balance": [("us-gaap", "CommonStockSharesOutstanding"), ("ifrs-full", "NumberOfSharesOutstanding")],
+    "diluted": [("us-gaap", "WeightedAverageNumberOfDilutedSharesOutstanding"), ("ifrs-full", "AdjustedWeightedAverageShares"),
+                ("ifrs-full", "WeightedAverageShares")],
+}
+# American depositary shares: ordinary shares per ADS (filings count ordinary shares, the price is per ADS). Checked
+# against the market values in Binance Web3 RWA Data (2026-10-07); a ratio is a fact about the listing, not a fit.
+ADR_SHARES = {"TSM": 5, "UMC": 5, "NTES": 5, "PDD": 4, "FUTU": 8, "BABA": 8, "BIDU": 8, "TM": 10, "JD": 2, "BZ": 2, "LI": 2,
+              "HIMX": 2}
+# Reporting currency -> USD: FRED daily noon buying rates (H.10), (series, quoted as units per USD).
+FX_SERIES = {"EUR": ("DEXUSEU", False), "GBP": ("DEXUSUK", False), "AUD": ("DEXUSAL", False), "TWD": ("DEXTAUS", True),
+             "DKK": ("DEXDNUS", True), "CAD": ("DEXCAUS", True), "JPY": ("DEXJPUS", True), "CNY": ("DEXCHUS", True),
+             "KRW": ("DEXKOUS", True), "HKD": ("DEXHKUS", True), "CHF": ("DEXSZUS", True), "SEK": ("DEXSDUS", True),
+             "NOK": ("DEXNOUS", True), "INR": ("DEXINUS", True), "SGD": ("DEXSIUS", True), "BRL": ("DEXBZUS", True),
+             "MXN": ("DEXMXUS", True), "ZAR": ("DEXSFUS", True)}
+FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={}"
 FLOWS = ("net_income", "revenue", "ocf", "capex", "dividends", "operating_income", "dna")
 UA = "XTXC STA research skewlabs@skew.deals"
 # Issuers that moved to a new SEC registrant (e.g. a holding-company reorganisation): ticker -> earlier CIKs whose
@@ -75,19 +118,31 @@ def merged(docs: list[dict]) -> dict:
     return {**docs[-1], "facts": facts}
 
 
-def _facts(doc: dict, concept: str) -> list[dict]:
-    for taxonomy in ("us-gaap",):
+def _facts(doc: dict, concept: str, unit: str = "USD") -> list[dict]:
+    for taxonomy in TAXONOMIES:
         units = doc.get("facts", {}).get(taxonomy, {}).get(concept, {}).get("units", {})
-        if "USD" in units:
-            return units["USD"]
+        if unit in units:
+            return units[unit]
     return []
+
+
+def currency_of(doc: dict) -> str:
+    """The reporting currency: the currency unit most used by the income, revenue and equity facts."""
+    counts: collections.Counter = collections.Counter()
+    for key in ("net_income", "revenue", "equity"):
+        for concept in CONCEPTS[key]:
+            for taxonomy in TAXONOMIES:
+                for unit, rows in doc.get("facts", {}).get(taxonomy, {}).get(concept, {}).get("units", {}).items():
+                    if len(unit) == 3 and unit.isalpha() and unit.isupper():
+                        counts[unit] += len(rows)
+    return counts.most_common(1)[0][0] if counts else "USD"
 
 
 def _days(a: str, b: str) -> int:
     return (dt.date.fromisoformat(b) - dt.date.fromisoformat(a)).days
 
 
-def quarterly(doc: dict, key: str) -> list[tuple[str, str, float]]:
+def quarterly(doc: dict, key: str, unit: str = "USD") -> list[tuple[str, str, float]]:
     """(available_from, period_end, 3-month value) for a flow concept; the first filing of each period wins.
 
     Filings report flows as 3-month figures and/or year-to-date figures (cash-flow statements are usually 6- and
@@ -99,7 +154,7 @@ def quarterly(doc: dict, key: str) -> list[tuple[str, str, float]]:
     for concept in CONCEPTS[key]:
         direct: dict[str, tuple[str, str, float]] = {}
         chains: dict[str, dict[str, tuple[str, int, float]]] = {}
-        for f in _facts(doc, concept):
+        for f in _facts(doc, concept, unit):
             if "start" not in f or not f.get("filed") or f.get("val") is None:
                 continue
             span = _days(f["start"], f["end"])
@@ -131,11 +186,11 @@ def quarterly(doc: dict, key: str) -> list[tuple[str, str, float]]:
     return sorted(best.values(), key=lambda q: q[1])
 
 
-def instants(doc: dict, key: str) -> list[tuple[str, str, float]]:
+def instants(doc: dict, key: str, unit: str = "USD") -> list[tuple[str, str, float]]:
     out: dict[str, tuple[str, str, float]] = {}
     for concept in CONCEPTS[key]:
         mine: dict[str, tuple[str, str, float]] = {}
-        for f in _facts(doc, concept):
+        for f in _facts(doc, concept, unit):
             if "start" in f or not f.get("filed") or f.get("val") is None:
                 continue
             cur = mine.get(f["end"])
@@ -144,6 +199,40 @@ def instants(doc: dict, key: str) -> list[tuple[str, str, float]]:
         for k, v in mine.items():
             out.setdefault(k, v)
     return sorted(out.values(), key=lambda q: q[1])
+
+
+def _period_facts(doc: dict, key: str, unit: str, lo: int, hi: int) -> dict[str, tuple[str, float, str]]:
+    """{period_end: (filed, value, start)} for facts spanning lo..hi days; first filing wins, then concept priority."""
+    best: dict[str, tuple[str, float, str]] = {}
+    for concept in CONCEPTS[key]:
+        mine: dict[str, tuple[str, float, str]] = {}
+        for f in _facts(doc, concept, unit):
+            if "start" in f and f.get("filed") and f.get("val") is not None and lo <= _days(f["start"], f["end"]) <= hi:
+                cur = mine.get(f["end"])
+                if cur is None or f["filed"] < cur[0]:
+                    mine[f["end"]] = (f["filed"], float(f["val"]), f["start"])
+        for k, v in mine.items():
+            best.setdefault(k, v)
+    return best
+
+
+def _near(table: dict, day: str, tolerance: int):
+    hits = [(abs(_days(k, day)), k) for k in table if abs(_days(k, day)) <= tolerance]
+    return table[min(hits)[1]] if hits else None
+
+
+def yearly(doc: dict, key: str, unit: str = "USD") -> list[tuple[str, str, float]]:
+    """(available_from, period_end, twelve-month value) from fiscal-year facts, and from first halves rolled forward
+    (H1 + previous FY - previous H1). Most 20-F / 40-F filers publish no quarters."""
+    fy = _period_facts(doc, key, unit, 350, 380)
+    half = _period_facts(doc, key, unit, 170, 190)
+    out = {e: (f, e, v) for e, (f, v, _start) in fy.items()}
+    for e, (f1, v1, s1) in half.items():
+        prev_fy = _near(fy, (dt.date.fromisoformat(s1) - dt.timedelta(days=1)).isoformat(), 4)   # H1 starts the fiscal year
+        prev_half = _near(half, (dt.date.fromisoformat(e) - dt.timedelta(days=365)).isoformat(), 7)
+        if prev_fy and prev_half and e not in out:
+            out[e] = (max(f1, prev_fy[0], prev_half[0]), e, v1 + prev_fy[1] - prev_half[1])
+    return sorted(out.values(), key=lambda r: r[1])
 
 
 def shares(doc: dict) -> list[tuple[str, str, float]]:
@@ -161,8 +250,13 @@ def shares(doc: dict) -> list[tuple[str, str, float]]:
         if len(found) >= 4:
             sources.append(found)
     rows = max(sources, key=lambda r: max(r)) if sources else {}
-    out = sorted(rows.values(), key=lambda r: r[1])
-    # Put every report on the latest split basis (see module docstring).
+    return _split_basis(sorted(rows.values(), key=lambda r: r[1]))
+
+
+def _split_basis(out: list) -> list[tuple[str, str, float]]:
+    """Put every report of one share series on its latest split basis, from jumps that look like splits (used when
+    the price data has no split record)."""
+    out = sorted((tuple(r) for r in out), key=lambda r: r[1])
     factor, adjusted = 1.0, []
     for i in range(len(out) - 1, -1, -1):
         filed, end, val = out[i]
@@ -208,56 +302,138 @@ def _ttm(rows: list[tuple[str, str, float]]):
     return [(max(r[0] for r in rows[max(0, i - 3):i + 1]), rows[i][1], rows[i][2]) for i in range(len(rows))], value
 
 
-DIGEST_VERSION = 1
+DIGEST_VERSION = 2
+
+
+def _evaluated(rows, value) -> list[list]:
+    out = []
+    for i in range(len(rows)):
+        v = value(rows, i)
+        if v is not None and math.isfinite(v):
+            out.append([rows[i][0], rows[i][1], float(v)])
+    return out
+
+
+def ttm_rows(doc: dict, key: str, unit: str = "USD") -> list[list]:
+    """Twelve-month values: four consecutive quarters where filed, else fiscal years and rolled half-years."""
+    rows = _evaluated(*_ttm(quarterly(doc, key, unit)))
+    ends = [r[1] for r in rows]
+    rows += [list(r) for r in yearly(doc, key, unit) if not any(abs(_days(e, r[1])) <= 20 for e in ends)]
+    return sorted(rows, key=lambda r: r[1])
+
+
+def _growth(ttm: list[list]) -> list[list]:
+    """Twelve-month value / the twelve-month value a year earlier - 1, published once both are."""
+    out = []
+    for f, e, v in ttm:
+        prev = next((r for r in ttm if abs(_days(r[1], e) - 365) <= 20), None)
+        if prev and prev[2] > 0:
+            out.append([max(f, prev[0]), e, v / prev[2] - 1])
+    return out
+
+
+def share_sources(doc: dict) -> dict[str, list[list]]:
+    facts, out = doc.get("facts", {}), {}
+    for name, concepts in SHARE_SOURCES.items():
+        found: dict[str, list] = {}
+        for taxonomy, concept in concepts:
+            mine: dict[str, list] = {}
+            for f in facts.get(taxonomy, {}).get(concept, {}).get("units", {}).get("shares", []):
+                if f.get("filed") and f.get("val") and ("start" not in f or 80 <= _days(f["start"], f["end"]) <= 380):
+                    cur = mine.get(f["end"])
+                    if cur is None or f["filed"] < cur[0]:
+                        mine[f["end"]] = [f["filed"], f["end"], float(f["val"])]
+            for k, v in mine.items():
+                found.setdefault(k, v)
+        out[name] = sorted(found.values(), key=lambda r: r[1])
+    return out
+
+
+def implied_shares(doc: dict, unit: str = "USD") -> list[list]:
+    """Diluted share count implied by a period's net income / diluted EPS (last resort when no count is tagged)."""
+    def periods(key, u):
+        for concept in CONCEPTS[key]:
+            table: dict = {}
+            for f in _facts(doc, concept, u):
+                if "start" in f and f.get("filed") and f.get("val"):
+                    k = (f["start"], f["end"])
+                    if k not in table or f["filed"] < table[k][0]:
+                        table[k] = (f["filed"], float(f["val"]))
+            if table:
+                return table
+        return {}
+    income, eps = periods("net_income", unit), periods("eps_diluted", unit + "/shares")
+    rows: dict[str, list] = {}
+    for k, (f1, n) in income.items():
+        if k in eps and eps[k][1] != 0 and n / eps[k][1] > 0:
+            filed = max(f1, eps[k][0])
+            if k[1] not in rows or filed < rows[k[1]][0]:
+                rows[k[1]] = [filed, k[1], n / eps[k][1]]
+    return sorted(rows.values(), key=lambda r: r[1])
 
 
 def digest(doc: dict) -> dict:
-    """Dated (available_from, period_end, value) series of one company, ready for ``ticker_panel``. Depends only on
-    the filings, never on prices, so it can be computed once per release."""
-    def evaluated(rows, value):
-        out = []
-        for i in range(len(rows)):
-            v = value(rows, i)
-            if v is not None and math.isfinite(v):
-                out.append([rows[i][0], rows[i][1], float(v)])
-        return out
-    flows = {k: evaluated(*_ttm(quarterly(doc, k))) for k in FLOWS}
-    rev_rows = quarterly(doc, "revenue")
-
-    def growth(series, i):
-        if i < 7:
-            return None
-        now, before = rev_rows[i - 3:i + 1], rev_rows[i - 7:i - 3]
-        if _days(before[0][1], now[-1][1]) > 660:
-            return None
-        base = sum(r[2] for r in before)
-        return sum(r[2] for r in now) / base - 1 if base > 0 else None
-    return {"version": DIGEST_VERSION, "shares": [list(r) for r in shares(doc)], "flows": flows,
-            "revenue_growth": evaluated(_ttm(rev_rows)[0], growth),
-            "instants": {k: [list(r) for r in instants(doc, k)] for k in ("equity", "debt", "cash")}}
+    """Dated (available_from, period_end, value) series of one company, in its reporting currency, ready for
+    ``ticker_panel``. Depends only on the filings, never on prices or exchange rates, so it is computed once per release."""
+    unit = currency_of(doc)
+    revenue = ttm_rows(doc, "revenue", unit)
+    return {"version": DIGEST_VERSION, "currency": unit, "shares": {**share_sources(doc), "implied": implied_shares(doc, unit)},
+            "flows": {k: revenue if k == "revenue" else ttm_rows(doc, k, unit) for k in FLOWS},
+            "revenue_growth": _growth(revenue),
+            "instants": {k: [list(r) for r in instants(doc, k, unit)] for k in ("equity", "debt", "cash")}}
 
 
-def ticker_panel(doc: dict, close: pd.Series) -> dict[str, np.ndarray]:
-    """Signals per session for one company; ``doc`` is a digest (or raw companyfacts, digested here)."""
+def _split_factor(end: str, splits: list) -> float:
+    return math.prod(r for day, r in splits if day > end)
+
+
+def _shares_per_day(sources: dict, idx: pd.DatetimeIndex, splits: list | None) -> np.ndarray:
+    """One share count per session, on today's split basis (the basis of split-adjusted closes).
+
+    ``splits`` [(date, ratio)] from the price data puts each report on today's basis, including splits after the last
+    report; without it, jumps in a series that look like splits are used. Each day: the cover-page count, else the
+    balance-sheet count; the as-converted diluted count when it is 1.4x to 20x that (other share classes) or when
+    neither is fresh; the count implied by income / EPS when nothing else is, or when only the diluted count is there
+    and it is off from the implied one by 50x or more (a filing that tagged thousands as shares)."""
+    def series(rows):
+        rows = [(f, e, v * _split_factor(e, splits)) for f, e, v in rows] if splits is not None else _split_basis(rows)
+        return _asof(rows, idx)
+    cover, balance, diluted, implied = (series(sources.get(k, [])) for k in ("cover", "balance", "diluted", "implied"))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        primary = np.where(np.isfinite(cover), cover, balance)
+        use_diluted = np.isfinite(diluted) & (~np.isfinite(primary) | ((diluted > 1.4 * primary) & (diluted < 20 * primary)))
+        sh = np.where(use_diluted, diluted, primary)
+        off = ~np.isfinite(primary) & np.isfinite(sh) & np.isfinite(implied) & ((sh > 50 * implied) | (implied > 50 * sh))
+        sh = np.where(off | ~(sh > 0), implied, sh)
+    return np.where(sh > 0, sh, np.nan)
+
+
+def ticker_panel(doc: dict, close: pd.Series, fx: list | None = None, splits: list | None = None,
+                 adr: float = 1.0) -> dict[str, np.ndarray]:
+    """Signals per session for one company; ``doc`` is a digest (or raw companyfacts, digested here).
+
+    ``fx`` [(date, date, USD per unit)] converts a non-USD reporting currency (each day at the previous session's
+    rate); without it such a company gets no money-based values. ``adr`` is ordinary shares per listed share."""
     d = doc if doc.get("version") == DIGEST_VERSION else digest(doc)
     idx = close.index
-    mcap = close.to_numpy(dtype=float) * _asof(d["shares"], idx)
+    mcap = close.to_numpy(dtype=float) * _shares_per_day(d["shares"], idx, splits) / adr
+    usd = np.ones(len(idx)) if d["currency"] == "USD" else _asof(fx, idx) if fx else np.full(len(idx), np.nan)
     flows = {k: _asof(d["flows"][k], idx) for k in FLOWS}
     equity, debt, cash = (_asof(d["instants"][k], idx) for k in ("equity", "debt", "cash"))
     dividends = np.where(np.isfinite(flows["dividends"]), flows["dividends"], np.where(np.isfinite(flows["net_income"]), 0.0, np.nan))
     with np.errstate(invalid="ignore", divide="ignore"):
         valid = mcap > 0
-        ev = mcap + np.nan_to_num(debt) - np.nan_to_num(cash)
+        ev = mcap + (np.nan_to_num(debt) - np.nan_to_num(cash)) * usd
         ebitda = flows["operating_income"] + np.nan_to_num(flows["dna"])
         return {
-            "earnings_yield": np.where(valid, flows["net_income"] / mcap, np.nan),
-            "book_to_price": np.where(valid, equity / mcap, np.nan),
-            "fcf_yield": np.where(valid, (flows["ocf"] - np.nan_to_num(flows["capex"])) / mcap, np.nan),
+            "earnings_yield": np.where(valid, flows["net_income"] * usd / mcap, np.nan),
+            "book_to_price": np.where(valid, equity * usd / mcap, np.nan),
+            "fcf_yield": np.where(valid, (flows["ocf"] - np.nan_to_num(flows["capex"])) * usd / mcap, np.nan),
             "roe": np.where(equity > 0, flows["net_income"] / equity, np.nan),
             "debt_to_equity": np.where(equity > 0, np.nan_to_num(debt) / equity, np.nan),
             "revenue_growth": _asof(d["revenue_growth"], idx),
-            "dividend_yield": np.where(valid, dividends / mcap, np.nan),
-            "ebitda_yield": np.where(valid & (ev > 0), ebitda / ev, np.nan),
+            "dividend_yield": np.where(valid, dividends * usd / mcap, np.nan),
+            "ebitda_yield": np.where(valid & (ev > 0), ebitda * usd / ev, np.nan),
         }
 
 
@@ -299,7 +475,8 @@ def sector_of(sic, ticker: str | None = None) -> str | None:
 
 
 def attach(prices: pd.DataFrame, closes: pd.DataFrame, docs: dict[str, dict], companies: set[str] | None = None,
-           sectors: dict[str, str] | None = None) -> pd.DataFrame:
+           sectors: dict[str, str] | None = None, fx: dict[str, list] | None = None,
+           splits: dict[str, list] | None = None) -> pd.DataFrame:
     """Price frame plus "<TICKER>::<signal>" columns (NaN where unknown) for ``companies``. ``closes`` are split-adjusted
     closes. ``docs`` may include sector peers that are not researched: they only feed the sector medians.
     ``companies`` limits value signals to operating companies (common stock / ADRs): a gold trust has "net income"
@@ -308,7 +485,11 @@ def attach(prices: pd.DataFrame, closes: pd.DataFrame, docs: dict[str, dict], co
     wanted = set(docs) if companies is None else companies
     for t, doc in docs.items():
         if t in closes.columns:
-            panels[t] = ticker_panel(doc, closes[t].reindex(prices.index))
+            d = doc if doc.get("version") == DIGEST_VERSION else digest(doc)
+            # An ADS can change its ratio without an ordinary-share split (and the reverse), so depositary listings put
+            # their ordinary counts on one basis from the counts themselves rather than from the ADS price splits.
+            panels[t] = ticker_panel(d, closes[t].reindex(prices.index), fx=(fx or {}).get(d["currency"]),
+                                     splits=None if t in ADR_SHARES else (splits or {}).get(t), adr=ADR_SHARES.get(t, 1.0))
     for t in wanted & set(panels):
         for s, arr in panels[t].items():
             cols[f"{t}::{s}"] = arr
@@ -339,26 +520,37 @@ def _object(root: Path, h: str, suffix: str) -> bytes:
     return raw
 
 
+def _atomic(path: Path, data: bytes) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
 def _put(root: Path, raw: bytes, suffix: str) -> str:
     h = hashlib.sha256(raw).hexdigest()
-    (root / "objects" / f"{h}{suffix}").write_bytes(gzip.compress(raw))
+    path = root / "objects" / f"{h}{suffix}"
+    if not path.exists():
+        _atomic(path, gzip.compress(raw))
     return h
 
 
-def _digest_object(root: Path, raw: bytes, earlier: list[bytes] = ()) -> str:
-    doc = merged([json.loads(r) for r in (*earlier, raw)])
-    return _put(root, json.dumps(digest(doc), sort_keys=True, separators=(",", ":")).encode(), ".digest.json.gz")
+def _digest_object(root: Path, raw: bytes, earlier: list[bytes] = ()) -> tuple[str, str]:
+    """(digest object hash, reporting currency) of one company."""
+    d = digest(merged([json.loads(r) for r in (*earlier, raw)]))
+    return _put(root, json.dumps(d, sort_keys=True, separators=(",", ":")).encode(), ".digest.json.gz"), d["currency"]
 
 
 def _write(root: Path, rel: dict) -> dict:
+    """Readers always see a whole release: the file is replaced in one step."""
     rel.pop("release_id", None)
     rel["release_id"] = hashlib.sha256(json.dumps(rel, sort_keys=True).encode()).hexdigest()
-    (root / "release.json").write_text(json.dumps(rel, indent=1, sort_keys=True))
+    _atomic(root / "release.json", json.dumps(rel, indent=1, sort_keys=True).encode())
     return rel
 
 
 def load_release(root) -> tuple[dict[str, dict], dict]:
-    """Digest per ticker from ``<root>/fundamentals/release.json`` (hash-checked). Missing release -> no fundamentals."""
+    """Digest per ticker from ``<root>/fundamentals/release.json`` (hash-checked), plus the exchange rates its
+    non-USD reporters need. Missing release -> no fundamentals."""
     root = Path(root) / "fundamentals"
     path = root / "release.json"
     if not path.exists():
@@ -367,72 +559,194 @@ def load_release(root) -> tuple[dict[str, dict], dict]:
     if rel.get("digest_version") != DIGEST_VERSION:
         raise ValueError("WAITING_DATA: Fundamentals release needs new digests (python -m xtxc_agent.research.fundamentals --derive).")
     docs = {t: json.loads(_object(root, row["digest"], ".digest.json.gz")) for t, row in rel["tickers"].items()}
+    fx = {c: json.loads(_object(root, row["object"], ".fx.json.gz")) for c, row in rel.get("fx", {}).items()}
     sectors = {t: row["sector"] for t, row in rel["tickers"].items() if row.get("sector")}
     return docs, {"available": True, "releaseId": rel["release_id"], "fetchedAt": rel["fetched_at"], "source": rel["source"],
-                  "tickers": sorted(docs), "sectors": sectors}
+                  "tickers": sorted(docs), "sectors": sectors, "fx": fx}
 
 
-def derive_release(root) -> dict:
-    """Recompute every digest and sector from the stored raw companyfacts and SIC codes (after a change to that
-    code); no network."""
-    root = Path(root) / "fundamentals"
-    rel = json.loads((root / "release.json").read_text())
-    for ticker, row in rel["tickers"].items():
-        earlier = [_object(root, e["object"], ".json.gz") for e in row.get("predecessors", [])]
-        row["digest"] = _digest_object(root, _object(root, row["object"], ".json.gz"), earlier)
-        row["sector"] = sector_of(row.get("sic"), ticker)
-    rel["digest_version"] = DIGEST_VERSION
-    return _write(root, rel)
+def split_events(root, tickers) -> dict[str, list]:
+    """[(date, ratio)] stock splits per ticker from the price data (``<root>/prices/<TICKER>.json`` events). A ticker
+    without a price file is left out, so its share counts fall back to the split heuristic."""
+    out = {}
+    for t in tickers:
+        try:
+            events = json.loads((Path(root) / "prices" / f"{t}.json").read_text()).get("events", [])
+        except (OSError, ValueError):
+            continue
+        rows = []
+        for e in events:
+            if e.get("type") == "split":
+                a, _, b = str(e.get("ratio", "")).partition(":")
+                try:
+                    r = float(a) / float(b)
+                except (ValueError, ZeroDivisionError):
+                    continue
+                if r > 0 and e.get("date"):
+                    rows.append((e["date"], r))
+        out[t] = rows
+    return out
 
 
-def fetch_release(tickers: list[str], root, fetcher=None) -> dict:
-    """Download companyfacts (and the SIC code) for tickers that have a SEC CIK and write a content-addressed release."""
+def _http(fetcher=None):
+    import urllib.error
     import urllib.request
 
     def get(url):
         if fetcher:
             return fetcher(url)
-        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.read()
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    return r.read()
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                    raise
+            except urllib.error.URLError:
+                if attempt == 2:
+                    raise
+            time.sleep(2 * (attempt + 1))
+    return get
+
+
+def fetch_fx(currencies, get) -> dict[str, list]:
+    """[(date, date, USD per unit)] per currency from FRED; a rate is used from the session after its date."""
+    out = {}
+    for c in sorted(set(currencies) - {"USD"}):
+        if c not in FX_SERIES:
+            continue
+        series, per_usd = FX_SERIES[c]
+        rows = []
+        for line in get(FRED_CSV.format(series)).decode().splitlines()[1:]:
+            day, _, value = line.partition(",")
+            try:
+                x = float(value)
+            except ValueError:
+                continue
+            if x > 0:
+                rows.append([day, day, 1 / x if per_usd else x])
+        if rows:
+            out[c] = rows
+    return out
+
+
+def _store_fx(root: Path, rel: dict, get) -> None:
+    currencies = {row.get("currency", "USD") for row in rel["tickers"].values()}
+    try:
+        rates = fetch_fx(currencies, get)
+    except Exception as exc:   # keep the previous rates; a stale rate expires after MAX_AGE_DAYS
+        rel["fx_error"] = str(exc)[:200]
+        return
+    rel.pop("fx_error", None)
+    fx = rel.setdefault("fx", {})
+    for c, rows in rates.items():
+        fx[c] = {"series": FX_SERIES[c][0], "through": rows[-1][0],
+                 "object": _put(root, json.dumps(rows, separators=(",", ":")).encode(), ".fx.json.gz")}
+
+
+def derive_release(root) -> dict:
+    """Recompute every digest, currency and sector from the stored raw companyfacts and SIC codes (after a change to
+    that code); no network."""
+    root = Path(root) / "fundamentals"
+    rel = json.loads((root / "release.json").read_text())
+    for ticker, row in rel["tickers"].items():
+        earlier = [_object(root, e["object"], ".json.gz") for e in row.get("predecessors", [])]
+        row["digest"], row["currency"] = _digest_object(root, _object(root, row["object"], ".json.gz"), earlier)
+        row["sector"] = sector_of(row.get("sic"), ticker)
+    rel["digest_version"] = DIGEST_VERSION
+    return _write(root, rel)
+
+
+def _company(t: str, cik: int, get, root: Path, submissions: dict) -> dict | None:
+    """One company's row: raw companyfacts (+ predecessors) stored, digest computed. None when SEC has no facts."""
+    try:
+        raw = get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
+    except Exception as exc:   # e.g. 404 for trusts/ETFs without XBRL company facts
+        if getattr(exc, "code", None) == 404:
+            return None
+        raise
+    time.sleep(0.15)               # SEC fair access: well under 10 requests per second
+    earlier = []
+    for old in PREDECESSORS.get(t, []):
+        earlier.append(get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{old:010d}.json"))
+        time.sleep(0.15)
+    doc = json.loads(raw)
+    sic = submissions.get("sic") or None
+    digest_hash, currency = _digest_object(root, raw, earlier)
+    return {"cik": cik, "object": _put(root, raw, ".json.gz"), "digest": digest_hash, "currency": currency,
+            **({"predecessors": [{"cik": c, "object": _put(root, r, ".json.gz")} for c, r in zip(PREDECESSORS[t], earlier)]}
+               if earlier else {}),
+            "entity": doc.get("entityName"), "us_gaap": bool(doc.get("facts", {}).get("us-gaap")),
+            "sic": sic, "sector": sector_of(sic, t), "last_filing": _last_filing(submissions)}
+
+
+def _last_filing(submissions: dict) -> str | None:
+    dates = submissions.get("filings", {}).get("recent", {}).get("filingDate", [])
+    return max(dates) if dates else None
+
+
+def _submissions(cik: int, get) -> dict:
+    out = json.loads(get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json"))
+    time.sleep(0.15)
+    return out
+
+
+def fetch_release(tickers: list[str], root, fetcher=None) -> dict:
+    """Download companyfacts (and the SIC code) for tickers that have a SEC CIK, plus exchange rates for non-USD
+    reporters, and write a content-addressed release."""
+    get = _http(fetcher)
     root = Path(root) / "fundamentals"
     (root / "objects").mkdir(parents=True, exist_ok=True)
     ciks = {v["ticker"].upper(): int(v["cik_str"]) for v in json.loads(get("https://www.sec.gov/files/company_tickers.json")).values()}
     rows, missing = {}, []
     for t in tickers:
         cik = ciks.get(t) or ciks.get(t.replace(".", "-"))
-        if not cik:
+        row = _company(t, cik, get, root, _submissions(cik, get)) if cik else None
+        if row:
+            rows[t] = row
+        else:
             missing.append(t)
+    rel = {"schema": "xtxc.fundamentals-release/v1", "source": "SEC EDGAR XBRL companyfacts + submissions (SIC); FRED H.10 rates",
+           "fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(), "digest_version": DIGEST_VERSION,
+           "tickers": rows, "missing": missing}
+    _store_fx(root, rel, get)
+    return _write(root, rel)
+
+
+def refresh_release(root, fetcher=None) -> dict:
+    """Bring a release up to date: one submissions request per company, and companyfacts only for companies with a
+    filing newer than the stored one; exchange rates are refreshed. The old release stays in place until the new one
+    is complete."""
+    get = _http(fetcher)
+    root = Path(root) / "fundamentals"
+    rel = json.loads((root / "release.json").read_text())
+    if rel.get("digest_version") != DIGEST_VERSION:
+        rel = derive_release(root.parent)
+    updated = []
+    for t, row in sorted(rel["tickers"].items()):
+        subs = _submissions(row["cik"], get)
+        if row.get("last_filing") and row["last_filing"] == _last_filing(subs):
+            sic = subs.get("sic") or row.get("sic")
+            row.update(sic=sic, sector=sector_of(sic, t))
             continue
-        try:
-            raw = get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
-        except Exception as exc:   # e.g. 404 for trusts/ETFs without XBRL company facts
-            if getattr(exc, "code", None) == 404:
-                missing.append(t)
-                continue
-            raise
-        time.sleep(0.15)          # SEC fair access: well under 10 requests per second
-        sic = json.loads(get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")).get("sic") or None
-        time.sleep(0.15)
-        earlier = []
-        for old in PREDECESSORS.get(t, []):
-            earlier.append(get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{old:010d}.json"))
-            time.sleep(0.15)
-        doc = json.loads(raw)
-        rows[t] = {"cik": cik, "object": _put(root, raw, ".json.gz"), "digest": _digest_object(root, raw, earlier),
-                   **({"predecessors": [{"cik": c, "object": _put(root, r, ".json.gz")} for c, r in zip(PREDECESSORS[t], earlier)]}
-                      if earlier else {}),
-                   "entity": doc.get("entityName"), "us_gaap": bool(doc.get("facts", {}).get("us-gaap")),
-                   "sic": sic, "sector": sector_of(sic, t)}
-    return _write(root, {"schema": "xtxc.fundamentals-release/v1", "source": "SEC EDGAR XBRL companyfacts + submissions (SIC)",
-                         "fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(), "digest_version": DIGEST_VERSION,
-                         "tickers": rows, "missing": missing})
+        fresh = _company(t, row["cik"], get, root, subs)
+        if fresh:
+            rel["tickers"][t] = fresh
+            updated.append(t)
+    rel["fetched_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    rel["updated"] = updated
+    _store_fx(root, rel, get)
+    return _write(root, rel)
 
 
 if __name__ == "__main__":  # pragma: no cover - operator entry point
     import sys
     if sys.argv[1] == "--derive":
         r = derive_release(sys.argv[2])
+    elif sys.argv[1] == "--refresh":
+        r = refresh_release(sys.argv[2])
     else:
         r = fetch_release(sys.argv[2].split(","), sys.argv[1])
-    print(json.dumps({"release": r["release_id"], "tickers": len(r["tickers"]), "missing": r["missing"]}))
+    print(json.dumps({"release": r["release_id"], "tickers": len(r["tickers"]), "missing": r["missing"],
+                      "updated": r.get("updated"), "fx": sorted(r.get("fx", {})), "fx_error": r.get("fx_error")}))

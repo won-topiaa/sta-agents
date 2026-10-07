@@ -40,7 +40,8 @@ for t in tickers:
     row = {"dollars": float(10 ** dv[-1]) if len(dv) and math.isfinite(dv[-1]) else 0.0, "fund": t in funds,
            "sector": meta["sectors"].get(t), "sic": (rel.get(t) or {}).get("sic")}
     if t in docs and not row["fund"]:
-        p = F.ticker_panel(docs[t], c)
+        p = F.attach(c.to_frame()[[]], c.to_frame(), {t: docs[t]}, {t}, None, meta["fx"], F.split_events(root, [t]))
+        p = {k.split("::")[1]: p[k].to_numpy() for k in p.columns}
         row["filings"] = bool(np.isfinite(p["earnings_yield"][-1]) and np.isfinite(p["book_to_price"][-1]))
         row["dividend"] = float(p["dividend_yield"][-1]) if np.isfinite(p["dividend_yield"][-1]) else None
     facts[t] = row

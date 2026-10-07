@@ -203,3 +203,94 @@ def test_a_predecessor_registrant_keeps_the_history(tmp_path, monkeypatch):
     docs, _ = F.load_release(tmp_path)
     assert [r[2] for r in docs["AAA"]["flows"]["net_income"]][-1] == 140      # 20+30+40 from the old registrant + 50
     assert F.derive_release(tmp_path)["release_id"] == rel["release_id"]
+
+
+def _ifrs(unit="TWD", shares_val=5_000_000_000):
+    """A 20-F filer: annual and first-half figures only, in its own currency, ordinary shares on the cover page."""
+    def fact(start, end, val, filed, form="20-F"):
+        return {"start": start, "end": end, "val": val, "filed": filed, "form": form}
+    profit = [fact("2023-01-01", "2023-12-31", 800, "2024-04-15"), fact("2024-01-01", "2024-06-30", 500, "2024-08-10", "6-K"),
+              fact("2023-01-01", "2023-06-30", 350, "2023-08-10", "6-K"), fact("2024-01-01", "2024-12-31", 1100, "2025-04-15")]
+    return {"facts": {"ifrs-full": {"ProfitLossAttributableToOwnersOfParent": {"units": {unit: profit}},
+                                    "EquityAttributableToOwnersOfParent": {"units": {unit: [{"end": "2023-12-31", "val": 4000, "filed": "2024-04-15"},
+                                                                                            {"end": "2024-12-31", "val": 5000, "filed": "2025-04-15"}]}},
+                                    "Revenue": {"units": {unit: [fact("2022-01-01", "2022-12-31", 2000, "2023-04-15"),
+                                                                 fact("2023-01-01", "2023-12-31", 2500, "2024-04-15")]}}},
+                      "dei": {"EntityCommonStockSharesOutstanding": {"units": {"shares": [
+                          {"end": e, "val": shares_val, "filed": f} for e, f in (("2023-03-01", "2023-04-15"), ("2024-03-01", "2024-04-15"),
+                                                                                 ("2025-03-01", "2025-04-15"))]}}}}}
+
+
+def test_a_foreign_filer_in_its_own_currency_with_years_and_halves():
+    doc = _ifrs()
+    d = F.digest(doc)
+    assert d["currency"] == "TWD" and [r[2] for r in d["flows"]["net_income"]] == [800, 950, 1100]   # H1 roll: 500 + 800 - 350
+    assert d["revenue_growth"] == [["2024-04-15", "2023-12-31", 0.25]]
+    idx = pd.bdate_range("2024-01-01", "2025-06-30")
+    close = pd.Series(100.0, index=idx)                                   # USD per ADS; 1 ADS = 5 ordinary shares
+    fx = [[str(day.date()), str(day.date()), 0.03] for day in pd.bdate_range("2023-12-01", "2025-06-30")]   # USD per TWD
+    p = F.ticker_panel(doc, close, fx=fx, adr=5.0)
+    mcap = 100.0 * 5_000_000_000 / 5
+    day = idx.get_loc(pd.Timestamp("2024-08-12"))
+    assert p["earnings_yield"][day] == pytest.approx(950 * 0.03 / mcap)
+    assert p["roe"][day] == pytest.approx(950 / 4000)                    # a ratio in one currency needs no rate
+    assert np.isnan(F.ticker_panel(doc, close)["earnings_yield"][day])   # no rate, no money-based value
+    assert np.isfinite(F.ticker_panel(doc, close)["roe"][day])
+
+
+def test_share_counts_pick_the_right_source_and_split_basis():
+    idx = pd.bdate_range("2024-01-01", "2025-03-31")
+    base = {"end": "2024-03-01", "filed": "2024-03-10"}
+
+    def doc_with(cover=None, diluted=None, eps=None):
+        d = _rich()
+        d["facts"]["dei"] = {"EntityCommonStockSharesOutstanding": {"units": {"shares": [{**base, "val": cover}] if cover else []}}}
+        if diluted:
+            d["facts"]["us-gaap"]["WeightedAverageNumberOfDilutedSharesOutstanding"] = {"units": {"shares": [
+                {"start": "2023-12-01", "end": "2024-02-29", "val": diluted, "filed": "2024-03-10"}]}}
+        if eps:
+            period = {"start": "2023-12-01", "end": "2024-02-29", "filed": "2024-03-10"}
+            d["facts"]["us-gaap"]["EarningsPerShareDiluted"] = {"units": {"USD/shares": [{**period, "val": eps}]}}
+            d["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"].append({**period, "val": 10.0})
+        return d
+    day = idx.get_loc(pd.Timestamp("2024-06-03"))
+    pick = lambda d, splits=None: F._shares_per_day(F.digest(d)["shares"], idx, splits)[day]
+    assert pick(doc_with(cover=100, diluted=105)) == 100                    # the cover-page count
+    assert pick(doc_with(cover=100, diluted=300)) == 300                    # other classes: as-converted diluted count
+    assert pick(doc_with(cover=100), splits=[("2024-05-01", 2.0)]) == 200    # split after the report
+    assert pick(doc_with(cover=100), splits=[("2023-05-01", 2.0)]) == 100    # split before the report: already counted
+    assert pick(doc_with(diluted=0.01, eps=1.0)) == pytest.approx(10)       # tagged in thousands: income / EPS instead
+    assert pick(doc_with(cover=100, eps=0.001)) == 100                       # a tagged count beats an odd implied one
+    assert np.isnan(pick(doc_with()))
+
+
+def test_refresh_fetches_only_companies_with_a_new_filing(tmp_path):
+    import json as _json
+    calls = []
+    filing = {"AAA": "2026-05-01", "BBB": "2026-05-02"}
+
+    def fetcher(url):
+        calls.append(url)
+        if url.endswith("company_tickers.json"):
+            return _json.dumps({"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}}).encode()
+        cik = int(url.split("CIK")[1][:10])
+        t = {1: "AAA", 2: "BBB"}[cik]
+        if "/submissions/" in url:
+            return _json.dumps({"sic": "3674", "filings": {"recent": {"filingDate": [filing[t], "2020-01-01"]}}}).encode()
+        return _json.dumps(_rich()).encode()
+    first = F.fetch_release(["AAA", "BBB"], tmp_path, fetcher=fetcher)
+    assert first["tickers"]["AAA"]["last_filing"] == "2026-05-01" and first["tickers"]["AAA"]["currency"] == "USD"
+    calls.clear()
+    filing["BBB"] = "2026-08-01"
+    again = F.refresh_release(tmp_path, fetcher=fetcher)
+    assert again["updated"] == ["BBB"]
+    assert sum("companyfacts" in u for u in calls) == 1 and sum("/submissions/" in u for u in calls) == 2
+    docs, meta = F.load_release(tmp_path)
+    assert set(docs) == {"AAA", "BBB"} and meta["fx"] == {}
+
+
+def test_fx_rates_are_per_usd_and_stored_with_the_release(tmp_path):
+    rows = F.fetch_fx({"TWD", "EUR", "USD", "XYZ"}, lambda url: b"observation_date,X\n2026-01-02,32.0\n2026-01-05,\n2026-01-06,40.0\n"
+                      if "DEXTAUS" in url else b"observation_date,X\n2026-01-02,1.10\n")
+    assert rows["TWD"] == [["2026-01-02", "2026-01-02", 1 / 32.0], ["2026-01-06", "2026-01-06", 1 / 40.0]]
+    assert rows["EUR"] == [["2026-01-02", "2026-01-02", 1.10]] and "XYZ" not in rows and "USD" not in rows

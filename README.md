@@ -87,7 +87,7 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 
 ## Company fundamentals for value agents
 
-Value signals come from **SEC EDGAR XBRL company facts** (`engine/agent/xtxc_agent/research/fundamentals.py`). Each number is usable only from the session after its filing date, so a backtest on day *t* sees what had been published by then.
+Value signals come from **SEC EDGAR XBRL company facts** (`engine/agent/xtxc_agent/research/fundamentals.py`): us-gaap facts for US filers and ifrs-full facts for foreign filers (20-F / 40-F), whose figures are converted to USD with FRED daily exchange rates. Each number is usable only from the session after its filing date, so a backtest on day *t* sees what had been published by then.
 
 | Signal | Definition |
 | --- | --- |
@@ -105,7 +105,8 @@ Value signals come from **SEC EDGAR XBRL company facts** (`engine/agent/xtxc_age
 - **Release format**: the raw `companyfacts` files are stored by content hash, with a small digest per company (dated series, no prices). A research run reads only the digests.
 
 - **Quarters**: taken from 3-month facts, or from differences of year-to-date facts. Cash-flow statements are cumulative.
-- **Market value**: split-adjusted close × shares outstanding put on the same split basis. Dividend-adjusted prices are not used for valuation.
+- **Market value**: split-adjusted close × shares outstanding on the same split basis (from the price data's split events) ÷ ordinary shares per ADS for depositary listings. Dividend-adjusted prices are not used for valuation. Checked against Binance RWA Data market values: 314 of 328 companies within 25%.
+- **Fresh data**: `engine/scripts/refresh_research_data.py` refreshes the price release and the fundamentals release (only companies with a new filing, plus exchange rates) every weekday after the US close; each release is replaced in one step and a failed refresh keeps the previous one.
 - **Backtester input**: the values are attached to the price panel as point-in-time columns, so the same "rows ≤ t" slicing and the same future-data perturbation test cover them.
 
 Trading-activity signals for every stock and fund (`engine/agent/xtxc_agent/research/volume.py`) use the same columns:
@@ -153,7 +154,7 @@ The live app is the hosted way to try it; the `web/` folder is an excerpt and do
 
 ## Limitations
 
-- **Coverage of value signals**: none for funds, foreign IFRS filers (TSM, NVO, AZN, ASML) and some multi-class issuers (V, BRK.B). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
+- **Coverage of value signals**: none for funds and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
 - **One Agentic Wallet per gateway**: it is bound to the first account that signs in. The CLI stores its session in the OS keychain.
 - **Not audited.** Small amounts only.

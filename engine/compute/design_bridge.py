@@ -53,7 +53,9 @@ def with_fundamentals(prices, snapshot, root, tickers):
     wanted = {sectors[t] for t in usable if sectors.get(t)}
     peers = sorted(t for t in docs if t not in companies and t not in NOT_COMPANIES and sectors.get(t) in wanted and t in released)
     closes, _ = load_prices(root, usable + peers, column='close', common=False)
-    prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable + peers}, set(usable), sectors)
+    prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable + peers}, set(usable), sectors,
+                                 fx=meta.get('fx'), splits=fundamentals.split_events(root, usable + peers))
+    meta = {k: v for k, v in meta.items() if k != 'fx'} | {'fxCurrencies': sorted(meta.get('fx', {}))}
     old = 'Adjusted history is not a point-in-time fundamentals dataset.'
     snapshot = {**snapshot, 'limitations': [x for x in snapshot.get('limitations', []) if x != old]}
     return prices, {**snapshot, 'fundamentals': {**meta, 'tickers': usable, 'sectors': {t: sectors[t] for t in usable if t in sectors},
