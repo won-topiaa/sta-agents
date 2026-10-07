@@ -16,7 +16,7 @@ STA Agents makes the style a saved, versioned setting that the system enforces:
 
 | | Typical chat agent | STA Agents |
 | --- | --- | --- |
-| Investing style | Re-stated in each prompt | Saved profile: **technical** (trend, dip, breakout) or **value** (deep value, quality, growth at a reasonable price), with rules and risk limits |
+| Investing style | Re-stated in each prompt | Saved profile: **technical** (trend, dip, breakout, sector rotation, chart patterns) or **value** (deep value, quality, growth at a reasonable price), with rules and risk limits |
 | Who enforces the rules | The model, hopefully | **Code** merges the agent's rules into every strategy before testing and checks them on the tested strategy |
 | Evidence before money | The model's reasoning | Deterministic backtests: training/held-out split, doubled costs, future-data perturbation, parameter stability |
 | Autonomy | On/off | Per agent: **approve every trade** (default) or **trade on its own within limits** in a Binance Agentic Wallet, where Binance enforces the daily limit |
@@ -165,7 +165,9 @@ STA (Stock Token Agent), our GWDC 2026 Challenge A entry (2nd place, [xtxctrade/
 
 New in this project:
 - user-defined agents with code-enforced rules
-- technical signals (RSI, Bollinger position, moving-average cross)
+- technical signals (RSI, Bollinger position, moving-average cross, relative strength, money flow), close-based chart
+  patterns (range breakout, volatility squeeze, higher highs and lows, double bottom) and exit rules (stop loss,
+  trailing stop)
 - point-in-time SEC fundamentals and the value style
 - BNB Smart Chain execution through the Binance Web3 API
 - Binance Agentic Wallet autonomy

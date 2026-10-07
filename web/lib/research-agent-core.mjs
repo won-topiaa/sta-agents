@@ -56,6 +56,9 @@ export function sellLegs(strategy, holdings, extra=[]) {
   return legs;
 }
 
+// Designs whose target depends on what is already held (buying-only filters, a hold buffer).
+export const holdsAware = design => Boolean(design?.filters?.some(f=>f?.entry===true)||design?.hold_buffer!=null);
+
 export class AgentStore extends ResearchStore {
   constructor(path,allowed) {
     super(path,allowed);
@@ -128,13 +131,17 @@ export class AgentStore extends ResearchStore {
   }
   transaction(fn) {if(this.transactionActive)return fn();this.db.exec('BEGIN IMMEDIATE');this.transactionActive=true;try{const v=fn();this.db.exec('COMMIT');return v;}catch(e){this.db.exec('ROLLBACK');throw e;}finally{this.transactionActive=false;}}
   event(owner,strategy,kind,document={}) {this.db.prepare('INSERT INTO agent_events(owner,strategy,kind,document,created_at) VALUES(?,?,?,?,?)').run(owner,strategy,kind,JSON.stringify(document),Date.now());}
-  enqueue(address,strategyId,goal,requestId) {
+  // `held` (optional): the stocks the account holds for this strategy, read on chain when the run starts. The engine
+  // then computes today's target the way the backtest does for holdings (buying-only filters, hold buffer).
+  enqueue(address,strategyId,goal,requestId,held=null) {
     const owner=this.owner(address),s=this.get(owner,strategyId);let g=validateGoal(goal);
+    if(held!==null&&(!Array.isArray(held)||held.length>64||held.some(t=>typeof t!=='string')))reject('Invalid holdings.');
+    const heldInstruments=held===null?null:[...new Set(held.filter(t=>s.instruments.includes(t)))].sort();
     if(typeof requestId!=='string'||!/^[a-f0-9-]{36}$/.test(requestId))reject('Invalid run request.');
     // The agent bound to the strategy is copied into the run: research uses exactly this version.
     const agent=s.agentId?this.agentProfile(owner,s.agentId):null;
     if(agent)g=clampGoal(g,agent);
-    const input={version:AGENT_VERSION,owner:address,strategy:s,goal:g,briefHash:briefHash(s),...(agent?{agent}:{})};
+    const input={version:AGENT_VERSION,owner:address,strategy:s,goal:g,briefHash:briefHash(s),...(agent?{agent}:{}),...(heldInstruments?{heldInstruments}:{})};
     return this.transaction(()=>{
       const previous=this.db.prepare('SELECT * FROM agent_runs WHERE owner=? AND request_id=?').get(owner,requestId);
       if(previous){if(hash(JSON.parse(previous.input))!==hash(input))reject('This run request was already used.',409);return previous.id;}
@@ -255,6 +262,9 @@ export class AgentStore extends ResearchStore {
       if(bsc){const min=BSC_MIN_LEG_ATOMS,small=a.legs.filter(l=>BigInt(l.inputAtoms)<min);
         if(small.length){a={legs:a.legs.filter(l=>BigInt(l.inputAtoms)>=min),cashAtoms:(BigInt(a.cashAtoms)+small.reduce((n,l)=>n+BigInt(l.inputAtoms),0n)).toString(),belowMinimum:small.map(l=>l.instrument)};}
         if(!a.legs.length)reject('Every purchase in this plan is below the 5 USDT minimum order. Raise the budget or choose fewer stocks.',409);}
+      // Buying-only (entry) filters and the hold buffer keep stocks already held. A run that did not know the account's
+      // holdings computed today's target for new money only, so a kept holding would be missing from it and sold.
+      if(bsc&&options.sells&&holdsAware(c.design)&&!Array.isArray(result.heldInstruments))reject('This result did not account for your current holdings. Run research again to rebalance.',409);
       const sells=bsc&&options.sells?sellLegs(s,options.sells).filter(l=>!c.weights.some(w=>w.instrument===l.instrument&&w.weightBps>0)):[];
       if(draftId){const draft=this.db.prepare('SELECT * FROM agent_rebalance_drafts WHERE id=? AND owner=?').get(draftId,owner);if(!draft||draft.run_id!==runId||draft.candidate_id!==candidateId||draft.report_hash!==reportHash)reject('Review the matching holdings allocation.',409);rebalance=JSON.parse(draft.document);if(rebalance.expiresAt<Date.now())reject('Refresh the holdings review before approving.',409);a=rebalance;}
       const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};

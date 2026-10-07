@@ -100,6 +100,31 @@
             }
           ]
         },
+        "pattern": {
+          "label": "Chart patterns",
+          "help": "Buys stocks breaking out of a quiet range, then lets a trailing stop decide when to sell.",
+          "rebalance": "weekly",
+          "rules": [
+            {
+              "id": "box_breakout",
+              "params": {
+                "days": 55
+              }
+            },
+            {
+              "id": "quiet_before_move",
+              "params": {
+                "max": 0.8
+              }
+            },
+            {
+              "id": "trailing_stop",
+              "params": {
+                "drop": 0.15
+              }
+            }
+          ]
+        },
         "custom": {
           "label": "Custom",
           "help": "Start from no rules and add your own.",
@@ -649,6 +674,29 @@
         "value": "$min"
       }
     },
+    "volume_confirmed": {
+      "label": "Volume confirms the buy",
+      "help": "Buys only stocks whose 20-day average volume is at least {min} above their 120-day average; checked when buying.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "min": {
+          "min": 0.1,
+          "max": 1.0,
+          "step": 0.1,
+          "default": 0.2,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "volume_surge",
+        "lookback": 5,
+        "rule": "above",
+        "value": "$min",
+        "entry": true
+      }
+    },
     "pays_dividend": {
       "label": "Pays a dividend",
       "help": "Holds only companies that paid dividends worth at least {min} of their market value over the last twelve months.",
@@ -891,6 +939,114 @@
       },
       "exit": {
         "trailing_stop": "$drop"
+      }
+    },
+    "box_breakout": {
+      "label": "Range breakout",
+      "help": "Buys only stocks that closed above every close of the previous {days} trading days (a break out of the range); a holding is not sold just because the breakout is over.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "days": {
+          "options": [
+            20,
+            55,
+            126,
+            252
+          ],
+          "default": 55,
+          "display": "days"
+        }
+      },
+      "filter": {
+        "signal": "breakout",
+        "lookback": "$days",
+        "rule": "above",
+        "value": 0,
+        "entry": true
+      }
+    },
+    "quiet_before_move": {
+      "label": "Quiet before the move",
+      "help": "Buys only stocks whose daily moves over the two weeks before the last close were at most {max} of their size over the last three months (a volatility squeeze); checked when buying.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "max": {
+          "min": 0.4,
+          "max": 0.9,
+          "step": 0.1,
+          "default": 0.7,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "squeeze",
+        "lookback": 63,
+        "rule": "below",
+        "value": "$max",
+        "entry": true
+      }
+    },
+    "higher_lows": {
+      "label": "Higher highs and lows",
+      "help": "Buys only stocks whose highs and lows kept stepping up over the last {days} trading days (more than {share} of the steps up); checked when buying.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "days": {
+          "options": [
+            40,
+            63,
+            126
+          ],
+          "default": 63,
+          "display": "days"
+        },
+        "share": {
+          "options": [
+            0.6,
+            0.75,
+            0.9
+          ],
+          "default": 0.75,
+          "display": "percent"
+        }
+      },
+      "filter": {
+        "signal": "higher_lows",
+        "lookback": "$days",
+        "rule": "above",
+        "value": "$share",
+        "entry": true
+      }
+    },
+    "double_bottom": {
+      "label": "Double bottom",
+      "help": "Buys only stocks that fell into two similar lows within the last {days} trading days and recently closed above the high between them; checked when buying.",
+      "styles": [
+        "technical"
+      ],
+      "params": {
+        "days": {
+          "options": [
+            63,
+            126,
+            252
+          ],
+          "default": 126,
+          "display": "days"
+        }
+      },
+      "filter": {
+        "signal": "double_bottom",
+        "lookback": "$days",
+        "rule": "above",
+        "value": 0,
+        "entry": true
       }
     }
   },

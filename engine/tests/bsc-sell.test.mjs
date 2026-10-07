@@ -68,6 +68,32 @@ test('rebalance: holdings the approved design no longer holds are sold first, th
   assert.throws(()=>s.assertBscPreparable(owner,plan.id,1,'1'),/previous trade/);   // the sale settles before buying
 });
 
+test('rebalance needs a run that knew the holdings when the design keeps holdings (entry filters, hold buffer)',t=>{
+  const s=setup(t),a=s.saveAgent(owner,{operation:'CREATE',requestId:randomUUID(),profile:{...presetBody('Patterns'),approval:'PER_TRADE'}});
+  const strategy=s.mutate(owner,{operation:'CREATE',requestId:randomUUID(),brief:{...brief,agentId:a.id}});
+  const result=(held,design)=>({candidates:[{id:'c1',verdict:'ELIGIBLE',weights:[{instrument:'NVDA',weightBps:2500}],design,agentChecks:a.rules.map(r=>({rule:r.id,params:r.params,status:'pass'}))}],...(held?{heldInstruments:held}:{})});
+  const run=(held,design,given=null)=>{s.enqueue(owner,strategy.id,goal,randomUUID(),given);const c=s.claim();s.finish(c,'REVIEW',result(held,design));return s.view(owner,strategy.id).runs[0];};
+  const sells={sells:[{instrument:'AMD',contract:amd,raw:tokens(1)}],wallet:'PERSONAL'};
+  const entry={filters:[{signal:'breakout',lookback:55,rule:'above',value:0,entry:true}]};
+  let r=run(null,entry);
+  assert.throws(()=>s.approve(owner,r.id,'c1',r.result.reportHash,null,sells),/did not account for your current holdings/);
+  r=run(null,{filters:[],hold_buffer:2});
+  assert.throws(()=>s.approve(owner,r.id,'c1',r.result.reportHash,null,sells),/did not account/);
+  r=run(['AMD'],entry);
+  assert.deepEqual(s.approve(owner,r.id,'c1',r.result.reportHash,null,sells).legs.map(l=>l.side+' '+l.instrument),['SELL AMD','BUY NVDA']);
+  r=run(null,{filters:[{signal:'trend',lookback:200,rule:'above',value:0}]});                     // no kept holdings: no guard
+  assert.equal(s.approve(owner,r.id,'c1',r.result.reportHash,null,sells).legs.length,2);
+});
+
+test('a run records the holdings it was given: within the strategy, unique, sorted',t=>{
+  const s=setup(t),{strategy}=strategyWith(s);
+  s.enqueue(owner,strategy.id,goal,randomUUID(),['NVDA','TSLA','AMD','NVDA']);
+  assert.deepEqual(s.claim().input.heldInstruments,['AMD','NVDA']);
+  s.enqueue(owner,strategy.id,goal,randomUUID(),[]);assert.deepEqual(s.claim().input.heldInstruments,[]);   // read, holds none
+  s.enqueue(owner,strategy.id,goal,randomUUID());assert.equal('heldInstruments' in s.claim().input,false);  // not read
+  assert.throws(()=>s.enqueue(owner,strategy.id,goal,randomUUID(),[1]),/Invalid holdings/);
+});
+
 test('exit watch: a fired stop loss proposes a sale to a per-trade owner, once per price release',async t=>{
   const s=setup(t),{strategy,run}=strategyWith(s,{exit:{stop_loss:0.1,trailing_stop:null}});
   const buy=s.approve(owner,run.id,'c1',run.result.reportHash);

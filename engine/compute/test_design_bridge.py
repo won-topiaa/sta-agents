@@ -2,7 +2,7 @@
 import copy
 import os
 import unittest
-from design_bridge import prompt, evaluate_designs
+from design_bridge import prompt, evaluate_designs, held_of
 
 REQUEST = {
     'strategy': {'objective': 'Study semiconductors without promising returns.',
@@ -93,6 +93,28 @@ class BridgeTest(unittest.TestCase):
         c=report['candidates'][0]
         self.assertTrue(all(x['status']=='pass' for x in c['agentChecks']))
         self.assertTrue(c['leakage']['passed'])
+
+    def test_held_instruments_are_checked(self):
+        tickers=REQUEST['strategy']['instruments']
+        self.assertIsNone(held_of({}, tickers))
+        self.assertEqual(held_of({'heldInstruments':['NVDA','TSLA','AMD','NVDA']}, tickers), ['AMD','NVDA'])
+        self.assertEqual(held_of({'heldInstruments':[]}, tickers), [])
+        for bad in ('NVDA', [1], ['X'*17], ['A']*65):
+            with self.assertRaises(ValueError):
+                held_of({'heldInstruments':bad}, tickers)
+
+    @unittest.skipUnless(os.environ.get('XTXC_TEST_PRICE_ROOT'), 'requires existing verified history')
+    def test_real_history_keeps_held_stocks_through_entry_filters(self):
+        body=copy.deepcopy(REQUEST)
+        body['proposal']['designs']['candidates'][0]['design']['filters']=[
+            {'signal':'breakout','lookback':55,'rule':'above','value':0,'entry':True}]
+        body['heldInstruments']=list(body['strategy']['instruments'])
+        report=evaluate_designs(body,os.environ['XTXC_TEST_PRICE_ROOT'])
+        self.assertEqual(report['heldInstruments'],sorted(body['strategy']['instruments']))
+        c=report['candidates'][0]
+        self.assertTrue(c['weights'])                                    # every stock is held: the entry filter is met
+        self.assertNotIn('NO_CURRENT_ALLOCATION',c['reasons'])
+        self.assertEqual(c['design']['filters'][0]['entry'],True)
 
     @unittest.skipUnless(os.environ.get('XTXC_TEST_PRICE_ROOT'), 'requires existing verified history')
     def test_real_history_through_original_pr07_executor(self):

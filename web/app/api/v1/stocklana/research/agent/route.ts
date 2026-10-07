@@ -80,7 +80,16 @@ export async function POST(request:Request){
       return Response.json({plan},{headers});
     }
     if(b.operation==='APPROVE_PROPOSED')return Response.json({plan:approveProposed(s,address,str(b.planId))},{headers});
-    if(b.operation==='RUN'){const runId=s.enqueue(address,str(b.strategyId),b.goal,str(b.requestId));return Response.json({runId},{headers});}
+    if(b.operation==='RUN'){
+      // BNB Chain: the stocks the account holds for this strategy, so today's target treats them as the backtest does.
+      // A failed read starts the run without them (rebalancing then asks for a fresh run).
+      let held:string[]|null=null;
+      if(bsc){const strategy=s.get(s.owner(address),str(b.strategyId)),wallet=saleWallet(s,address,strategy);
+        // A short cap: starting research never waits on an unreachable gateway (a read takes about 2 s for 40 tokens).
+        const quick=(m:'GET'|'POST',path:string,body?:unknown)=>gateway(m,path,body,8000);
+        try{held=holdingsFor(strategy,await readHoldings(quick,wallet.address,strategyContracts(strategy).map(c=>c.contract))).map(h=>h.instrument);}catch{held=null;}}
+      const runId=s.enqueue(address,str(b.strategyId),b.goal,str(b.requestId),held);return Response.json({runId},{headers});
+    }
     if(b.operation==='CANCEL'){s.cancel(address,str(b.runId));return Response.json({cancelled:true},{headers});}
     if(b.operation==='REVIEW_REBALANCE'){
       const runId=str(b.runId),candidateId=str(b.candidateId),reportHash=str(b.reportHash),{strategy,candidate}=s.reviewCandidate(address,runId,candidateId,reportHash);

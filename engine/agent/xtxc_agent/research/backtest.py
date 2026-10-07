@@ -122,8 +122,9 @@ def _resolve_period(index: pd.DatetimeIndex, period: dict) -> tuple[int, int]:
 
 
 def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snapshot_id: str | None = None,
-             holdout_days: int = HOLDOUT_DAYS) -> dict:
-    """Run the backtest on an in-memory price frame (index=date, columns=ticker, adjusted close)."""
+             holdout_days: int = HOLDOUT_DAYS, held: list[str] | None = None) -> dict:
+    """Run the backtest on an in-memory price frame (index=date, columns=ticker, adjusted close). ``held``: the
+    account's current holdings, if known; the latest target then treats them as the backtest treats its own."""
     s = normalize_spec(spec)
     cm = normalize_cost_model(cost_model)
     prices = prices.sort_index()
@@ -261,8 +262,9 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             "benchmark": compute_metrics(bench_curve[base:], exposure=1.0) if bench_curve is not None else None,
         }
 
-    # The allocation recommended for new money: the account's own holdings are not the backtest's, so no hold buffer.
-    latest = target_weights(s, prices, i1)
+    # The allocation recommended now. Without the account's holdings it is for new money (no hold buffer, every entry
+    # filter applies); with them, a holding keeps its place exactly as one would in the backtest.
+    latest = target_weights(s, prices, i1, held=frozenset(held) if held else None)
     return {
         "equity": [[d, round(float(v), 6)] for d, v in zip(dates, equity)],
         "benchmark": [[d, round(float(v), 6)] for d, v in zip(dates, bench_curve)] if bench_curve is not None else [],

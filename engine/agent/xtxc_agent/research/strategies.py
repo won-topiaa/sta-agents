@@ -249,7 +249,8 @@ def _leveraged_tickers() -> frozenset[str]:
 
 def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: frozenset | set | None = None) -> dict[str, float]:
     """Target weights at the close of row ``asof_index`` using rows <= asof_index only. ``held``: names the strategy
-    holds going into that day (custom designs with a ``hold_buffer`` keep them while they rank close enough).
+    holds going into that day (custom designs with a ``hold_buffer`` keep them while they rank close enough, and
+    entry filters do not apply to them).
 
     Returns {ticker: weight} for names with weight > 0 (sorted by ticker).  Cash = 1 - sum.
     """

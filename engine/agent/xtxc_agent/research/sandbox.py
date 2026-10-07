@@ -173,7 +173,8 @@ def worker_main(job_dir: str) -> None:
         if job["task"] == "backtests":
             out = []
             for run in p["runs"]:
-                res = backtest.simulate(run["spec"], prices, run.get("cost_model"), snapshot_id=p.get("snapshot_id"))
+                res = backtest.simulate(run["spec"], prices, run.get("cost_model"), snapshot_id=p.get("snapshot_id"),
+                                        held=run.get("held"))
                 out.append(res if run.get("full") else {k: res[k] for k in ("metrics", "holdout_metrics", "period", "spec_hash",
                                                                             "trades", "turnover", "costs_paid")})
             result = {"runs": out}

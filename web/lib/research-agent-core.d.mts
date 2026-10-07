@@ -14,6 +14,7 @@ export function budgetAtoms(value:string,decimals?:number):string;
 export type BscPrepareGuard={phase:string;preparedAt:number|null};
 export type SaleHolding={instrument:string;contract:string;raw:string};
 export type SaleLeg={side:'SELL';instrument:string;productContract:string;productSymbol:string;platform:string;inputAtoms:string;inputDecimals:number};
+export function holdsAware(design:unknown):boolean;
 export function sellLegs(strategy:ResearchStrategy,holdings:SaleHolding[]):SaleLeg[];
 export class AgentStore extends ResearchStore {
   db:DatabaseSync;
@@ -22,7 +23,7 @@ export class AgentStore extends ResearchStore {
   transaction<T>(fn:()=>T):T;
   reserveTokens(maximum:number,cap?:number):{day:string;maximum:number}|null;
   tokenResult(ticket:{day:string;maximum:number},actual?:number|null):void;
-  enqueue(address:string,strategyId:string,goal:unknown,requestId:string):string;
+  enqueue(address:string,strategyId:string,goal:unknown,requestId:string,held?:string[]|null):string;
   view(address:string,strategyId:string,after?:number):AgentReply;
   cancel(address:string,id:string):void;
   reviewCandidate(address:string,runId:string,candidateId:string,reportHash:string):{strategy:ResearchStrategy;candidate:ResearchCandidate;input:unknown};

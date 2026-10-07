@@ -30,6 +30,17 @@ Signals (per stock, from adjusted closes up to the decision day; a stock without
   ma_cross(fast, lookback)   ``fast``-day average / ``lookback``-day average - 1 (above 0: the short average is on top,
                              i.e. a "golden cross" state)
   rel_strength(lookback)     return over ``lookback`` days minus the Nasdaq-100 (QQQ) return over the same days
+Chart patterns, from closes up to the decision day (a pattern is only "there" once its last close has happened):
+  breakout(lookback)         close / highest close of the previous ``lookback`` days - 1 (above 0: a new closing high)
+  squeeze(lookback)          volatility of the 10 daily moves before the latest one / volatility over ``lookback`` days
+                             (below 1: it had gone quiet; the latest move is left out so a breakout today still counts)
+  higher_lows(lookback)      the window in four parts: share of the 6 steps where a part's low or high beat the part
+                             before it (1: lows and highs kept rising)
+  double_bottom(lookback)    a fall into a low, a rebound of at least 5% (the neckline: the highest close between the
+                             lows), a second low within 3% of the first and at least a fifth of the window later, and no
+                             close above the neckline since then before the last fifth of the window: close / neckline - 1
+                             (below 0: still forming; above 0: confirmed recently). None without such a shape, so a score
+                             term on it ranks only stocks that show one
   volume_surge               20-day average volume / 120-day average volume - 1 (trading activity picking up)
   dollar_volume              log10 of the 20-day average traded value in dollars (7 = $10M a day)
   money_flow                 20-day money flow: (dollars traded on up days - on down days) / all dollars traded, -1..1
@@ -42,7 +53,9 @@ Score   sum of weight x cross-sectional z-score of each signal (among the stocks
 Filters ``rule``: "above" / "below" a ``value`` of the raw signal, or "top_fraction" / "bottom_fraction" (keep that
         share of the stocks, by the signal; at least one stock). ``value`` is -1..1 except rsi (0..100) and zscore (-5..5).
         A model writes at most ``MAX_FILTERS``; an agent profile may add its own enforced filters on top
-        (``MAX_TOTAL_FILTERS`` in all, see ``research/agent_profile``).
+        (``MAX_TOTAL_FILTERS`` in all, see ``research/agent_profile``). ``"entry": true`` (optional) makes a filter a
+        buying condition only: a stock already held does not need to pass it again (chart patterns are events; a
+        holding then leaves by rank, the other filters or the exit rules).
 Weighting  equal; rank (best-ranked gets the most, linear in rank); inverse_volatility (1 / volatility over 63 days).
 hold_buffer  (optional, 1..4) a stock already held stays while it ranks within ``hold_buffer`` x the number of holdings
            and still passes the filters, so fewer trades are made for small changes in rank
@@ -62,7 +75,9 @@ import math
 
 import numpy as np
 
-PRICE_SIGNALS = ("momentum", "volatility", "trend", "drawdown", "sharpe", "rsi", "zscore", "ma_cross", "rel_strength")
+PATTERN_SIGNALS = ("breakout", "squeeze", "higher_lows", "double_bottom")
+PATTERN_MIN_LOOKBACK = {"breakout": 10, "squeeze": 20, "higher_lows": 20, "double_bottom": 30}
+PRICE_SIGNALS = ("momentum", "volatility", "trend", "drawdown", "sharpe", "rsi", "zscore", "ma_cross", "rel_strength") + PATTERN_SIGNALS
 # Trading activity, precomputed per day from rows <= t (research/volume.py).
 VOLUME_SIGNALS = ("volume_surge", "dollar_volume", "money_flow", "sector_momentum", "sector_money_flow")
 # Company fundamentals as of the decision day (research/fundamentals.py).
@@ -84,7 +99,7 @@ BENCHMARK = "QQQ"   # rel_strength compares with it
 # raw-value range a filter may compare against; every other signal is a fraction (-1..1)
 FILTER_VALUE = {"rsi": (0.0, 100.0), "zscore": (-5.0, 5.0), "book_to_price": (0.0, 10.0), "roe": (-2.0, 2.0),
                 "debt_to_equity": (0.0, 20.0), "revenue_growth": (-1.0, 5.0), "volume_surge": (-1.0, 5.0),
-                "dollar_volume": (3.0, 12.0)}
+                "dollar_volume": (3.0, 12.0), "squeeze": (0.0, 5.0)}
 INV_VOL_LOOKBACK = 63
 
 
@@ -130,6 +145,8 @@ def _signal(d, name) -> dict:
         if d.get("skip") not in (0, None) or "fast" in d:
             raise DesignError(f"{name}: {d['signal']} takes no skip or fast")
         return {"signal": d["signal"], "lookback": 5}
+    if out["lookback"] < PATTERN_MIN_LOOKBACK.get(d["signal"], 0):
+        raise DesignError(f"{name}.lookback must be at least {PATTERN_MIN_LOOKBACK[d['signal']]} for {d['signal']}")
     if d["signal"] == "momentum":
         out["skip"] = _int(d.get("skip", 0), f"{name}.skip", *SKIP)
     elif "skip" in d and d["skip"] not in (0, None):
@@ -160,13 +177,16 @@ def normalize_design(design) -> dict:
     if not isinstance(design.get("filters") or [], list):
         raise DesignError("filters must be a list")
     for i, f in enumerate(design.get("filters") or []):
-        _keys(f, {"signal", "lookback", "skip", "fast", "rule", "value"}, {"signal", "lookback", "rule", "value"}, f"filters[{i}]")
+        _keys(f, {"signal", "lookback", "skip", "fast", "rule", "value", "entry"}, {"signal", "lookback", "rule", "value"}, f"filters[{i}]")
         if not isinstance(f["signal"], str) or not isinstance(f["rule"], str):
             raise DesignError(f"filters[{i}]: signal and rule must be text")
         if f["rule"] not in RULES:
             raise DesignError(f"filters[{i}].rule must be one of {list(RULES)}")
         lo, hi = (0.1, 0.9) if f["rule"].endswith("fraction") else FILTER_VALUE.get(f.get("signal"), (-1.0, 1.0))
-        filters.append({**_signal(f, f"filters[{i}]"), "rule": f["rule"], "value": _num(f["value"], f"filters[{i}].value", lo, hi)})
+        if f.get("entry") not in (None, False, True):
+            raise DesignError(f"filters[{i}].entry must be true or false")
+        filters.append({**_signal(f, f"filters[{i}]"), "rule": f["rule"], "value": _num(f["value"], f"filters[{i}].value", lo, hi),
+                        **({"entry": True} if f.get("entry") is True else {})})
     if len(filters) > MAX_TOTAL_FILTERS:
         raise DesignError(f"at most {MAX_TOTAL_FILTERS} filters")
     top_n = design.get("top_n")
@@ -253,6 +273,8 @@ def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | Non
     L, k = sig["lookback"], sig.get("skip", 0)
     n = arr.shape[0]
     out = np.full(arr.shape[1], np.nan)
+    if sig["signal"] in PATTERN_SIGNALS:
+        return _pattern(sig["signal"], arr, L)
     if sig["signal"] == "rel_strength":
         if bench is None or len(bench) != n:
             return out
@@ -297,6 +319,48 @@ def _signal_values(sig: dict, arr: np.ndarray, fund: dict[str, np.ndarray] | Non
         return np.where(ok & (base > 0), last / base - 1.0, np.nan)
 
 
+def _pattern(name: str, arr: np.ndarray, L: int) -> np.ndarray:
+    """Chart patterns per column from the last rows of ``arr`` (all <= the decision day); NaN without a full window."""
+    n, cols = arr.shape
+    out = np.full(cols, np.nan)
+    if n < L + 1:
+        return out
+    win = arr[n - L - 1:]
+    ok = np.all(np.isfinite(win) & (win > 0), axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        if name == "breakout":
+            return np.where(ok, win[-1] / win[:-1].max(axis=0) - 1.0, np.nan)
+        if name == "squeeze":
+            r = np.diff(np.log(np.where(ok, win, 1.0)), axis=0)
+            long = r.std(axis=0, ddof=1)
+            return np.where(ok & (long > 0), r[-11:-1].std(axis=0, ddof=1) / long, np.nan)
+        if name == "higher_lows":
+            parts = np.array_split(win[1:], 4, axis=0)
+            lows, highs = [q.min(axis=0) for q in parts], [q.max(axis=0) for q in parts]
+            ups = sum((lows[i + 1] > lows[i]).astype(float) + (highs[i + 1] > highs[i]).astype(float) for i in range(3))
+            return np.where(ok, ups / 6.0, np.nan)
+    # double_bottom: column by column (at most a few hundred columns, at most 253 rows)
+    gap = max(5, L // 5)
+    for j in np.flatnonzero(ok):
+        w = win[:, j]
+        body = w[:-1]                                    # the closes before the decision day; it may confirm the shape
+        a = int(np.argmin(body))
+        masked = body.copy()
+        masked[max(0, a - gap):a + gap + 1] = np.inf
+        if not np.isfinite(masked).any():
+            continue
+        i, k = sorted((a, int(np.argmin(masked))))
+        low = min(w[i], w[k])
+        neck = float(w[i:k + 1].max())
+        if abs(w[i] - w[k]) / low > 0.03 or neck < low * 1.05 or w[:i + 1].max() < neck:
+            continue                                     # not two similar lows, no real rebound, or no fall into the first
+        above = np.flatnonzero(w[k + 1:] > neck)
+        if len(above) and k + 1 + above[0] < len(w) - gap:
+            continue                                     # it broke out long ago: an old pattern, not a fresh one
+        out[j] = w[-1] / neck - 1.0
+    return out
+
+
 def _z(x: np.ndarray) -> np.ndarray:
     sd = float(np.std(x))
     return np.zeros_like(x) if sd <= 0 or not math.isfinite(sd) else (x - float(np.mean(x))) / sd
@@ -314,7 +378,7 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
                   held: set[str] | frozenset | None = None) -> tuple[dict[str, float], float]:
     """(scores for cap_weights, exposure multiplier). ``hist_arr`` rows are days <= t, columns ``tickers``;
     ``fundamentals[signal]`` has the same rows and columns (point-in-time company values). ``held`` is what the
-    strategy holds going into day t (only used with ``hold_buffer``)."""
+    strategy holds going into day t (used by ``hold_buffer`` and entry filters)."""
     fund = fundamentals or {}
     d = normalize_design(design)
     bench = market.get(BENCHMARK)
@@ -338,13 +402,16 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
     # (top / bottom fraction) ranks the stocks that passed every threshold, and a stock must make every share filter.
     # "The cheapest 40%" is thus the cheapest 40% of the companies meeting the hard limits, and a share filter written
     # the other way round (bottom instead of top) cannot turn an agent's rule into its opposite.
+    # An entry filter is a buying condition: a stock already held passes it.
+    holding = np.array([tickers[j] in held for j in idx], dtype=bool) if held else np.zeros(len(idx), dtype=bool)
     fbase = {k: a[:, idx] for k, a in fund.items()}
     passed = np.ones(len(idx), dtype=bool)
     for f in d["filters"]:
         if f["rule"] in ("above", "below"):
             v = _signal_values(f, hist_arr[:, idx], fbase, bench)
-            passed &= np.isfinite(v) & ((v > f["value"]) if f["rule"] == "above" else (v < f["value"]))
-    idx = idx[passed]
+            ok = np.isfinite(v) & ((v > f["value"]) if f["rule"] == "above" else (v < f["value"]))
+            passed &= (ok | holding) if f.get("entry") else ok
+    idx, holding = idx[passed], holding[passed]
     fbase = {k: a[:, idx] for k, a in fund.items()}
     passed = np.ones(len(idx), dtype=bool)
     for f in d["filters"]:
@@ -356,7 +423,7 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
                 k = max(1, int(math.floor(len(finite) * f["value"] + 1e-9)))
                 order = finite[np.argsort(-v[finite] if f["rule"] == "top_fraction" else v[finite], kind="stable")]
                 keep[order[:k]] = True
-            passed &= keep
+            passed &= (keep | holding) if f.get("entry") else keep
     idx = idx[passed]
     if not len(idx):
         return {}, exposure
@@ -396,7 +463,7 @@ def scaled(design: dict, factor: float) -> dict:
     def periods(x):
         if x["signal"] in COLUMN_SIGNALS:
             return x
-        out = {**x, "lookback": s(x)}
+        out = {**x, "lookback": max(s(x), PATTERN_MIN_LOOKBACK.get(x["signal"], 0))}
         if "fast" in x:   # the short average stays shorter than the long one
             out["fast"] = max(2, min(out["lookback"] - 1, int(round(x["fast"] * factor))))
         return out

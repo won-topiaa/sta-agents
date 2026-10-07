@@ -19,6 +19,20 @@ from xtxc_agent.research import fundamentals, volume
 from xtxc_agent.research.strategy_lang import DesignError
 
 
+MAX_HELD = 64
+
+
+def held_of(request, tickers):
+    """The account's current holdings among the strategy's stocks (``heldInstruments``), or None when not given.
+    They only shape the current allocation; the backtest itself never sees them."""
+    held = request.get('heldInstruments')
+    if held is None:
+        return None
+    if not isinstance(held, list) or len(held) > MAX_HELD or not all(isinstance(t, str) and 0 < len(t) <= 16 for t in held):
+        raise ValueError(f'heldInstruments must be a list of at most {MAX_HELD} tickers')
+    return sorted(set(held) & set(tickers))
+
+
 def agent_of(request):
     """The user's own agent, re-validated here; its risk limits bound the goal (the web app already clamps them)."""
     agent = request.get('agent')
@@ -129,6 +143,7 @@ def evaluate_designs(request, root):
         if not merged:
             raise ValueError('None of the designs fits this agent: ' + '; '.join(r['reason'] for r in designs['rejected'])[:300])
         designs['candidates'] = merged
+    held = held_of(request, tickers)
     prices, snapshot = load_prices(root, sorted(set(tickers+['QQQ','SPY'])))
     prices, snapshot = with_fundamentals(prices, snapshot, root, tickers)
     prices = with_volume(prices, root, tickers)
@@ -155,8 +170,8 @@ def evaluate_designs(request, root):
         spec=make_spec(candidate)
         # Invoke the exact PR07 executor, not a second implementation of the DSL.
         measured = sandbox.run('backtests', {'runs':[
-            {'spec':spec, 'cost_model':{'default_bps':g['costBps']}, 'full':True},
-            {'spec':spec, 'cost_model':{'default_bps':g['costBps']*2}, 'full':True}],
+            {'spec':spec, 'cost_model':{'default_bps':g['costBps']}, 'full':True, 'held':held},
+            {'spec':spec, 'cost_model':{'default_bps':g['costBps']*2}, 'full':True, 'held':held}],
             'snapshot_id':snapshot['id']}, prices)
         res, stress = measured['result']['runs']
         sandbox.check_backtest(spec, res, set(tickers))
@@ -201,6 +216,8 @@ def evaluate_designs(request, root):
             'howItPicks':describe(candidate['design'])})
     eligible=sum(c['verdict']=='ELIGIBLE' for c in candidates)
     return {'schema':'xtxc.research-evaluation/v1','dataset':snapshot,'candidates':candidates,
+            # null: computed for new money; a list (maybe empty): computed with these holdings kept as the backtest keeps them
+            'heldInstruments':held,
             'agent':{'id':agent['id'],'revision':agent['revision'],'name':agent['name'],'style':agent['style'],
                      'rebalance':agent['rebalance'],'profileHash':agent_profile.profile_hash(agent)} if agent else None,
             'decision':'REVIEW' if eligible else 'DECLINED',

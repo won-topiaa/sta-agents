@@ -37,7 +37,9 @@ DESIGN_SYSTEM = (
     "A term is {{\"signal\": s, \"lookback\": days 5..252, \"skip\": days 0..63 (momentum only), \"fast\": days "
     "2..lookback-1 (ma_cross only, required there), \"weight\": -3..3, not 0}}. "
     "A filter is {{\"signal\": s, \"lookback\": days, \"rule\": \"above\"|\"below\"|\"top_fraction\"|\"bottom_fraction\", "
-    "\"value\": -1..1 for above/below (rsi 0..100, zscore -5..5), 0.1..0.9 for fractions}}; at most three filters. "
+    "\"value\": -1..1 for above/below (rsi 0..100, zscore -5..5), 0.1..0.9 for fractions, optional \"entry\": true (checked "
+    "only when buying; a stock already held keeps its place without it: use it for chart patterns, which are events)}}; "
+    "at most three filters. "
     "Signals s: momentum (return over lookback days ending "
     "skip days ago), volatility (daily swings), trend (price vs its average over lookback), drawdown (price vs its high "
     "over lookback, zero or negative), sharpe (return per unit of swing), rsi (relative strength 0..100 over lookback "
@@ -48,6 +50,14 @@ DESIGN_SYSTEM = (
     "rel_strength (return over lookback minus the Nasdaq-100's, above 0 beats the market), money_flow (20-day dollars "
     "traded on up days minus down days over all dollars traded, -1..1), sector_momentum (the sector's median three-month "
     "return), sector_money_flow (money moving into the whole sector, -1..1); "
+    "chart patterns from closes: breakout (close vs the highest close of the previous lookback days, minus one; above 0 "
+    "is a new closing high; lookback 10+), squeeze (swings of the 10 days before the last close vs swings over lookback; "
+    "below 1 has gone quiet, filter value 0..5; lookback 20+), higher_lows (share 0..1 of the steps up when the lookback "
+    "is cut in four parts and each part's low and high are compared with the part before; lookback 20+), double_bottom "
+    "(a fall, two lows within 3% of each other, a rebound of 5%+ between them: close vs that rebound high, minus one; "
+    "above 0 is a recent confirmed breakout; stocks without the shape have no value, so use it as a filter; lookback "
+    "30+); patterns are events, so write their filters with \"entry\": true and let exit rules or rank end a holding; a "
+    "squeeze entry filter (below 0.7) with a breakout entry filter (above 0) is the classic quiet-range breakout; "
     "write lookback 5 for volume_surge, dollar_volume, money_flow and the sector signals. Company fundamentals (as of each date, from SEC filings; write lookback 5): "
     "earnings_yield (earnings / market value, higher is cheaper), book_to_price (equity / market value, higher is cheaper), "
     "fcf_yield (free cash flow / market value), roe (earnings / equity), debt_to_equity (long-term debt / equity, lower is "
@@ -70,7 +80,7 @@ EXAMPLE = {"score": [{"signal": "momentum", "lookback": 126, "skip": 21, "weight
 
 STYLE_TEXT = {
     "technical": "a technical-analysis trader: choices come from price behaviour (trend, momentum, oversold or "
-                 "overbought levels, bands, moving averages and trading volume), not from company financials; use price and "
+                 "overbought levels, bands, moving averages, chart patterns and trading volume), not from company financials; use price and "
                  "volume signals only",
     "value": "a fundamental (value) investor: choices come from company financials (cheapness, profitability, cash "
              "generation, balance-sheet strength, growth); every design must score at least one fundamental signal, "
@@ -182,12 +192,13 @@ def describe(design: dict) -> dict:
     filters = []
     for f in d["filters"]:
         if f["rule"].endswith("fraction"):
-            filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), p=f"{f['value']:.0%}"))
+            filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), p=f"{f['value']:.0%}") + (tr("dz.filter.entry") if f.get("entry") else ""))
         else:
             v = (f"{f['value']:g}" if f["signal"] == "rsi" else f"{f['value']:+g}σ" if f["signal"] == "zscore"
                  else f"${10 ** f['value'] / 1e6:,.0f}M" if f["signal"] == "dollar_volume"
-                 else f"{f['value']:g}x" if f["signal"] == "debt_to_equity" else f"{f['value']:+.0%}")
-            filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), v=v))
+                 else f"{f['value']:g}x" if f["signal"] == "debt_to_equity"
+                 else f"{f['value']:.0%}" if f["signal"] in ("squeeze", "higher_lows") else f"{f['value']:+.0%}")
+            filters.append(tr(f"dz.filter.{f['rule']}", sig=_signal_text(f), v=v) + (tr("dz.filter.entry") if f.get("entry") else ""))
     out = {"score": i18n.join(score), "filters": i18n.join(filters) if filters else tr("word.none"),
            "pick": tr("dz.top", n=d["top_n"]) if d["top_n"] else tr("dz.top.auto"), "weighting": tr(f"dz.w.{d['weighting']}")}
     ro = d["risk_off"]
