@@ -1,4 +1,4 @@
-import {reject} from './research-agent-core.mjs';
+import {reject,briefHash} from './research-agent-core.mjs';
 import {bscProduct} from './bsc-research-universe.mjs';
 
 // Agentic Wallet execution for agents set to "trade on its own within limits".
@@ -20,15 +20,24 @@ export function bindAgentic(store,address,wallet){
   return agenticBinding(store);
 }
 export function agenticRun(store,planId){return store.db.prepare('SELECT * FROM agent_agentic_runs WHERE plan_id=?').get(planId)??null;}
+// A single purchase leg above this is refused by the gateway (its buy cap); refuse the plan up front instead.
+export const AGENTIC_MAX_BUY_ATOMS=200n*10n**18n;
+const LIVE=['APPROVED','PARTIAL'];
+// The Agentic Wallet reports the daily limit left under one of these keys, depending on the CLI version.
+export const quotaLeftOf=q=>Number(q?.quotaLeft??q?.leftQuota??q?.left??q?.remaining??NaN);
 export function startAgentic(store,address,planId,quotaLeftUsd){
-  const owner=store.owner(address),p=store.plan(address,planId),b=agenticBinding(store);
+  const owner=store.owner(address),p=store.plan(address,planId),b=agenticBinding(store),sale=Boolean(p.kind);
   if(p.chain!=='eip155:56')reject('Agentic execution is for BNB Chain plans.',409);
   if(!p.agent)reject('Only a plan designed by your agent can run on its own.',409);
-  store.assertAutonomyAllowed(address,p);   // the agent's CURRENT setting must allow trading on its own
+  // A purchase plan runs on its own only for an agent allowed to; a sale the owner asked for (CLOSE) or accepted
+  // (EXIT) is the owner's own decision and may run from the Agentic Wallet that holds the tokens.
+  if(!sale)store.assertAutonomyAllowed(address,p);
   if(!b||b.owner!==owner)reject('Connect your Agentic Wallet first.',409);
   if(p.status!=='APPROVED'||Date.now()>p.expiresAt)reject('Approve a current plan first.',409);
+  if(!sale&&briefHash(store.get(owner,p.strategyId))!==p.briefHash)reject('The strategy changed after this approval. Run and approve it again.',409);
   // Tokens to sell must be in the Agentic Wallet; holdings in the owner's own wallet are signed there, step by step.
   if(p.wallet==='PERSONAL'&&p.legs.some(l=>l.side==='SELL'))reject('These holdings are in your own wallet. Sign each sale in the trade steps.',409);
+  if(p.legs.some(l=>l.side!=='SELL'&&BigInt(l.inputAtoms)>AGENTIC_MAX_BUY_ATOMS))reject('A single purchase is capped at 200 USDT. Lower the budget or spread it over more stocks.',409);
   if(store.db.prepare('SELECT 1 FROM agent_steps WHERE plan_id=?').get(planId))reject('This plan already has trades. Use a fresh approval.',409);
   const total=usd18(p.budgetAtoms)-usd18(p.cashAtoms);
   if(!(Number(quotaLeftUsd)>=total))reject(`Your Agentic Wallet has $${Number(quotaLeftUsd).toFixed(2)} of daily limit left; this plan needs $${total.toFixed(2)}.`,409);
@@ -37,18 +46,50 @@ export function startAgentic(store,address,planId,quotaLeftUsd){
   store.event(owner,p.strategyId,'AGENTIC_STARTED',{planId,wallet:b.address});
   return agenticRun(store,planId);
 }
+// Stopping ends the plan's remaining trades (like revoking it); an order already sent still settles.
 export function stopAgentic(store,address,planId){
   const owner=store.owner(address),p=store.plan(address,planId);
-  store.db.prepare("UPDATE agent_agentic_runs SET status='STOPPED',reason='OWNER_STOPPED',updated_at=? WHERE plan_id=? AND owner=? AND status='RUNNING'").run(Date.now(),planId,owner);
-  store.event(owner,p.strategyId,'AGENTIC_STOPPED',{planId});   // an order already sent is not cancelled by this
+  store.transaction(()=>{
+    store.db.prepare("UPDATE agent_agentic_runs SET status='STOPPED',reason='OWNER_STOPPED',updated_at=? WHERE plan_id=? AND owner=? AND status IN ('RUNNING','PAUSED')").run(Date.now(),planId,owner);
+    store.db.prepare("UPDATE agent_plans SET status='REVOKED' WHERE id=? AND owner=? AND status IN ('APPROVED','PARTIAL')").run(planId,owner);
+  });
+  store.event(owner,p.strategyId,'AGENTIC_STOPPED',{planId});
   return agenticRun(store,planId);
 }
 const setStep=(store,planId,index,phase,doc)=>store.db.prepare('INSERT INTO agent_steps VALUES(?,?,?,?) ON CONFLICT(plan_id,step) DO UPDATE SET phase=excluded.phase,document=excluded.document').run(planId,index,phase,JSON.stringify(doc));
 const finishRun=(store,planId,status,reason=null)=>store.db.prepare('UPDATE agent_agentic_runs SET status=?,reason=?,updated_at=? WHERE plan_id=?').run(status,reason,Date.now(),planId);
+// The plan status follows its legs, except that a revoked or expired plan stays so.
+const planStatus=(store,planId,legs)=>{const done=store.db.prepare("SELECT count(*) n FROM agent_steps WHERE plan_id=? AND phase='RECONCILED'").get(planId).n;
+  store.db.prepare("UPDATE agent_plans SET status=? WHERE id=? AND status NOT IN ('REVOKED','EXPIRED')").run(done===legs?'COMPLETE':done?'PARTIAL':'APPROVED',planId);return done;};
+const FILLED=['FINISHED','SUCCESS','FILLED','COMPLETED'],FAILED=['FAILED','CANCELLED','CANCELED','EXPIRED','REJECTED'];
+// Claims leg `index` for submission, re-reading everything that may have changed since the tick began. Only one
+// process can claim a leg (BEGIN IMMEDIATE); a leg that already has a step (manual or agentic) is never claimed.
+function claimLeg(store,run,index,doc){
+  return store.transaction(()=>{
+    const r=store.db.prepare('SELECT status FROM agent_agentic_runs WHERE plan_id=?').get(run.plan_id);
+    if(r?.status!=='RUNNING')return 'RUN_ENDED';
+    const row=store.db.prepare('SELECT status,document FROM agent_plans WHERE id=?').get(run.plan_id),plan=JSON.parse(row.document);
+    if(!LIVE.includes(row.status))return 'PLAN_ENDED';
+    if(!plan.kind){
+      if(briefHash(store.get(run.owner,plan.strategyId))!==plan.briefHash)return 'BRIEF_CHANGED';
+      let approval=null;try{approval=plan.agent?store.agentProfile(run.owner,plan.agent.id).approval:null;}catch{/* a deleted agent ends the run */}
+      if(plan.agent&&approval!=='AUTO_WITHIN_LIMITS')return 'AGENT_SETTING_CHANGED';
+    }
+    const step=store.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=?').get(run.plan_id,index);
+    if(step&&!['READY','FAILED'].includes(step.phase))return 'STEP_EXISTS';
+    setStep(store,run.plan_id,index,'AGENTIC_SUBMITTING',doc);   // durable before the order exists
+    return null;
+  });
+}
 
-// One pass over running plans. `gw(method,path,body)` calls the BNB gateway.
-export async function agenticTick(store,gw){
-  const runs=store.db.prepare("SELECT r.*,p.document,p.strategy FROM agent_agentic_runs r JOIN agent_plans p ON p.id=r.plan_id WHERE r.status IN ('RUNNING','STOPPED') ORDER BY r.created_at LIMIT 10").all();
+// One pass over Agentic runs. `gw(method,path,body)` calls the BNB gateway.
+export async function agenticTick(store,gw,now=Date.now()){
+  // A run paused by the daily limit or a closed market tries again after an hour; Binance re-checks the limit.
+  store.db.prepare("UPDATE agent_agentic_runs SET status='RUNNING',reason=NULL,updated_at=? WHERE status='PAUSED' AND updated_at<?").run(now,now-3600000);
+  // Running runs, plus ended runs that still have an order in flight to settle.
+  const runs=store.db.prepare(`SELECT r.*,p.document,p.strategy FROM agent_agentic_runs r JOIN agent_plans p ON p.id=r.plan_id
+    WHERE r.status='RUNNING' OR EXISTS (SELECT 1 FROM agent_steps s WHERE s.plan_id=r.plan_id AND s.phase IN ('AGENTIC_SUBMITTING','AGENTIC_SUBMITTED'))
+    ORDER BY r.updated_at LIMIT 50`).all();
   for(const run of runs){
     const plan=JSON.parse(run.document),steps=store.db.prepare('SELECT step,phase,document FROM agent_steps WHERE plan_id=? ORDER BY step').all(run.plan_id);
     const open=steps.find(s=>['AGENTIC_SUBMITTING','AGENTIC_SUBMITTED'].includes(s.phase));
@@ -56,25 +97,26 @@ export async function agenticTick(store,gw){
       const doc=JSON.parse(open.document);
       if(open.phase==='AGENTIC_SUBMITTING'){setStep(store,run.plan_id,open.step,'UNKNOWN',{...doc,reason:'INTERRUPTED_BEFORE_ORDER_ID'});finishRun(store,run.plan_id,'ATTENTION','INTERRUPTED');continue;}
       let order;try{order=await gw('GET',`/v1/agentic/order?orderId=${encodeURIComponent(doc.orderId)}`);}catch{continue;}
-      const o=Array.isArray(order)?order[0]:order?.list?.[0]??order?.orders?.[0]??order;
+      const list=Array.isArray(order)?order:order?.list??order?.orders??[order];
+      const o=list.find(x=>String(x?.orderId??x?.id??'')===doc.orderId)??(list.length===1?list[0]:null);
       const status=String(o?.status??o?.orderStatus??'PENDING').toUpperCase();
-      if(status==='FINISHED'||status==='SUCCESS'||status==='FILLED'){setStep(store,run.plan_id,open.step,'RECONCILED',{...doc,order:o});}
-      else if(status==='FAILED'||status==='CANCELLED'){setStep(store,run.plan_id,open.step,'FAILED',{...doc,order:o});finishRun(store,run.plan_id,'ATTENTION','ORDER_FAILED');continue;}
+      if(FILLED.includes(status)){setStep(store,run.plan_id,open.step,'RECONCILED',{...doc,order:o});planStatus(store,run.plan_id,plan.legs.length);}
+      else if(FAILED.includes(status)){setStep(store,run.plan_id,open.step,'FAILED',{...doc,order:o});finishRun(store,run.plan_id,'ATTENTION','ORDER_FAILED');continue;}
       else continue;
     }
     if(run.status!=='RUNNING')continue;
-    const done=store.db.prepare("SELECT count(*) n FROM agent_steps WHERE plan_id=? AND phase='RECONCILED'").get(run.plan_id).n;
-    store.db.prepare('UPDATE agent_plans SET status=? WHERE id=?').run(done===plan.legs.length?'COMPLETE':done?'PARTIAL':'APPROVED',run.plan_id);
+    const done=planStatus(store,run.plan_id,plan.legs.length);
     if(done===plan.legs.length){finishRun(store,run.plan_id,'COMPLETE');store.event(run.owner,run.strategy,'AGENTIC_COMPLETE',{planId:run.plan_id});continue;}
     // A sale names the exact token held (Ondo or bStock); a purchase buys the listed product.
     const index=done,leg=plan.legs[index],sell=leg.side==='SELL',product=sell?{contract:leg.productContract,symbol:leg.productSymbol,platform:leg.platform}:bscProduct(leg.instrument);
     if(!product?.contract){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue;}
     let quota;try{quota=await gw('GET','/v1/agentic/quota');}catch{continue;}
-    const left=Number(quota?.quotaLeft??quota?.leftQuota??quota?.left??NaN);
     // A purchase leg's USD value is known; a sale's is not until it fills, so Binance's own limit check covers it.
+    const left=quotaLeftOf(quota);
     if(!sell&&Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue;}
     const doc={leg,product,mode:'AGENTIC',wallet:run.address,at:Date.now()};
-    setStep(store,run.plan_id,index,'AGENTIC_SUBMITTING',doc);   // durable before the order exists
+    const refused=claimLeg(store,run,index,doc);
+    if(refused){if(refused!=='RUN_ENDED')finishRun(store,run.plan_id,refused==='STEP_EXISTS'?'ATTENTION':'STOPPED',refused);continue;}
     try{
       const r=await gw('POST','/v1/agentic/swap',sell?{fromToken:product.contract,toToken:USDT,fromTokenQty:decimal18(leg.inputAtoms)}:{fromToken:USDT,toToken:product.contract,fromTokenQty:decimal18(leg.inputAtoms)});
       const orderId=r?.orderId??r?.id??r?.order?.orderId;

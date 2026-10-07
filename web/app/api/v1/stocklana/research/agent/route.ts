@@ -2,6 +2,7 @@ import { requireRequesterSession, RequesterAuthError } from '@/lib/requester-aut
 import { researchPrincipal, allowedStocksFor, isBscPrincipal, bscWallet } from '@/lib/research-principal';
 import { gateway, binanceTokenPrice } from '@/lib/bnb-gateway';
 import { createSellPlan, approveProposed, strategyContracts, holdingsFor, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
+import { agenticBinding } from '@/lib/research-agentic.mjs';
 import { checkSent } from '@/lib/bsc-execution.mjs';
 import { bscProduct } from '@/lib/bsc-research-universe.mjs';
 import { BSC_USDT } from '@/lib/binance-web3.mjs';
@@ -37,21 +38,22 @@ export async function POST(request:Request){
       const id=str(b.planId),i=index(b.index),user=bscWallet(address);
       if(b.operation==='BSC_PREPARE'){
         const {pending}=await gateway<{pending:string}>('GET',`/v1/nonce?address=${user}`);
-        const {plan}=s.assertBscPreparable(address,id,i,pending),leg=plan.legs[i],sell=leg.side==='SELL';
+        const {plan,guard}=s.assertBscPreparable(address,id,i,pending),leg=plan.legs[i],sell=leg.side==='SELL';
         if(plan.wallet==='AGENTIC')reject('This sale runs in your Agentic Wallet. Use its controls.',409);
         // A sale spends the exact token the plan names (validated against the listed contracts when it was made).
         const product=sell?{contract:String(leg.productContract),symbol:leg.productSymbol}:bscProduct(leg.instrument);
         if(!product?.contract)reject(`${leg.instrument} is not tradable on BNB Chain.`,409);
         const slippage=b.slippagePercent==null?'1':String(b.slippagePercent);
         const prepared=await gateway<{step:'APPROVE'|'SWAP';tx:Record<string,string>;quote?:unknown;simulation?:unknown}>('POST','/v1/prepare',sell?{user,fromToken:product.contract,toToken:BSC_USDT,amount:leg.inputAtoms,slippagePercent:slippage}:{user,fromToken:BSC_USDT,toToken:product.contract,amount:leg.inputAtoms,slippagePercent:slippage},60000);
-        return Response.json({prepared:s.bscPrepared(address,id,i,prepared.step,prepared,pending),product},{headers});
+        return Response.json({prepared:s.bscPrepared(address,id,i,prepared.step,prepared,pending,guard),product},{headers});
       }
       const step=s.bscStep(address,id,i);
       if(b.operation==='BSC_SENT'){
         const hash=str(b.txHash);if(!/^0x[0-9a-fA-F]{64}$/.test(hash))reject('Invalid transaction hash.');
         if(!step.doc.prepared)reject('No prepared transaction for this step.',409);
         const observed=await gateway<{tx:{from:string;to:string;input:string;value:string}|null;receipt:{status:string}|null}>('GET',`/v1/tx?hash=${hash}`);
-        try{checkSent(observed.tx,step.doc.prepared.tx);}catch(e){reject(e instanceof Error?e.message:'Transaction mismatch.',409);}
+        // The sent transaction must be the prepared one, and not older than the wallet's pending nonce at preparation.
+        try{checkSent(observed.tx,step.doc.prepared.tx,{minNonce:step.doc.prepared.nonce});}catch(e){reject(e instanceof Error?e.message:'Transaction mismatch.',409);}
         s.bscSent(address,id,i,hash);
         return Response.json({step:s.bscReceipt(address,id,i,observed.receipt)},{headers});
       }
@@ -59,16 +61,21 @@ export async function POST(request:Request){
       const observed=await gateway<{receipt:{status:string;blockNumber:number}|null}>('GET',`/v1/tx?hash=${step.doc.sent.hash}`);
       return Response.json({step:s.bscReceipt(address,id,i,observed.receipt)},{headers});
     }
-    // BNB Chain holdings of this strategy's stock tokens, read on chain from the wallet that would sell them.
+    // BNB Chain holdings of this strategy's stock tokens, read on chain from the owner's wallet and, when it is bound to
+    // this owner, the Agentic Wallet: a sale runs from the wallet that actually holds the tokens.
     if(b.operation==='BSC_HOLDINGS'||b.operation==='BSC_CLOSE'){
       if(!bsc)reject('Selling here is available for BNB Chain wallets.',409);
-      const strategy=s.get(s.owner(address),str(b.strategyId)),wallet=saleWallet(s,address,strategy);
-      const holdings=holdingsFor(strategy,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
+      const strategy=s.get(s.owner(address),str(b.strategyId)),contracts=strategyContracts(strategy).map(c=>c.contract);
+      const binding=agenticBinding(s),wallets:{kind:'PERSONAL'|'AGENTIC';address:string}[]=[{kind:'PERSONAL',address:bscWallet(address)},...(binding?.owner===s.owner(address)?[{kind:'AGENTIC' as const,address:binding.address}]:[])];
       if(b.operation==='BSC_HOLDINGS'){
-        const priced=await Promise.all(holdings.map(async h=>({...h,priceUsd:(await binanceTokenPrice(h.contract).catch(()=>null))?.priceUsd??null})));
-        return Response.json({wallet:wallet.kind,address:wallet.address,holdings:priced},{headers});
+        const read=await Promise.all(wallets.map(async w=>{const held=holdingsFor(strategy,await readHoldings(gateway,w.address,contracts));
+          return {wallet:w.kind,address:w.address,holdings:await Promise.all(held.map(async h=>({...h,priceUsd:(await binanceTokenPrice(h.contract).catch(()=>null))?.priceUsd??null})))};}));
+        return Response.json({wallets:read},{headers});
       }
+      const wallet=wallets.find(w=>w.kind===(b.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'));
+      if(!wallet)reject('Connect your Agentic Wallet first.',409);
       const only=Array.isArray(b.instruments)?b.instruments.map(String):null;
+      const holdings=holdingsFor(strategy,await readHoldings(gateway,wallet.address,contracts));
       const plan=createSellPlan(s,address,strategy.id,{kind:'CLOSE',wallet:wallet.kind,holdings:holdings.filter(h=>!only||only.includes(h.instrument)).map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw}))});
       return Response.json({plan},{headers});
     }

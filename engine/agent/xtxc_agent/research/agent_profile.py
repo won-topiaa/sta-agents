@@ -66,7 +66,7 @@ def _param(spec: dict, value, name: str):
 
 def normalize_rule(rule, style: str) -> dict:
     cat = catalog()["rules"]
-    if not isinstance(rule, dict) or set(rule) - {"id", "params"} or rule.get("id") not in cat:
+    if not isinstance(rule, dict) or set(rule) - {"id", "params"} or not isinstance(rule.get("id"), str) or rule["id"] not in cat:
         raise ProfileError("unknown rule")
     spec = cat[rule["id"]]
     if style not in spec["styles"]:
@@ -101,9 +101,9 @@ def normalize_profile(profile) -> dict:
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= lim["name_chars"] or _CONTROL.search(name):
         raise ProfileError("agent name")
     style = profile.get("style")
-    if style not in cat["styles"] or not cat["styles"][style]["available"]:
+    if not isinstance(style, str) or style not in cat["styles"] or not cat["styles"][style]["available"]:
         raise ProfileError("this style is not available yet")
-    if profile.get("preset") not in cat["styles"][style]["presets"]:
+    if not isinstance(profile.get("preset"), str) or profile["preset"] not in cat["styles"][style]["presets"]:
         raise ProfileError("unknown preset")
     rules = profile.get("rules")
     if not isinstance(rules, list) or len(rules) > lim["rules"]:

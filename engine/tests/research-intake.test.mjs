@@ -48,3 +48,17 @@ test('BNB Chain drafts use data-built groups: value and dividend requests get co
  assert.ok(new Set(starter.brief.instruments.map(t=>t)).size>=10);
  assert.throws(()=>resolveIntake(p,text,allowed));                      // the Solana catalog has no dividend group
 });
+test('numbers are grounded next to their unit and role; company names are whole words',()=>{
+ const base={...slots,themes:[],include:[],targetPercent:null,targetEvidence:null,horizonDays:null,horizonEvidence:null};
+ const text='Put $20 for 365 days into semiconductors';
+ assert.throws(()=>resolveIntake({...base,themes:['semiconductors'],budgetUSDC:'365',budgetEvidence:'$20 for 365'},text,allowed));   // 365 is not the money
+ assert.equal(resolveIntake({...base,themes:['semiconductors'],budgetUSDC:'20',budgetEvidence:'$20'},text,allowed).brief.budget,'20');
+ const goals='반도체로 target 30%, max loss 10%';
+ assert.throws(()=>resolveIntake({...base,themes:['semiconductors'],targetPercent:'10',targetEvidence:'max loss 10%'},goals,allowed));
+ assert.throws(()=>resolveIntake({...base,themes:['semiconductors'],maxLossPercent:'30',maxLossEvidence:'target 30%'},goals,allowed));   // a looser loss limit
+ const ok=resolveIntake({...base,themes:['semiconductors'],targetPercent:'30',targetEvidence:'target 30%',maxLossPercent:'10',maxLossEvidence:'max loss 10%'},goals,allowed);
+ assert.equal(ok.goal.targetReturnBps,3000);assert.equal(ok.goal.maxDrawdownBps,1000);
+ const ai=resolveIntake({...base,themes:[],include:['INTC']},'artificial intelligence names, not chips',['INTC','NVDA']);
+ assert.ok(!ai.brief.instruments.includes('INTC'));                                                   // "intel" inside "intelligence"
+ assert.ok(resolveIntake({...base,themes:[],include:['INTC']},'compare Intel please',['INTC','NVDA']).brief.instruments.includes('INTC'));
+});

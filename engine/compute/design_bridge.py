@@ -52,8 +52,14 @@ def with_fundamentals(prices, snapshot, root, tickers):
     sectors = meta.get('sectors', {})
     released = json.loads((pathlib.Path(root) / 'prices' / 'quant_release.json').read_text())['tickers']
     wanted = {sectors[t] for t in usable if sectors.get(t)}
-    peers = sorted(t for t in docs if t not in companies and t not in NOT_COMPANIES and sectors.get(t) in wanted and t in released)
-    closes, _ = load_prices(root, usable + peers, column='close', common=False)
+    # Peers only feed sector medians: one without a usable verified history is left out instead of failing the run.
+    ok = lambda r: bool(r.get('object')) and (r.get('verification', {}).get('ok') is True or str(r.get('provenance', '')).startswith('reference:'))
+    peers = sorted(t for t in docs if t not in companies and t not in NOT_COMPANIES and sectors.get(t) in wanted and ok(released.get(t, {})))
+    try:
+        closes, _ = load_prices(root, usable + peers, column='close', common=False)
+    except ValueError:
+        peers = []
+        closes, _ = load_prices(root, usable, column='close', common=False)
     prices = fundamentals.attach(prices, closes, {t: docs[t] for t in usable + peers}, set(usable), sectors,
                                  fx=meta.get('fx'), splits=fundamentals.split_events(root, usable + peers))
     # Sector strength and sector money flow, over the same sector peers (technical signals; rows <= t only).

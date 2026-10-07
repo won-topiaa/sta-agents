@@ -11,6 +11,7 @@ export function reject(message:string,status?:number):never;
 export function validateGoal(value:unknown):ResearchGoal;
 export function briefHash(value:unknown):string;
 export function budgetAtoms(value:string,decimals?:number):string;
+export type BscPrepareGuard={phase:string;preparedAt:number|null};
 export type SaleHolding={instrument:string;contract:string;raw:string};
 export type SaleLeg={side:'SELL';instrument:string;productContract:string;productSymbol:string;platform:string;inputAtoms:string;inputDecimals:number};
 export function sellLegs(strategy:ResearchStrategy,holdings:SaleHolding[]):SaleLeg[];
@@ -45,8 +46,8 @@ export class AgentStore extends ResearchStore {
   assertAgentCurrent(owner:string,agent:{id:string;revision:number}|null|undefined):AgentProfile|null;
   assertAutonomyAllowed(address:string,plan:AgentPlan):void;
   bscStep(address:string,id:string,index:number):{plan:AgentPlan;phase:string;doc:BscStepDoc};
-  assertBscPreparable(address:string,id:string,index:number,nonceNow:string):{plan:AgentPlan;doc:BscStepDoc};
-  bscPrepared(address:string,id:string,index:number,kind:'APPROVE'|'SWAP',prepared:{tx:Record<string,string>;quote?:unknown;simulation?:unknown},nonce:string):BscPrepared;
+  assertBscPreparable(address:string,id:string,index:number,nonceNow:string):{plan:AgentPlan;doc:BscStepDoc;guard:BscPrepareGuard};
+  bscPrepared(address:string,id:string,index:number,kind:'APPROVE'|'SWAP',prepared:{tx:Record<string,string>;quote?:unknown;simulation?:unknown},nonce:string,guard?:BscPrepareGuard|null):BscPrepared;
   bscSent(address:string,id:string,index:number,hash:string):BscStepDoc;
   bscReceipt(address:string,id:string,index:number,receipt:{status:string;blockNumber?:number}|null):BscStepDoc;
 }

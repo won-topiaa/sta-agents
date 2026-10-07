@@ -42,12 +42,18 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  */
 export function web3Client({apiKey,secretKey,fetcher=fetch,now=()=>new Date(),observe=()=>{},retries=2,minIntervalMs=220}){
   if(!apiKey||!secretKey)throw new Web3ApiError('NO_KEY','Binance Web3 API key is not configured.');
-  const lastCall=new Map();   // documented default: 5 requests/second per endpoint
-  async function call(method,path,{params,body}={}){
+  const lastCall=new Map(),queue=new Map();   // documented default: 5 requests/second per endpoint
+  // Concurrent calls to one endpoint take turns, so the spacing holds under bursts too.
+  function slot(path){
+    const turn=(queue.get(path)??Promise.resolve()).then(async()=>{const wait=(lastCall.get(path)??0)+minIntervalMs-Date.now();if(wait>0)await sleep(wait);lastCall.set(path,Date.now());});
+    queue.set(path,turn.catch(()=>{}));
+    return turn;
+  }
+  async function call(method,path,{params,body,retry=true}={}){
     if(!path.startsWith('/api/'))throw new Web3ApiError('BAD_PATH','Unsupported Binance Web3 API path.');
     const requestPath=BUILD_PREFIX+path+query(params),payload=body===undefined?'':JSON.stringify(body);
     for(let attempt=0;;attempt++){
-      const wait=(lastCall.get(path)??0)+minIntervalMs-Date.now();if(wait>0)await sleep(wait);lastCall.set(path,Date.now());
+      await slot(path);
       const timestamp=now().toISOString(),started=Date.now();
       let status=0,code='NETWORK',msg='';
       try{
@@ -61,12 +67,13 @@ export function web3Client({apiKey,secretKey,fetcher=fetch,now=()=>new Date(),ob
       }catch(e){
         const err=e instanceof Web3ApiError?e:new Web3ApiError('NETWORK',e?.name==='TimeoutError'?'Binance Web3 API timed out.':'Binance Web3 API is unreachable.',status);
         code=err.code;msg=err.message;
-        if(!err.retryable||attempt>=retries)throw err;
+        if(!retry||!err.retryable||attempt>=retries)throw err;
         await sleep(500*2**attempt);
       }finally{observe({at:new Date(started).toISOString(),method,path,status,code,msg:code==='0'?'':msg.slice(0,300),ms:Date.now()-started});}
     }
   }
-  return {get:(path,params)=>call('GET',path,{params}),post:(path,body)=>call('POST',path,{body})};
+  // post(..., {once:true}) never retries: for requests that are not safe to repeat (an order submission).
+  return {get:(path,params)=>call('GET',path,{params}),post:(path,body,{once=false}={})=>call('POST',path,{body,retry:!once})};
 }
 
 // ---- typed helpers (paths and fields from the Binance Web3 API reference) ----
@@ -80,7 +87,7 @@ export const trading={
   quote:(c,{amount,fromTokenAddress,toTokenAddress,userWalletAddress})=>c.get('/api/v1/dex/aggregator/quote',{binanceChainId:BSC,amount,fromTokenAddress,toTokenAddress,userWalletAddress}),
   swap:(c,{amount,fromTokenAddress,toTokenAddress,userWalletAddress,quoteId,slippagePercent})=>c.get('/api/v1/dex/aggregator/swap',{binanceChainId:BSC,amount,fromTokenAddress,toTokenAddress,userWalletAddress,quoteId,slippagePercent}),
   approve:(c,{tokenContractAddress,approveAmount,vendor})=>c.get('/api/v1/dex/aggregator/approve-transaction',{binanceChainId:BSC,tokenContractAddress,approveAmount,vendor}),
-  submitOrder:(c,{requestId,userSignature,vendor,quoteId})=>c.post('/api/v1/dex/aggregator/order/submit',{requestId,userSignature,vendor,quoteId}),
+  submitOrder:(c,{requestId,userSignature,vendor,quoteId})=>c.post('/api/v1/dex/aggregator/order/submit',{requestId,userSignature,vendor,quoteId},{once:true}),
   order:(c,orderId)=>c.get(`/api/v1/dex/aggregator/order/${encodeURIComponent(orderId)}`),
 };
 export const transaction={

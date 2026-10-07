@@ -272,14 +272,20 @@ def test_refresh_fetches_only_companies_with_a_new_filing(tmp_path):
     def fetcher(url):
         calls.append(url)
         if url.endswith("company_tickers.json"):
-            return _json.dumps({"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}}).encode()
+            return _json.dumps({"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}, "2": {"ticker": "CCC", "cik_str": 3}}).encode()
         cik = int(url.split("CIK")[1][:10])
-        t = {1: "AAA", 2: "BBB"}[cik]
+        t = {1: "AAA", 2: "BBB", 3: "CCC"}[cik]
         if "/submissions/" in url:
-            return _json.dumps({"sic": "3674", "filings": {"recent": {"filingDate": [filing[t], "2020-01-01"]}}}).encode()
-        return _json.dumps(_rich()).encode()
-    first = F.fetch_release(["AAA", "BBB"], tmp_path, fetcher=fetcher)
+            if t == "CCC":
+                raise TimeoutError("read timed out")
+            return _json.dumps({"sic": "3674", "filings": {"recent": {"filingDate": [filing[t], "2026-09-30", "2020-01-01"],
+                                                                      "form": ["10-Q", "4", "10-K"], "isXBRL": [1, 0, 1]}}}).encode()
+        doc = _rich()
+        doc["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]["shares"].append({"end": filing[t], "val": 10, "filed": filing[t]})
+        return _json.dumps(doc).encode()
+    first = F.fetch_release(["AAA", "BBB", "CCC"], tmp_path, fetcher=fetcher)
     assert first["tickers"]["AAA"]["last_filing"] == "2026-05-01" and first["tickers"]["AAA"]["currency"] == "USD"
+    assert first["tickers"]["AAA"]["facts_through"] == "2026-05-01" and "CCC" in first["errors"]      # an insider Form 4 is ignored
     calls.clear()
     filing["BBB"] = "2026-08-01"
     again = F.refresh_release(tmp_path, fetcher=fetcher)
@@ -294,3 +300,31 @@ def test_fx_rates_are_per_usd_and_stored_with_the_release(tmp_path):
                       if "DEXTAUS" in url else b"observation_date,X\n2026-01-02,1.10\n")
     assert rows["TWD"] == [["2026-01-02", "2026-01-02", 1 / 32.0], ["2026-01-06", "2026-01-06", 1 / 40.0]]
     assert rows["EUR"] == [["2026-01-02", "2026-01-02", 1.10]] and "XYZ" not in rows and "USD" not in rows
+
+
+
+def test_statement_counts_are_not_split_twice():
+    idx = pd.bdate_range("2024-01-01", "2024-12-31")
+    # quarter ends 2024-03-31, 10:1 split on 2024-04-10, 10-Q filed 2024-04-20 already on the post-split basis
+    sources = {"cover": [["2024-04-20", "2024-04-15", 1000.0]], "balance": [["2024-04-20", "2024-03-31", 1000.0]],
+               "diluted": [["2024-04-20", "2024-03-31", 1000.0]], "implied": []}
+    sh = F._shares_per_day(sources, idx, [("2024-04-10", 10.0)])
+    assert sh[idx.get_loc(pd.Timestamp("2024-05-01"))] == 1000
+    late = {**sources, "cover": [["2024-03-25", "2024-03-20", 100.0]]}                       # a cover count from before it
+    assert F._shares_per_day(late, idx, [("2024-04-10", 10.0)])[idx.get_loc(pd.Timestamp("2024-04-01"))] == 1000
+
+
+def test_a_concept_never_tagged_is_zero_but_a_gap_is_unknown():
+    idx = pd.bdate_range("2021-01-01", "2023-06-30")
+    close = pd.Series(10.0, index=idx)
+    never = F.ticker_panel(doc(SHARES), close)                                                # no debt facts at all
+    day = idx.get_loc(pd.Timestamp("2022-03-01"))
+    assert never["debt_to_equity"][day] == 0
+    old_debt = doc(SHARES)
+    old_debt["facts"]["us-gaap"]["LongTermDebt"] = {"units": {"USD": [{"end": "2019-12-31", "val": 50, "filed": "2020-02-10"}]}}
+    assert np.isnan(F.ticker_panel(old_debt, close)["debt_to_equity"][day])                 # tagged once, now stale
+
+
+def test_fx_parsing_refuses_an_empty_response():
+    with pytest.raises(ValueError):
+        F.fetch_fx({"EUR"}, lambda url: b"<html>maintenance</html>")

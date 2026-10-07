@@ -150,6 +150,19 @@ export async function createStatelessSolanaRequesterSession(addressValue: unknow
  * The principal is `eip155:56:<checksummed address>`. It admits research and preparation only; every
  * BSC trade is still a separate wallet signature over the exact transaction.
  */
+// A signed sign-in message is good for one session only: its nonce is remembered until the message expires (at most
+// a few minutes), so a copied message and signature cannot open more sessions. One web process serves the app.
+const usedEvmNonces = new Map<string, number>();
+function claimEvmNonce(message: string) {
+  const now = Date.now();
+  for (const [nonce, until] of usedEvmNonces) if (until < now) usedEvmNonces.delete(nonce);
+  const nonce = /^Nonce: ([a-f0-9]{32})$/m.exec(message)?.[1] ?? "";
+  const until = Date.parse(/^Expiration Time: (.+)$/m.exec(message)?.[1] ?? "") || now + 10 * 60_000;
+  if (!nonce || usedEvmNonces.has(nonce)) throw new RequesterAuthError("MESSAGE_REUSED", "This sign-in was already used. Sign in again.", 401);
+  if (usedEvmNonces.size > 50_000) throw new RequesterAuthError("BUSY", "Too many sign-ins right now. Try again shortly.", 503);
+  usedEvmNonces.set(nonce, until);
+}
+
 export async function createStatelessEvmRequesterSession(addressValue: unknown, messageValue: unknown, signatureValue: unknown, request: Request) {
   requireSameOrigin(request);
   let address: string;
@@ -162,6 +175,7 @@ export async function createStatelessEvmRequesterSession(addressValue: unknown, 
   let valid = false;
   try { valid = await verifyMessage({ address: address as `0x${string}`, message, signature: signatureValue as `0x${string}` }); } catch { valid = false; }
   if (!valid) throw new RequesterAuthError("SIGNATURE_INVALID", "Wallet signature did not match this sign-in.", 401);
+  claimEvmNonce(message);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
   const scopeEpoch = randomBytes(32).toString("hex");
   const payload: StocklanaSessionPayload = { v: 1, address: `${EVM_PRINCIPAL_PREFIX}${address}`, expiresAt, scopeEpoch };

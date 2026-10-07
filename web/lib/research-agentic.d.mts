@@ -6,4 +6,6 @@ export function bindAgentic(store:AgentStore,address:string,wallet:unknown):{own
 export function agenticRun(store:AgentStore,planId:string):AgenticRun|null;
 export function startAgentic(store:AgentStore,address:string,planId:string,quotaLeftUsd:number):AgenticRun|null;
 export function stopAgentic(store:AgentStore,address:string,planId:string):AgenticRun|null;
-export function agenticTick(store:AgentStore,gw:(method:string,path:string,body?:unknown)=>Promise<unknown>):Promise<void>;
+export function agenticTick(store:AgentStore,gw:(method:string,path:string,body?:unknown)=>Promise<unknown>,now?:number):Promise<void>;
+export const AGENTIC_MAX_BUY_ATOMS:bigint;
+export function quotaLeftOf(quota:unknown):number;

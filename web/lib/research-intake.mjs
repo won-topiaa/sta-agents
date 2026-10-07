@@ -16,13 +16,19 @@ const defaults={targetReturnBps:1000,horizonDays:365,maxDrawdownBps:2000,maxWeig
 // A visible starter research set, not a model recommendation or purchase list.
 export const STARTER_UNIVERSE=['SPY','QQQ','VTI','AAPL','NVDA','AMZN','JPM','JNJ','XOM'];
 const themeWords={ai:/\bai\b|artificial intelligence|인공지능|AI주|AI관련주/i,semiconductors:/반도체|semiconductor|chipmaker/i,technology:/기술주|테크|technology|big tech/i,healthcare:/헬스케어|의료|제약|healthcare|pharma/i,finance:/금융|은행|finance|financial|bank/i,consumer:/소비재|consumer/i,energy:/에너지|석유|energy|oil/i,broad_market:/시장 전체|지수|broad market|index/i,dividend:/배당|dividend/i,value:/저평가|가치주|가치\s*투자|undervalued|value (?:stocks?|investing|investor)|cheap stocks?/i,industrials:/산업재|방산|industrials?\b|defen[cs]e stocks?/i,utilities:/유틸리티|전력주|utilit(?:y|ies)/i,materials:/소재|원자재|광산|materials|metals? stocks?|mining compan/i,real_estate:/부동산|리츠|\breits?\b|real estate/i,communication:/통신|미디어|telecom|communication services|media stocks?/i,crypto:/코인|가상자산|암호화폐|비트코인|crypto|bitcoin|blockchain/i};
-const companyWords={NVDA:/엔비디아|nvidia/i,AMD:/에이엠디|advanced micro devices/i,AVGO:/브로드컴|broadcom/i,ASML:/에이에스엠엘/i,TSM:/티에스엠씨|tsmc|taiwan semiconductor/i,MU:/마이크론|micron/i,INTC:/인텔|intel/i,MRVL:/마벨|marvell/i,AAPL:/애플|apple/i,MSFT:/마이크로소프트|microsoft/i,GOOGL:/구글|google|alphabet/i,META:/메타|facebook/i,TSLA:/테슬라|tesla/i,AMZN:/아마존|amazon/i,LLY:/일라이릴리|eli lilly/i,QQQ:/나스닥.?100|nasdaq.?100/i,SPY:/s&p.?500|에스앤피/i};
+// English names are whole words ("intel" is not in "intelligence", "apple" not in "pineapple"); 메타 is not 메타버스.
+const companyWords={NVDA:/엔비디아|\bnvidia\b/i,AMD:/에이엠디|\badvanced micro devices\b/i,AVGO:/브로드컴|\bbroadcom\b/i,ASML:/에이에스엠엘/i,TSM:/티에스엠씨|\btsmc\b|\btaiwan semiconductor\b/i,MU:/마이크론|\bmicron\b/i,INTC:/인텔|\bintel\b/i,MRVL:/마벨|\bmarvell\b/i,AAPL:/애플|\bapple\b/i,MSFT:/마이크로소프트|\bmicrosoft\b/i,GOOGL:/구글|\bgoogle\b|\balphabet\b/i,META:/메타(?!버스)|\bfacebook\b|\bmeta platforms\b/i,TSLA:/테슬라|\btesla\b/i,AMZN:/아마존|\bamazon\b/i,LLY:/일라이릴리|\beli lilly\b/i,QQQ:/나스닥.?100|\bnasdaq.?100\b/i,SPY:/s&p.?500|에스앤피/i};
 // Discovery groups per execution chain. Solana keeps the hand-picked groups above; BNB Chain uses groups built
 // from the research data (dev/gen_bsc_themes.py). Either way they only seed a draft the user reviews.
 export const CATALOGS={solana:{themes:RESEARCH_THEMES,starter:STARTER_UNIVERSE,executionChain:'solana:mainnet',evidenceChain:'solana:devnet'},
  bsc:{themes:BSC_THEMES,starter:BSC_STARTER,executionChain:'eip155:56',evidenceChain:'eip155:56'}};
 const mentioned=(ticker,text)=>new RegExp(`(^|[^A-Za-z0-9])${ticker.replaceAll('.','\\.')}([^A-Za-z0-9]|$)`,'i').test(text)||companyWords[ticker]?.test(text);
-const sameNumber=(e,v)=>(e.replaceAll(',','').match(/\d+(?:\.\d+)?/g)??[]).some(n=>Number(n)===Number(v));
+// A number counts only next to its unit: "$20 for 365 days" grounds a budget of 20, not 365.
+const moneyNumbers=e=>[...e.replaceAll(',','').matchAll(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:USDC|USDT|USD|달러|dollars?)/gi)].map(m=>Number(m[1]??m[2]));
+const percentNumbers=e=>[...e.replaceAll(',','').matchAll(/(\d+(?:\.\d+)?)\s*(?:%|퍼센트|퍼|프로|percent)/gi)].map(m=>Number(m[1]));
+// The loss limit is the slot that protects the user, so its evidence must say it is about a loss, and the target's
+// evidence must not: a model cannot swap "target 30%, max loss 10%" into a 30% loss limit.
+const LOSS_WORDS=/loss|lose|losing|drawdown|draw-down|down more than|손실|손해|낙폭|하락|잃|손절|마이너스/i;
 const percent=s=>typeof s==='string'&&/^\d{1,5}(?:\.\d{1,2})?$/.test(s)?Math.round(Number(s)*100):reject('The requested percentage needs clarification.');
 const comparable=text=>text.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
 const containsEvidence=(text,evidence)=>typeof evidence==='string'&&!!evidence.trim()&&comparable(text).includes(comparable(evidence));
@@ -92,11 +98,11 @@ export function resolveIntake(p,text,allowed,context=null,selected=[],catalog=CA
  const goal={...(context?.goal??defaults)};let budget=context?.brief.budget??'';
  if(p.budgetUSDC!=null){
   const e=grounded(p.budgetUSDC,p.budgetEvidence,text);
-  if(typeof p.budgetUSDC!=='string'||!/^\d{1,8}(?:\.\d{1,2})?$/.test(p.budgetUSDC)||Number(p.budgetUSDC)<=0||!/(?:\$|USDC|USD|달러|dollars?)/i.test(e)||/[원₩]/.test(e)||!sameNumber(e,p.budgetUSDC))reject('State the research budget in USDC or dollars.');
+  if(typeof p.budgetUSDC!=='string'||!/^\d{1,8}(?:\.\d{1,2})?$/.test(p.budgetUSDC)||Number(p.budgetUSDC)<=0||/[원₩]/.test(e)||!moneyNumbers(e).includes(Number(p.budgetUSDC)))reject('State the research budget in USDC or dollars.');
   budget=p.budgetUSDC;
  }
- if(p.targetPercent!=null){const e=grounded(p.targetPercent,p.targetEvidence,text);if(!sameNumber(e,p.targetPercent)||!/(?:%|퍼|프로|percent)/i.test(e))reject('State the target as a percentage.');goal.targetReturnBps=percent(p.targetPercent);}
- if(p.maxLossPercent!=null){const e=grounded(p.maxLossPercent,p.maxLossEvidence,text);if(!sameNumber(e,p.maxLossPercent)||!/(?:%|퍼|프로|percent)/i.test(e))reject('State the loss limit as a percentage.');goal.maxDrawdownBps=percent(p.maxLossPercent);}
+ if(p.targetPercent!=null){const e=grounded(p.targetPercent,p.targetEvidence,text);if(!percentNumbers(e).includes(Number(p.targetPercent))||LOSS_WORDS.test(e))reject('State the target as a percentage.');goal.targetReturnBps=percent(p.targetPercent);}
+ if(p.maxLossPercent!=null){const e=grounded(p.maxLossPercent,p.maxLossEvidence,text);if(!percentNumbers(e).includes(Number(p.maxLossPercent))||!LOSS_WORDS.test(e))reject('State the loss limit as a percentage.');goal.maxDrawdownBps=percent(p.maxLossPercent);}
  const allDurations=durations(text);
  const quotedDurations=containsEvidence(text,p.horizonEvidence)?durations(p.horizonEvidence):[];
  const statedDuration=quotedDurations.length===1?quotedDurations[0]:allDurations.length===1?allDurations[0]:null;

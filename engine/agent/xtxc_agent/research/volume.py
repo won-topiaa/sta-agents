@@ -1,7 +1,8 @@
 """Trading-activity signals per stock, as "<TICKER>::<signal>" columns of the price frame.
 
-Every value on day t uses rows <= t only (trailing rolling means), so the backtester's slicing and the future-data
-perturbation test cover them like any other column. Volume and the unadjusted close come from the same verified
+Every value on day t uses rows <= t only (trailing rolling means). The columns are built once for the whole period, so
+the future-data perturbation test (which edits finished columns) cannot see a look-ahead inside a builder: each builder
+has its own test that changing later rows leaves earlier values unchanged (tests/research/test_technical.py). Volume and the unadjusted close come from the same verified
 price release (Yahoo volume is split-adjusted, like the close)."""
 
 from __future__ import annotations

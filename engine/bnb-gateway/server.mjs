@@ -17,9 +17,15 @@ const RPC=env('BSC_RPC_URL')||'https://bsc-dataseed.bnbchain.org';
 const STABLES=[BSC_USDT,BSC_USDC];
 
 export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,log=()=>{},maxStable=200n*10n**18n,minGasWei=300000000000000n}){
-  let universe=null;
+  if(typeof token!=='string'||!token)throw new Error('The gateway needs a token.');
+  let universe=null,loading=null;
   async function tokens(){
     if(universe&&now()-universe.at<300000)return universe;
+    if(loading)return loading;   // one refresh at a time, however many requests arrive
+    loading=refreshTokens().finally(()=>{loading=null;});
+    return loading;
+  }
+  async function refreshTokens(){
     const rows=[];
     for(const platformId of ['bstock','ondo'])for(const t of await rwa.tokens(client,platformId))rows.push({
       platform:platformId,contract:t.tokenContractAddress,symbol:t.tokenSymbol,name:t.tokenName,decimals:Number(t.decimals),
@@ -29,6 +35,14 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     universe={at:now(),observedAt:new Date(now()).toISOString(),tokens:rows};return universe;
   }
   const known=async addr=>STABLES.some(s=>sameAddress(s,addr))||(await tokens()).tokens.some(t=>sameAddress(t.contract,addr));
+  // Exactly one side is a stablecoin and the other a listed stock token; returns true for a purchase.
+  async function pair(fromToken,toToken){
+    const fromStable=STABLES.some(s=>sameAddress(s,fromToken)),toStable=STABLES.some(s=>sameAddress(s,toToken));
+    if(fromStable===toStable||!await known(fromToken)||!await known(toToken))
+      throw new ExecutionCheckError('TOKEN','Only stablecoin ↔ listed stock token swaps are allowed.');
+    return fromStable;
+  }
+  const atoms18=qty=>{const [i,f='']=String(qty).split('.');return BigInt(i)*10n**18n+BigInt((f+'0'.repeat(18)).slice(0,18));};
   async function allowance(owner,tokenAddr){
     const data='0xdd62ed3e'+owner.toLowerCase().slice(2).padStart(64,'0')+BSC_ROUTER.toLowerCase().slice(2).padStart(64,'0');
     return BigInt(await rpc('eth_call',[{to:tokenAddr,data},'latest']));
@@ -38,9 +52,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     if(!isAddress(user)||!isAddress(fromToken)||!isAddress(toToken)||sameAddress(fromToken,toToken))throw new ExecutionCheckError('INPUT','Check the wallet and tokens.');
     if(!/^\d{1,40}$/.test(String(amount))||BigInt(amount)<=0n)throw new ExecutionCheckError('INPUT','Check the amount.');
     checkSlippage(slippagePercent);
-    if(!await known(fromToken)||!await known(toToken)||!(STABLES.some(s=>sameAddress(s,fromToken))||STABLES.some(s=>sameAddress(s,toToken))))
-      throw new ExecutionCheckError('TOKEN','Only stablecoin ↔ listed stock token swaps are allowed.');
-    const buying=STABLES.some(s=>sameAddress(s,fromToken));
+    const buying=await pair(fromToken,toToken);
     if(buying&&BigInt(amount)>maxStable)throw new ExecutionCheckError('LIMIT','This gateway caps a single purchase leg.');
     const stock=(await tokens()).tokens.find(t=>sameAddress(t.contract,buying?toToken:fromToken));
     if(stock&&stock.status.reason!=='TRADING')throw new ExecutionCheckError('MARKET',`${stock.symbol} is not trading now (${stock.status.reason}).`);
@@ -57,14 +69,16 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     if(bnb<minGasWei)throw unfunded('NO_GAS',`Add a little BNB to this wallet for network fees (at least ${Number(minGasWei)/1e18} BNB).`);
     const held=BigInt(await rpc('eth_call',[{to:fromToken,data:'0x70a08231'+user.toLowerCase().slice(2).padStart(64,'0')},'latest']));
     if(held<BigInt(amount))throw unfunded('NO_FUNDS',`This step needs ${(Number(BigInt(amount)/10n**12n)/1e6).toFixed(2)} of the input token; the wallet holds ${(Number(held/10n**12n)/1e6).toFixed(2)}.`);
-    if(await allowance(user,fromToken)<BigInt(amount)){
-      // The approval names the vendor of the route it is for (required for equity tokens).
+    if(await allowance(user,fromToken)!==BigInt(amount)){
+      // Exactly this leg: a missing, smaller or larger allowance (e.g. an unlimited one left by another app) is set to
+      // the exact amount first. The approval names the vendor of the route it is for (required for equity tokens).
       const built=await trading.approve(client,{tokenContractAddress:fromToken,approveAmount:String(amount),vendor:route.vendorName});
       return {step:'APPROVE',tx:checkApproval(built,{user,token:fromToken,amount:String(amount)}),quote};
     }
     const built=await trading.swap(client,{amount:String(amount),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:user,quoteId:route.quoteId,slippagePercent:String(slippagePercent)});
     const tx=checkSwap(built,{user,fromToken,toToken,amount:String(amount),quotedOut:String(route.toTokenAmount),slippagePercent});
-    const sim=checkSimulation(await transaction.simulate(client,{from:tx.from,to:tx.to,value:tx.value,data:tx.data}),{user,toToken,minReceiveAmount:tx.minReceiveAmount});
+    const sim=checkSimulation(await transaction.simulate(client,{from:tx.from,to:tx.to,value:tx.value,data:tx.data}),
+      {user,fromToken,toToken,amount:String(amount),minReceiveAmount:tx.minReceiveAmount});
     return {step:'SWAP',tx,quote,simulation:sim,preparedId:randomUUID()};
   }
   // On-chain balances of listed stock tokens (balanceOf), for whole-holding sales. Only known tokens, at most 40.
@@ -89,10 +103,16 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
   const agentic={
     status:()=>baw(['wallet','status']),address:()=>baw(['wallet','address']),settings:()=>baw(['wallet','settings']),quota:()=>baw(['wallet','left-quota']),
     signin:()=>baw(['auth','signin']),verify:qrCodeId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{3,79}$/.test(qrCodeId))throw new ExecutionCheckError('INPUT','Invalid QR id.');return baw(['auth','verify','--qrCodeId',qrCodeId],330000);},
-    async swap({fromToken,toToken,fromTokenQty}){
+    // The same limits as a hand-signed leg: listed pair, purchase cap, trading status, bounded slippage.
+    async swap({fromToken,toToken,fromTokenQty,slippagePercent='1'}){
       if(!/^\d{1,12}(\.\d{1,18})?$/.test(String(fromTokenQty))||Number(fromTokenQty)<=0)throw new ExecutionCheckError('INPUT','Check the amount.');
-      if(!await known(fromToken)||!await known(toToken)||!(STABLES.some(s=>sameAddress(s,fromToken))||STABLES.some(s=>sameAddress(s,toToken))))throw new ExecutionCheckError('TOKEN','Only stablecoin ↔ listed stock token swaps are allowed.');
-      return baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',String(fromTokenQty),'--slippage','auto','--mev','true'],120000);
+      if(!isAddress(fromToken)||!isAddress(toToken))throw new ExecutionCheckError('INPUT','Check the tokens.');
+      const buying=await pair(fromToken,toToken),slippage=checkSlippage(slippagePercent);
+      if(buying&&atoms18(fromTokenQty)>maxStable)throw new ExecutionCheckError('LIMIT','This gateway caps a single purchase leg.');
+      const stock=(await tokens()).tokens.find(t=>sameAddress(t.contract,buying?toToken:fromToken));
+      if(!stock||stock.status.reason!=='TRADING')throw new ExecutionCheckError('MARKET',`${stock?.symbol??'This token'} is not trading now.`);
+      return baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',String(fromTokenQty),
+        '--slippage',String(slippage),'--mev','true'],120000);
     },
     order:orderId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(orderId))throw new ExecutionCheckError('INPUT','Invalid order id.');return baw(['market-order','list','--orderId',orderId]);},
   };
@@ -131,8 +151,11 @@ function bawRun(args,timeout=60000){
   return new Promise((resolve,reject)=>{
     execFile(env('BAW_NODE')||process.execPath,[env('BAW_BIN'),...args,'--json'],{timeout,maxBuffer:1_000_000,env:{PATH:process.env.PATH,HOME:env('BAW_HOME'),BAW_DIR:env('BAW_DIR')}},(err,stdout)=>{
       let parsed=null;try{parsed=JSON.parse(stdout);}catch{/* fall through */}
-      if(parsed&&parsed.success!==false)return resolve(parsed.data??parsed);
-      reject(new ExecutionCheckError('AGENTIC',String(parsed?.error?.message??parsed?.message??err?.message??'Agentic Wallet command failed.').slice(0,300)));
+      // A command succeeded only if it exited cleanly AND said so. The CLI's own message is passed on; the process error
+      // (command line, stderr) is not, since it names local paths.
+      if(!err&&parsed&&parsed.success!==false)return resolve(parsed.data??parsed);
+      const message=typeof parsed?.error?.message==='string'?parsed.error.message:typeof parsed?.message==='string'?parsed.message:'Agentic Wallet command failed.';
+      reject(new ExecutionCheckError('AGENTIC',message.slice(0,200)));
     });
   });
 }
@@ -142,5 +165,6 @@ if(process.argv[1]?.endsWith('server.mjs')){
   const evidence=env('DX_CALLS_FILE');if(evidence)mkdirSync(evidence.replace(/\/[^/]+$/,''),{recursive:true});
   const client=web3Client({apiKey:keys.BINANCE_WEB3_API_KEY,secretKey:keys.BINANCE_WEB3_SECRET_KEY,observe:e=>evidence&&appendFileSync(evidence,JSON.stringify(e)+'\n')});
   const port=Number(env('GATEWAY_PORT')||4590);
+  if(typeof gw.GATEWAY_TOKEN!=='string'||gw.GATEWAY_TOKEN.length<32){console.error('GATEWAY_TOKEN (32+ characters) is missing from GATEWAY_ENV_FILE; not starting.');process.exit(1);}
   createGateway({client,token:gw.GATEWAY_TOKEN}).listen(port,'127.0.0.1',()=>console.log(`bnb gateway on 127.0.0.1:${port}`));
 }

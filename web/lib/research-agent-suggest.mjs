@@ -16,7 +16,8 @@ export function resolveSuggestions(parsed,text,style){
   if(!parsed||typeof parsed!=='object'||Object.keys(parsed).some(k=>!['rules','unsupported'].includes(k))||!Array.isArray(parsed.rules)||parsed.rules.length>AGENT_RULES.limits.rules)throw new Error('envelope');
   const suggestions=[],seen=new Set();
   for(const s of parsed.rules){
-    if(!s||typeof s!=='object'||seen.has(s.id)||!quoted(text,s.evidence))continue;   // ungrounded or repeated: dropped
+    // ungrounded, too short to mean anything ("I"), or repeated: dropped
+    if(!s||typeof s!=='object'||seen.has(s.id)||!quoted(text,s.evidence)||String(s.evidence).replace(/[^\p{L}\p{N}]/gu,'').length<4)continue;
     try{suggestions.push({...normalizeRule({id:s.id,params:s.params??{}},style),evidence:s.evidence.trim().slice(0,160)});seen.add(s.id);}
     catch(e){if(!(e instanceof AgentProfileError))throw e;}
   }

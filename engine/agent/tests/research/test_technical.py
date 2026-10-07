@@ -117,3 +117,49 @@ def test_agent_rules_for_the_new_tools():
     assert "10%" in words["exit"] and "2" in words["hold"] and "50%" in words["breadth"]
     with pytest.raises(ValueError):
         ap.normalize_profile({**AGENT, "style": "value", "preset": "deep_value", "rules": [{"id": "relative_strength"}]})
+
+
+def test_filters_do_not_depend_on_their_order():
+    hist = np.column_stack([np.linspace(10, 10 * (1 + r), 200) for r in (0.9, 0.7, 0.5, 0.3, 0.1, -0.1, -0.3, -0.5, -0.6, -0.7)])
+    names = [f"S{i}" for i in range(10)]
+    agent = {**AGENT, "rules": [{"id": "strong_momentum", "params": {"keep": 0.5}}]}
+    # the model asks for the opposite fraction; the agent's "top half" must still mean the top half of all stocks
+    model = {**BASE, "top_n": 5, "filters": [{"signal": "momentum", "lookback": 126, "skip": 21, "rule": "bottom_fraction", "value": 0.5}]}
+    d = ap.apply(model, agent)
+    picks, _ = sl.design_scores(d, hist, names, {}, 5)
+    assert picks == {}                                                    # top half AND bottom half: nothing qualifies
+    both_ways = [{"signal": "trend", "lookback": 100, "rule": "above", "value": 0},
+                 {"signal": "momentum", "lookback": 126, "skip": 21, "rule": "top_fraction", "value": 0.5}]
+    one, _ = sl.design_scores({**BASE, "top_n": 5, "filters": both_ways}, hist, names, {}, 5)
+    assert set(one) == {"S0", "S1", "S2", "S3", "S4"}                     # half of the ten, not half of the risers
+
+
+def test_an_exit_on_a_rebalance_day_is_not_bought_back_at_once():
+    prices = _prices(n=500)
+    crash = prices.copy()
+    crash.iloc[300:, crash.columns.get_loc("AAA")] *= 0.5
+    design = {**BASE, "top_n": 5, "exit": {"stop_loss": 0.15}, "hold_buffer": 3}
+    res = simulate(normalize_spec(spec(design, rebalance="weekly", min_cash="0")), crash, {"default_bps": 10, "per_ticker_bps": {}}, holdout_days=50)
+    sells = [d for d, t in res["exits"] if t == "AAA"]
+    assert len(sells) == len(set(sells))
+    days = [crash.index.get_loc(pd.Timestamp(d)) for d in sells]
+    assert all(b - a > 1 for a, b in zip(days, days[1:]))                 # never sold again the next day
+
+
+def test_malformed_model_values_reject_one_candidate_only():
+    from xtxc_agent.core.strategy_design import validate_candidates
+    good = {"name": "Good one", "idea": "Rides the strongest names in an uptrend.", "design": BASE}
+    for bad in ({**BASE, "filters": 5}, {**BASE, "filters": [{"signal": ["rsi"], "lookback": 14, "rule": "below", "value": 30}]},
+                {**BASE, "top_n": float("inf")}, {**BASE, "top_n": 10 ** 400}, {**BASE, "hold_buffer": 10 ** 400}):
+        out = validate_candidates({"candidates": [{"name": "Bad one", "idea": "Breaks the schema on purpose here.", "design": bad}, good]})
+        assert [c["name"] for c in out["candidates"]] == ["Good one"] and out["rejected"][0]["index"] == 0
+    with pytest.raises(ValueError):
+        ap.normalize_profile({**AGENT, "style": ["technical"]})
+    assert sl.design_hash({**BASE, "hold_buffer": 1}) == sl.design_hash(BASE)
+    assert sl.design_hash({**BASE, "breadth_off": {"lookback": 200, "below": 0.5, "exposure": 1}}) == sl.design_hash(BASE)
+
+
+def test_long_ideas_end_on_a_word():
+    from xtxc_agent.core.strategy_design import _short
+    out = _short("abcdefghij " * 30, 240)
+    assert len(out) <= 240 and out.endswith("abcdefghij…")

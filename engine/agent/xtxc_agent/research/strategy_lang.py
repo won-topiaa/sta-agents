@@ -93,13 +93,21 @@ class DesignError(ValueError):
 
 
 def _int(x, name, lo, hi) -> int:
-    if isinstance(x, bool) or not isinstance(x, (int, float)) or int(x) != x or not lo <= int(x) <= hi:
+    try:
+        ok = not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(float(x)) and int(x) == x and lo <= int(x) <= hi
+    except (OverflowError, ValueError):
+        ok = False
+    if not ok:
         raise DesignError(f"{name} must be an integer from {lo} to {hi}")
     return int(x)
 
 
 def _num(x, name, lo, hi) -> float:
-    if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) or not lo <= float(x) <= hi:
+    try:
+        ok = not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(float(x)) and lo <= float(x) <= hi
+    except (OverflowError, ValueError):
+        ok = False
+    if not ok:
         raise DesignError(f"{name} must be a number from {lo} to {hi}")
     return round(float(x), 6)
 
@@ -149,8 +157,12 @@ def normalize_design(design) -> dict:
             raise DesignError(f"score[{i}].weight must not be 0")
         score.append(term)
     filters = []
+    if not isinstance(design.get("filters") or [], list):
+        raise DesignError("filters must be a list")
     for i, f in enumerate(design.get("filters") or []):
         _keys(f, {"signal", "lookback", "skip", "fast", "rule", "value"}, {"signal", "lookback", "rule", "value"}, f"filters[{i}]")
+        if not isinstance(f["signal"], str) or not isinstance(f["rule"], str):
+            raise DesignError(f"filters[{i}]: signal and rule must be text")
         if f["rule"] not in RULES:
             raise DesignError(f"filters[{i}].rule must be one of {list(RULES)}")
         lo, hi = (0.1, 0.9) if f["rule"].endswith("fraction") else FILTER_VALUE.get(f.get("signal"), (-1.0, 1.0))
@@ -173,7 +185,9 @@ def normalize_design(design) -> dict:
     # Optional parts appear in the canonical form only when used, so designs without them keep their hash.
     extra = {}
     if design.get("hold_buffer") is not None:
-        extra["hold_buffer"] = _num(design["hold_buffer"], "hold_buffer", *HOLD_BUFFER)
+        hb = _num(design["hold_buffer"], "hold_buffer", *HOLD_BUFFER)
+        if hb > 1:   # 1 keeps nothing extra: the same design as without it
+            extra["hold_buffer"] = hb
     ex = design.get("exit")
     if ex is not None:
         _keys(ex, {"stop_loss", "trailing_stop"}, set(), "exit")
@@ -183,9 +197,11 @@ def normalize_design(design) -> dict:
     bo = design.get("breadth_off")
     if bo is not None:
         _keys(bo, {"lookback", "below", "exposure"}, {"lookback", "below", "exposure"}, "breadth_off")
-        extra["breadth_off"] = {"lookback": _int(bo["lookback"], "breadth_off.lookback", 20, LOOKBACK[1]),
-                                "below": _num(bo["below"], "breadth_off.below", 0.05, 0.95),
-                                "exposure": _num(bo["exposure"], "breadth_off.exposure", 0, 1)}
+        bo = {"lookback": _int(bo["lookback"], "breadth_off.lookback", 20, LOOKBACK[1]),
+              "below": _num(bo["below"], "breadth_off.below", 0.05, 0.95),
+              "exposure": _num(bo["exposure"], "breadth_off.exposure", 0, 1)}
+        if bo["exposure"] < 1:   # full exposure changes nothing
+            extra["breadth_off"] = bo
     # canonical order: terms and filters sorted so the same idea written differently hashes the same
     score.sort(key=lambda t: json.dumps(t, sort_keys=True))
     filters.sort(key=lambda t: json.dumps(t, sort_keys=True))
@@ -318,10 +334,12 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
         return {}, exposure
     alive = np.all(np.isfinite(hist_arr[-need:]) & (hist_arr[-need:] > 0), axis=0)
     idx = np.flatnonzero(alive)
+    # Every filter looks at the same eligible stocks and a stock must pass all of them, so the order of filters never
+    # matters and "the top 50%" is half of the eligible stocks with a value, not half of what another filter left.
+    passed = np.ones(len(idx), dtype=bool)
+    fbase = {k: a[:, idx] for k, a in fund.items()}
     for f in d["filters"]:
-        if not len(idx):
-            break
-        v = _signal_values(f, hist_arr[:, idx], {k: a[:, idx] for k, a in fund.items()}, bench)
+        v = _signal_values(f, hist_arr[:, idx], fbase, bench)
         keep = np.isfinite(v)
         if f["rule"] == "above":
             keep &= v > f["value"]
@@ -334,7 +352,8 @@ def design_scores(design: dict, hist_arr: np.ndarray, tickers: list[str], market
                 order = finite[np.argsort(-v[finite] if f["rule"] == "top_fraction" else v[finite], kind="stable")]
                 keep = np.zeros_like(keep)
                 keep[order[:k]] = True
-        idx = idx[keep]
+        passed &= keep
+    idx = idx[passed]
     if not len(idx):
         return {}, exposure
     sub = hist_arr[:, idx]

@@ -121,3 +121,11 @@
 .bsc-holdings li span{display:flex;flex-direction:column;gap:2px}
 .bsc-holdings li b{font-size:13px;font-weight:600}
 .bsc-holdings li small{font-size:11.5px;color:#a3a3a3;font-variant-numeric:tabular-nums}
+.ra-trade-legs .bsc-sent{color:#f3d9a4}
+.bsc-sent a{color:#f3d9a4}
+.bsc-paste{margin-top:8px;font-size:12px;color:#bdbdbd}
+.bsc-paste summary{cursor:pointer}
+.bsc-paste>span{display:flex;gap:8px;margin-top:8px;flex-direction:row}
+.bsc-paste input{flex:1;min-width:0;background:#141414;border:1px solid #383838;border-radius:6px;padding:8px 10px;color:#ededed;font:inherit;font-size:12px}
+.bsc-holdings-wallet{margin-top:12px}
+.bsc-holdings-where{display:block;font-size:11.5px;letter-spacing:.2px;color:#8f8f8f}

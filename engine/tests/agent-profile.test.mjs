@@ -160,3 +160,7 @@ test('a phrase that backs a suggested rule is never also listed as not expressib
   assert.deepEqual(r.suggestions.map(s=>s.id),['pays_dividend','low_debt']);
   assert.deepEqual(r.unsupported,['I follow the news']);
 });
+test('a suggestion needs real words from the description as evidence',()=>{
+  const r=resolveSuggestions({rules:[{id:'uptrend_only',evidence:'I'}],unsupported:[]},'I mostly hold index funds','technical');
+  assert.deepEqual(r.suggestions,[]);
+});

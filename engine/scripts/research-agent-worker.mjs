@@ -84,7 +84,7 @@ async function main() {
     // Daily exit rules (once per price release). A failure retries after 10 minutes; nothing is sent from here
     // except Agentic Wallet sales of an agent allowed to trade on its own (through agenticTick on the next cycle).
     if(process.env.XTXC_BNB_GATEWAY_URL&&Date.now()>=exitAt){
-      try{await exitWatch(store,{gw:gatewayCall,check:exitCheck,release:releaseId()});exitAt=Date.now()+60000;}
+      try{const r=await exitWatch(store,{gw:gatewayCall,check:exitCheck,release:releaseId()});exitAt=Date.now()+(r?.retry?600000:60000);}
       catch(e){exitAt=Date.now()+600000;process.stderr.write(`Exit check failed; it retries later. ${String(e?.message??'').slice(0,160)}\n`);}
     }
     if(process.argv.includes('--once'))break;

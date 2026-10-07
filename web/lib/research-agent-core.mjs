@@ -38,12 +38,13 @@ export function allocateBudget(total, weights) {
 
 // BNB Chain sale legs: token -> USDT for whole holdings the gateway read on chain. Only this strategy's stocks and only
 // the Ondo/bStock contracts listed for them; amounts are token atoms (18 decimals).
-export function sellLegs(strategy, holdings) {
+export function sellLegs(strategy, holdings, extra=[]) {
   if(!Array.isArray(holdings)||holdings.length>20)reject('Check the holdings to sell.');
   const seen=new Set(),legs=[];
   for(const h of holdings){
     const instrument=String(h?.instrument??''),contract=String(h?.contract??'').toLowerCase(),raw=String(h?.raw??'');
-    if(!strategy.instruments.includes(instrument))reject(`${instrument||'This stock'} is not part of this strategy.`,409);
+    // `extra`: stocks this strategy bought before they were removed from it (an exit may still sell them).
+    if(!strategy.instruments.includes(instrument)&&!extra.includes(instrument))reject(`${instrument||'This stock'} is not part of this strategy.`,409);
     const listed=Object.entries(BSC_RESEARCH_PRODUCTS[instrument]??{}).find(([,p])=>p?.contract?.toLowerCase()===contract);
     if(!listed)reject(`${instrument} is not a listed BNB Chain token for this strategy.`,409);
     if(!/^[1-9]\d{0,35}$/.test(raw))continue;   // nothing held: nothing to sell
@@ -205,6 +206,7 @@ export class AgentStore extends ResearchStore {
         WHERE p.owner=? AND p.status='APPROVED'
           AND NOT EXISTS (SELECT 1 FROM agent_steps s WHERE s.plan_id=p.id)
           AND NOT EXISTS (SELECT 1 FROM agent_autonomy_claims c WHERE c.plan_id=p.id)
+          AND NOT EXISTS (SELECT 1 FROM agent_agentic_runs r WHERE r.plan_id=p.id)
       `).all(owner);
       const expired=[];
       for(const row of unused){
@@ -393,20 +395,37 @@ export class AgentStore extends ResearchStore {
     // sent anything since, do not build a second swap for the same leg.
     if(['SWAP_PREPARED','APPROVE_PREPARED'].includes(phase)&&doc.prepared&&BigInt(nonceNow)>BigInt(doc.prepared.nonce))
       reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
-    return {plan:p,doc};
+    return {plan:p,doc,guard:{phase,preparedAt:doc.prepared?.at??null}};
   }
-  bscPrepared(address,id,index,kind,prepared,nonce) {
-    const {plan:p,doc}=this.bscStep(address,id,index);
-    const next={...doc,leg:p.legs[index],prepared:{kind,tx:prepared.tx,quote:prepared.quote??null,simulation:prepared.simulation??null,nonce:String(nonce),at:Date.now()}};
-    this.db.prepare('INSERT INTO agent_steps VALUES(?,?,?,?) ON CONFLICT(plan_id,step) DO UPDATE SET phase=excluded.phase,document=excluded.document').run(id,index,kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED',JSON.stringify(next));
-    this.event(this.owner(address),p.strategyId,'TRADE_STATUS',{planId:id,index,phase:kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED'});
-    return next.prepared;
+  // `guard` (from assertBscPreparable) is re-checked after the gateway call: the plan may have been revoked, handed
+  // to the Agentic Wallet, or this step prepared or sent from another tab meanwhile. A stale preparation is refused
+  // instead of overwriting a step that was already sent.
+  bscPrepared(address,id,index,kind,prepared,nonce,guard=null) {
+    return this.transaction(()=>{
+      const {plan:p,phase,doc}=this.bscStep(address,id,index);
+      if(guard){
+        if(!['APPROVED','PARTIAL'].includes(p.status)||Date.now()>p.expiresAt)reject('This approval is no longer current.',409);
+        if(this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(id))reject('This plan runs in your Agentic Wallet. Use its controls.',409);
+        if(phase!==guard.phase||(doc.prepared?.at??null)!==guard.preparedAt)reject('This trade changed while it was being prepared. Refresh and try again.',409);
+      }
+      const next={...doc,leg:p.legs[index],prepared:{kind,tx:prepared.tx,quote:prepared.quote??null,simulation:prepared.simulation??null,nonce:String(nonce),at:Date.now()}};
+      this.db.prepare('INSERT INTO agent_steps VALUES(?,?,?,?) ON CONFLICT(plan_id,step) DO UPDATE SET phase=excluded.phase,document=excluded.document').run(id,index,kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED',JSON.stringify(next));
+      this.event(this.owner(address),p.strategyId,'TRADE_STATUS',{planId:id,index,phase:kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED'});
+      return next.prepared;
+    });
   }
   // The caller has verified that `hash` carries exactly doc.prepared.tx (checkSent).
   bscSent(address,id,index,hash) {
+    return this.transaction(()=>this.recordBscSent(address,id,index,hash));
+  }
+  recordBscSent(address,id,index,hash) {
     const {plan:p,phase,doc}=this.bscStep(address,id,index);
     if(!/^0x[0-9a-fA-F]{64}$/.test(hash))reject('Invalid transaction hash.');
     if(doc.sent?.hash===hash)return doc;
+    // One transaction settles one step: a hash already recorded anywhere for this owner cannot settle another.
+    const used=this.db.prepare(`SELECT 1 FROM agent_steps s JOIN agent_plans p ON p.id=s.plan_id WHERE p.owner=? AND NOT (s.plan_id=? AND s.step=?)
+      AND (lower(json_extract(s.document,'$.sent.hash'))=lower(?) OR EXISTS (SELECT 1 FROM json_each(s.document,'$.receipts') r WHERE lower(json_extract(r.value,'$.hash'))=lower(?)))`).get(this.owner(address),id,index,hash,hash);
+    if(used)reject('This transaction is already recorded for another trade.',409);
     if(!['SWAP_PREPARED','APPROVE_PREPARED'].includes(phase))reject('No prepared transaction for this step.',409);
     const kind=doc.prepared.kind,next={...doc,sent:{hash,kind,at:Date.now()}};
     const nextPhase=kind==='APPROVE'?'APPROVE_SENT':'SUBMITTED';
@@ -430,8 +449,14 @@ export class AgentStore extends ResearchStore {
     return next;
   }
   revoke(address,id) {
-    const p=this.plan(address,id);this.db.prepare("UPDATE agent_plans SET status='REVOKED' WHERE id=?").run(id);this.event(this.owner(address),p.strategyId,'REVOKED',{planId:id});
-    // Existing signed/submitted orders are not cancelled by changing this local plan.
+    return this.transaction(()=>{
+      const p=this.plan(address,id);
+      if(['COMPLETE','EXPIRED','REVOKED'].includes(p.status))return;   // finished plans stay as they are
+      this.db.prepare("UPDATE agent_plans SET status='REVOKED' WHERE id=?").run(id);
+      // An Agentic Wallet run of this plan stops too. Existing signed/submitted orders are not cancelled by this.
+      this.db.prepare("UPDATE agent_agentic_runs SET status='STOPPED',reason='OWNER_REVOKED',updated_at=? WHERE plan_id=? AND status IN ('RUNNING','PAUSED')").run(Date.now(),id);
+      this.event(this.owner(address),p.strategyId,'REVOKED',{planId:id});
+    });
   }
   monitor(address,strategyId,goal,enabled) {
     const owner=this.owner(address),s=this.get(owner,strategyId),g=validateGoal(goal);

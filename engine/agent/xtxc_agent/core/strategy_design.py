@@ -114,7 +114,8 @@ def _short(text: str, limit: int) -> str:
     end = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
     if end >= 10:
         return head[:end + 1]
-    return head[:max(head.rfind(" "), limit - 1)].rstrip(" ,;:") + "…"
+    space = head.rfind(" ")
+    return head[:space if space > limit // 2 else limit - 1].rstrip(" ,;:") + "…"
 
 
 def validate_candidates(answer) -> dict:
@@ -147,8 +148,9 @@ def validate_candidates(answer) -> dict:
             h = design_hash(d)
             if h in seen:
                 raise ValueError("repeats another candidate")
-        except ValueError as exc:
-            rejected.append({"index": i, "name": str(c.get("name", ""))[:40] if isinstance(c, dict) else "", "reason": str(exc)[:160]})
+        except (ValueError, TypeError, OverflowError) as exc:   # one malformed candidate never stops the others
+            reason = str(exc) if isinstance(exc, ValueError) else "malformed design values"
+            rejected.append({"index": i, "name": str(c.get("name", ""))[:40] if isinstance(c, dict) else "", "reason": reason[:160]})
             continue
         seen.add(h)
         out.append({"name": c["name"].strip(), "idea": c["idea"].strip(), "design": d, "design_hash": h})

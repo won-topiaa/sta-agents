@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 from xtxc_agent.research import fundamentals, quantstore  # noqa: E402
+from xtxc_agent.research import marketdata as md  # noqa: E402
 
 DEFAULT_STORE = Path("/home/ubuntu/xtxc_ai_quant")
 
@@ -35,14 +36,23 @@ def refresh_prices(root: Path, store: Path) -> dict:
     before = {t for t, r in current["tickers"].items() if r.get("rows")}
     new = quantstore.build_release(sorted(current["tickers"]), store_root=store, root=root, start=current.get("start", "2010-01-01"))
     rows = new["tickers"]
-    return {"release": new["release_id"], "tickers": len(rows), "lost": sorted(before - {t for t, r in rows.items() if r.get("rows")}),
+    lost = sorted(before - {t for t, r in rows.items() if r.get("rows")})
+    if lost:
+        # A reference outage must not empty a ticker that had history: keep its previous row (objects are never
+        # deleted) and publish again in one step.
+        for t in lost:
+            rows[t] = {**current["tickers"][t], "kept_from_previous_release": True}
+        new["release_id"] = md._sha256(md._canonical_json({k: new[k] for k in ("schema", "store", "start")}
+                                                          | {"content": {t: v["object"] for t, v in rows.items()}}))
+        md._atomic_write(md._prices_dir(root) / quantstore.RELEASE_FILE, json.dumps(new, indent=1, sort_keys=True).encode())
+    return {"release": new["release_id"], "tickers": len(rows), "lost": lost,
             "errors": {t: r["reference_error"][:120] for t, r in rows.items() if r.get("reference_error")},
             "through": max((r.get("last") or "" for r in rows.values()), default=None)}
 
 
 def refresh_fundamentals(root: Path) -> dict:
     rel = fundamentals.refresh_release(root)
-    return {"release": rel["release_id"], "tickers": len(rel["tickers"]), "updated": rel.get("updated", []),
+    return {"release": rel["release_id"], "tickers": len(rel["tickers"]), "updated": rel.get("updated", []), "errors": rel.get("errors", {}),
             "fx": {c: row["through"] for c, row in rel.get("fx", {}).items()}, "fx_error": rel.get("fx_error")}
 
 

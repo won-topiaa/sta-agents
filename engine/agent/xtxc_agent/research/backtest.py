@@ -169,6 +169,7 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             growth = np.where((pos != 0) & np.isfinite(prev) & np.isfinite(cur) & (prev > 0), cur / prev, 1.0)
         pos = pos * growth
         E = cash + float(pos.sum())
+        just_exited = np.zeros(len(tickers), dtype=bool)
         if exit_due.any():
             mask = exit_due & np.isfinite(raw[i]) & (pos > 0)
             if mask.any():
@@ -180,9 +181,13 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
                                  "trades": int(mask.sum()), "cost": cost})
                 exits.extend([dates[k], tickers[j]] for j in np.flatnonzero(mask))
                 E = cash + float(pos.sum())
+                entry[mask] = np.nan
+                peak[mask] = np.nan
+                just_exited = mask
             exit_due[:] = False
         if pending is not None:
-            target = np.array([pending.get(t, 0.0) for t in tickers], dtype="float64")
+            # a name sold by an exit rule today stays out of a rebalance that executes on the same day
+            target = np.array([0.0 if just_exited[j] else pending.get(t, 0.0) for j, t in enumerate(tickers)], dtype="float64")
             tradable = np.isfinite(raw[i])
             if band > 0 and E > 0:
                 w_cur = pos / E
@@ -256,7 +261,8 @@ def simulate(spec: dict, prices: pd.DataFrame, cost_model: dict | None, *, snaps
             "benchmark": compute_metrics(bench_curve[base:], exposure=1.0) if bench_curve is not None else None,
         }
 
-    latest = target_weights(s, prices, i1, held=frozenset(t for j, t in enumerate(tickers) if pos[j] > 0))
+    # The allocation recommended for new money: the account's own holdings are not the backtest's, so no hold buffer.
+    latest = target_weights(s, prices, i1)
     return {
         "equity": [[d, round(float(v), 6)] for d, v in zip(dates, equity)],
         "benchmark": [[d, round(float(v), 6)] for d, v in zip(dates, bench_curve)] if bench_curve is not None else [],

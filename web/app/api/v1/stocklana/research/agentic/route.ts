@@ -2,7 +2,7 @@ import {requireRequesterSession,RequesterAuthError} from '@/lib/requester-auth';
 import {researchPrincipal,allowedStocksFor,isBscPrincipal} from '@/lib/research-principal';
 import {AgentStore,reject} from '@/lib/research-agent-core.mjs';
 import {ResearchStoreError} from '@/lib/research-store.mjs';
-import {agenticBinding,bindAgentic,startAgentic,stopAgentic,agenticRun} from '@/lib/research-agentic.mjs';
+import {agenticBinding,bindAgentic,startAgentic,stopAgentic,agenticRun,quotaLeftOf} from '@/lib/research-agentic.mjs';
 import {gateway} from '@/lib/bnb-gateway';
 import {stocklanaBody} from '@/lib/stocklana-execution';
 
@@ -32,6 +32,10 @@ export async function POST(request:Request){
     const address=await owner(request),s=db(address),b=await stocklanaBody(request,4000) as Record<string,unknown>;
     const binding=agenticBinding(s);
     if(binding&&binding.owner!==s.owner(address))reject('This Agentic Wallet is connected to another account.',409);
+    // One gateway drives one Agentic Wallet. When XTXC_AGENTIC_OWNER names the operator's BNB Chain address, only that
+    // account may sign it in and bind it.
+    const operator=process.env.XTXC_AGENTIC_OWNER;
+    if(operator&&!binding&&address.toLowerCase()!==`eip155:56:${operator.toLowerCase()}`)reject('The Agentic Wallet is reserved for the operator account.',403);
     if(b.operation==='SIGNIN')return Response.json({signin:await gateway('POST','/v1/agentic/signin',{})},{headers});
     if(b.operation==='VERIFY'){
       await gateway('POST','/v1/agentic/verify',{qrCodeId:String(b.qrCodeId??'')},330000);
@@ -42,7 +46,7 @@ export async function POST(request:Request){
     const planId=String(b.planId??'');
     if(b.operation==='START'){
       const quota=await gateway<Quota>('GET','/v1/agentic/quota');
-      return Response.json({run:startAgentic(s,address,planId,Number(quota?.quotaLeft??NaN))},{headers});
+      return Response.json({run:startAgentic(s,address,planId,quotaLeftOf(quota))},{headers});
     }
     if(b.operation==='STOP')return Response.json({run:stopAgentic(s,address,planId)},{headers});
     reject('Unknown Agentic Wallet operation.');
