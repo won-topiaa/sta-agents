@@ -9,6 +9,9 @@ import { readPortfolioDrafts, portfolioFromFragment, PORTFOLIO_STORAGE, weightBp
 import { type PortfolioResponse } from './stocklana-exchange-client';
 import { ensureResearchSession, researchPrincipalOf, isEvmWallet } from './research-session';
 import { useMarketPrices } from './use-stock-workspace-data';
+import { BSC_RESEARCH_PRODUCTS } from '@/lib/bsc-research-universe.mjs';
+import type { GeckoResponse } from '@/lib/bnb-gecko.mjs';
+import type { MarketObservation } from '@/lib/stock-market-data';
 import { StockLogo } from './stock-logo';
 import './research-workspace.css';
 import { useResearchAgent, ResearchRunControls, ResearchResults, ResearchPlanExecution, runActive } from './research-agent-panel';
@@ -70,8 +73,11 @@ function AccountWorkspace({holdingsNote,wallet,directory,portfolio,balanceError,
   const stable = wallet && isEvmWallet(wallet) ? 'USDT' : 'USDC';
   const withAgent = (b: ResearchBrief): ResearchBrief => { const {agentId:_,...rest}=b; void _; return boundAgentId ? {...rest,agentId:boundAgentId} : rest; };
   const market = directory.find(r=>r.instrument===focus) ?? directory[0];
-  const prices = useMarketPrices(market?.instrument);
-  const observation = prices.snapshot?.markets.find(m=>m.id===market?.instrument);
+  // BNB Chain research reads its token price from the BNB market route; other workspaces keep the stock price feed.
+  const bnb = directory.some(r=>r.networks.includes('bnb'));
+  const prices = useMarketPrices(bnb ? undefined : market?.instrument);
+  const bnbObservation = useBnbPrice(bnb ? market?.instrument : undefined);
+  const observation = bnb ? bnbObservation : prices.snapshot?.markets.find(m=>m.id===market?.instrument);
   const summaries = data?.strategies ?? [];
   const visibleStrategies = summaries.filter(s=>(s.name+' '+s.instruments.join(' ')).toLowerCase().includes(filter.toLowerCase()));
 
@@ -318,6 +324,31 @@ function Empty({icon,title,detail,children}:{icon:string;title:string;detail:str
 function Glyph({name}:{name:string}){
   const paths:Record<string,ReactNode>={plus:<path d="M12 5v14M5 12h14"/>,arrow:<path d="M5 12h14m-5-5 5 5-5 5"/>,chevron:<path d="m7 10 5 5 5-5"/>,close:<path d="m6 6 12 12M6 18 18 6"/>,search:<><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></>,lock:<><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></>,document:<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8M8 17h5"/></>,thread:<path d="M20 11a8 8 0 0 1-8 8H5l-3 2V11a9 9 0 0 1 18 0ZM7 9h8M7 13h5"/>,check:<path d="m5 12 4 4L19 6"/>,edit:<><path d="m14 5 5 5M4 20l5-1L20 8a3 3 0 0 0-5-5L4 14v6Z"/></>,chart:<path d="M4 4v16h16M7 14l4-5 4 3 5-7"/>,list:<path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/>,refresh:<><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></>};
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]??paths.document}</svg>;
+}
+// Token price for a BNB Chain research ticker: Binance Web3 RWA Data (the venue trades route through), else the
+// GeckoTerminal pool. The Ondo token is tried first because the chart directory maps Ondo contracts.
+function useBnbPrice(ticker?:string):MarketObservation|undefined{
+  const [seen,setSeen]=useState<{ticker:string;value:MarketObservation}|null>(null);
+  useEffect(()=>{
+    const entry=ticker?BSC_RESEARCH_PRODUCTS[ticker]:undefined,products=entry?[['ondo',entry.ondo],['bstock',entry.bstock]] as const:[];
+    if(!ticker||!products.some(([,p])=>p))return;
+    let live=true;
+    const read=async()=>{
+      for(const [platform,product] of products){
+        if(!product)continue;
+        const r=await fetch(`/api/bnb/market?${new URLSearchParams({ticker,contract:product.contract})}`,{signal:AbortSignal.timeout(12000)}).catch(()=>null);
+        const b=r?.ok?await r.json().catch(()=>null) as GeckoResponse|null:null;
+        const price=b?.binance?.priceUsd??b?.market?.priceUsd;
+        if(!b||price==null)continue;
+        if(live)setSeen({ticker,value:{id:ticker,mint:null,chain:'eip155:56',issuer:platform,tokenSymbol:product.symbol,priceUsd:price,change24hPct:b.binance?null:b.market?.change24h??null,
+          source:b.binance?.source??b.market?.source??null,observedAt:b.binance?.observedAt??b.market?.observedAt}});
+        return;
+      }
+    };
+    void read();const timer=setInterval(()=>{if(!document.hidden)void read();},60000);
+    return()=>{live=false;clearInterval(timer);};
+  },[ticker]);
+  return seen&&seen.ticker===ticker?seen.value:undefined;
 }
 type JourneyStep={label:string;state:'done'|'now'|'todo';go?:()=>void};
 type NextStep={text:string;detail?:string;action?:{label:string;run:()=>void}};
