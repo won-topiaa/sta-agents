@@ -4,7 +4,7 @@
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
-> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · Demo video (≤ 4 min): _to be added_ · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
+> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
 
 ---
 
