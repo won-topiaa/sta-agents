@@ -272,8 +272,11 @@ export class AgentStore extends ResearchStore {
       if(bsc){const min=BSC_MIN_LEG_ATOMS,small=a.legs.filter(l=>BigInt(l.inputAtoms)<min);
         if(small.length){a={legs:a.legs.filter(l=>BigInt(l.inputAtoms)>=min),cashAtoms:(BigInt(a.cashAtoms)+small.reduce((n,l)=>n+BigInt(l.inputAtoms),0n)).toString(),belowMinimum:small.map(l=>l.instrument)};}
         // A rebalance keeps a stock it already holds for this strategy as it is: buying it again would double the position.
-        if(options.sells){const kept=new Set(options.sells.map(h=>h.instrument).filter(i=>c.weights.some(w=>w.instrument===i&&w.weightBps>0)));
-          if(kept.size)a={...a,legs:a.legs.filter(l=>!kept.has(l.instrument)),kept:[...kept]};}
+        // `held` is what the research run treated as held (including a purchase whose delivered amount is unknown);
+        // `sells` only sizes the sales. The kept stock's share of the budget stays in cash.
+        if(options.sells){const kept=new Set((options.held??options.sells.map(h=>h.instrument)).filter(i=>c.weights.some(w=>w.instrument===i&&w.weightBps>0)));
+          if(kept.size){const k=a.legs.filter(l=>kept.has(l.instrument));
+            a={...a,legs:a.legs.filter(l=>!kept.has(l.instrument)),cashAtoms:(BigInt(a.cashAtoms)+k.reduce((n,l)=>n+BigInt(l.inputAtoms),0n)).toString(),kept:[...kept]};}}
         if(!a.legs.length&&!(options.sells??[]).some(h=>!c.weights.some(w=>w.instrument===h.instrument&&w.weightBps>0)))reject(a.kept?.length?'You already hold every stock this strategy keeps; there is nothing to buy or sell.':'Every purchase in this plan is below the 5 USDT minimum order. Raise the budget or choose fewer stocks.',409);
         if(a.legs.some(l=>BigInt(l.inputAtoms)>BSC_MAX_LEG_ATOMS))reject('A single purchase is capped at 200 USDT on BNB Chain. Lower the budget or the per-stock limit.',409);}
       // Buying-only (entry) filters and the hold buffer keep stocks already held. A run that did not know the account's
@@ -414,12 +417,7 @@ export class AgentStore extends ResearchStore {
     const {plan:p,phase,doc}=this.bscStep(address,id,index),s=this.get(this.owner(address),p.strategyId);
     if(!['APPROVED','PARTIAL'].includes(p.status)||briefHash(s)!==p.briefHash||Date.now()>p.expiresAt)reject('This approval is no longer current.',409);
     if(index>0&&this.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=?').get(id,index-1)?.phase!=='RECONCILED')reject('Wait for the previous trade receipt.',409);
-    // The router allowance belongs to the wallet, not to a plan: another live plan's prepared or sent step could spend
-    // this step's approval (or this one spend its), so one trade at a time per wallet.
-    for(const o of this.db.prepare("SELECT p.id,p.document FROM agent_plans p JOIN agent_steps s ON s.plan_id=p.id WHERE p.owner=? AND p.id<>? AND p.status IN ('APPROVED','PARTIAL') AND s.phase IN ('APPROVE_PREPARED','APPROVE_SENT','SWAP_PREPARED','SUBMITTED')").all(this.owner(address),id)){
-      const d=JSON.parse(o.document);
-      if(d.chain==='eip155:56'&&Date.now()<=d.expiresAt&&!this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(o.id))reject('Another plan has a trade in progress in this wallet. Finish or stop it first.',409);
-    }
+    this.assertNoOtherTrade(this.owner(address),id,p.legs[index]);
     if(['SUBMITTED','RECONCILED','UNKNOWN','APPROVE_SENT'].includes(phase))reject('Check this trade before preparing another. No automatic replay.',409);
     // A prepared swap that was never reported may still have been sent. If the wallet has sent anything since, a second
     // swap is built only when this step's own exact approval shows the first did not run: the quote must then still find
@@ -427,6 +425,19 @@ export class AgentStore extends ResearchStore {
     const moved=phase==='SWAP_PREPARED'&&doc.prepared&&BigInt(nonceNow)>BigInt(doc.prepared.nonce);
     if(moved&&!approvedHere(doc))reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
     return {plan:p,doc,guard:{phase,preparedAt:doc.prepared?.at??null,allowanceMustRemain:Boolean(moved)}};
+  }
+  // The router allowance belongs to the wallet and the token it spends, not to a plan: another live plan's step that
+  // approved, is spending, or still holds an approval of the same token (a swap that reverted keeps it) could spend
+  // this step's approval, or this one spend its. So one trade per token at a time in a wallet: purchases all spend the
+  // stablecoin, a sale spends its stock token. Agentic plans trade from the Agentic Wallet, a different wallet.
+  assertNoOtherTrade(owner,id,leg) {
+    const spends=l=>l?.side==='SELL'?String(l.productContract).toLowerCase():'STABLE',mine=spends(leg);
+    for(const o of this.db.prepare("SELECT p.id,p.strategy,p.document,s.step FROM agent_plans p JOIN agent_steps s ON s.plan_id=p.id WHERE p.owner=? AND p.id<>? AND p.status IN ('APPROVED','PARTIAL','UNKNOWN') AND s.phase IN ('APPROVE_PREPARED','APPROVE_SENT','ALLOWANCE_READY','SWAP_PREPARED','SUBMITTED','FAILED')").all(owner,id)){
+      const d=JSON.parse(o.document);
+      if(d.chain!=='eip155:56'||Date.now()>d.expiresAt||spends(d.legs[o.step])!==mine||this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(o.id))continue;
+      let name='';try{name=this.get(owner,o.strategy).name;}catch{}
+      reject(`Another plan has a trade in progress in this wallet${name?` (${name})`:''}. Finish or stop it first.`,409);
+    }
   }
   // `guard` (from assertBscPreparable) is re-checked after the gateway call: the plan may have been revoked, handed
   // to the Agentic Wallet, or this step prepared or sent from another tab meanwhile. A stale preparation is refused
@@ -438,6 +449,8 @@ export class AgentStore extends ResearchStore {
         if(!['APPROVED','PARTIAL'].includes(p.status)||Date.now()>p.expiresAt)reject('This approval is no longer current.',409);
         if(this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(id))reject('This plan runs in your Agentic Wallet. Use its controls.',409);
         if(phase!==guard.phase||(doc.prepared?.at??null)!==guard.preparedAt)reject('This trade changed while it was being prepared. Refresh and try again.',409);
+        // Another plan may have prepared a trade of the same token while the gateway was building this one.
+        this.assertNoOtherTrade(this.owner(address),id,p.legs[index]);
       }
       // This step's exact approval succeeded and no swap of it is recorded, yet the router needs a new approval: the
       // allowance was spent, so a swap of this leg may already have run (a second signature, or a swap reported as failed

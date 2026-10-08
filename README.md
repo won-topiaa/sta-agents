@@ -4,7 +4,7 @@
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
-> Live app: _to be added_ · Demo video (≤ 4 min): _to be added_ · Mainnet transactions: _to be added_
+> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · Demo video (≤ 4 min): _to be added_ · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
 
 ---
 
@@ -58,6 +58,34 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 | Wallet | `GET /api/v1/dex/balance/all-token-balances-by-address` | Holdings view |
 | Agentic Wallet (`@binance/agentic-wallet`) | `auth signin/verify`, `wallet address/settings/left-quota`, `market-order swap/list` | QR sign-in from the agent card; the limits Binance enforces; autonomous legs |
 
+## Mainnet transactions (2026-10-08)
+
+One research request, run by two agents with the same rules: *"25 USDT in NVDA, AVGO, MSFT, GOOGL, META, AMZN, AAPL, TSM for one year, targeting 3% a year, max loss 25%"*. Both designs passed (typical year +25.8% and +21.6%, worst drop −21.5% and −21.3% over the whole five-year test), were approved, bought, and then sold back to USDT.
+
+**You approve every trade**: Phantom wallet `0xf418755edf574Cf8Dc7af11493cE1c9d5c288721`, each leg signed by the owner.
+
+| Side | Stock | Transaction |
+|---|---|---|
+| Buy | AAPL | [`0x529657d6…4b42`](https://bscscan.com/tx/0x529657d6304282a3a73b84b60280cceb9217125417d20bce929c223765f74b42) |
+| Buy | MSFT | [`0x615cd24b…c728`](https://bscscan.com/tx/0x615cd24b2a72c7eab47a3160b8a62acd2923611cf1cee89b163ec2011c5bc728) |
+| Buy | NVDA | [`0x491eae04…395c`](https://bscscan.com/tx/0x491eae04702fef234d081b43682c39dce2872051448eec4784f6d4c8024c395c) |
+| Sell | NVDA | [`0x41ee0ca4…4238`](https://bscscan.com/tx/0x41ee0ca42e8a6fb434f899402be1def884bdf466f4f62e9917a4656479b24238) |
+| Sell | MSFT | [`0x1a42035b…d465`](https://bscscan.com/tx/0x1a42035bb5b0127a41b7c27b5d7bdfb353227a1631784cbfaabf4eef1643d465) |
+| Sell | AAPL | [`0x141d0b61…ea3d`](https://bscscan.com/tx/0x141d0b617e95b52a2306db8b3fc2930219b80109d9e5c056c0eac5467e29ea3d) |
+
+**Trades on its own within limits**: Binance Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`, one plan approval, then the agent placed each order.
+
+| Side | Stock | Transaction |
+|---|---|---|
+| Buy | MSFT | [`0x29f83b14…40ae`](https://bscscan.com/tx/0x29f83b14c8cbe6ef5afd22eea77d64306647075a3428a1825ddbf56ae36240ae) |
+| Buy | NVDA | [`0x807d0df0…7dba`](https://bscscan.com/tx/0x807d0df0b4b802c2a35a8634c1329ca8f3fafaf5ebf413fa6812f0813e0e7dba) |
+| Buy | TSM | [`0x1a0f31ce…6350`](https://bscscan.com/tx/0x1a0f31cefe86c16875581e212627e31092950db7d3ac31db1a05ddc6ec1f6350) |
+| Sell | NVDA | [`0xafe86252…f1fd`](https://bscscan.com/tx/0xafe86252fa983d2f3a9148d6bd3746d836213a7eb1066cfa86704eb113c4f1fd) |
+| Sell | MSFT | [`0x37a2e58d…577f`](https://bscscan.com/tx/0x37a2e58d0d2491b035c9b8f98867333e81a10cdfbd582ecade8dc1d74ae3577f) |
+| Sell | TSM | [`0xdb725691…6874`](https://bscscan.com/tx/0xdb7256917cdf255359ee62a5f2d47bfc28cfcac5ddf117f3fca82d95da186874) |
+
+Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ orders) led to the two execution checks added under *Safety boundaries*.
+
 ## Safety boundaries
 
 **The model**
@@ -76,6 +104,8 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 - The swap's target is the documented router, `from` is the owner, `value` is 0, and the selector is known.
 - Calldata contains the approved tokens and exact amount, and the minimum received is within slippage.
 - The dry run succeeds.
+- Routes that fill from a market maker's signed order (RFQ) are skipped: those orders expire seconds after the quote, before a person can confirm in a wallet. With no other route, nothing is offered for signing.
+- The gas limit is the node's own estimate plus 30%, never less than the route's figure (one route asked for 250k on a swap that used ~950k).
 - BNB for gas and the USDT balance are checked first.
 - After the wallet sends, the on-chain transaction must be byte-identical to the prepared one.
 - If the wallet's nonce moved after preparation, the same leg is never rebuilt, so it cannot be bought twice.

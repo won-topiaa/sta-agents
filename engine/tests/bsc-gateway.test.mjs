@@ -59,17 +59,19 @@ async function call(server,method,path,body,token='t0k'){
   try{const r=await fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return{status:r.status,body:await r.json()};}
   finally{server.close();}
 }
-function fakeClient({allowance=0n,status='TRADING',simulation=received(),gas=10n**16n,funds=10n**21n,price='241',ratio='1',impact='0.1',out='103615607209127732'}={}){
+function fakeClient({allowance=0n,status='TRADING',simulation=received(),gas=10n**16n,funds=10n**21n,price='241',ratio='1',impact='0.1',out='103615607209127732',estimate=100000n,routes=null,rfq=[]}={}){
   const seen=[];
-  const client={get:async(path)=>{seen.push(path);
+  const client={get:async(path,params={})=>{seen.push(path);
       if(path.endsWith('/rwa/tokens'))return [{tokenContractAddress:stock,platformId:'bstock',tokenSymbol:'NVDAB',decimals:'18',underlyingTicker:'NVDA',tokenToShareRatio:ratio,tokenPrice:price,statusInfo:{reasonCode:status}}];
-      if(path.endsWith('/aggregator/quote'))return [{quoteId:'q1',vendorName:'LiquidMesh',executionMode:'SWAP',toTokenAmount:out,priceImpactPercent:impact,isBest:true}];
-      if(path.endsWith('/aggregator/swap'))return built();
+      if(path.endsWith('/aggregator/quote'))return routes??[{quoteId:'q1',vendorName:'LiquidMesh',executionMode:'SWAP',toTokenAmount:out,priceImpactPercent:impact,isBest:true}];
+      // A route listed in rfq fills through the RFQ adapter: its address appears after the checked head of the calldata.
+      if(path.endsWith('/aggregator/swap'))return rfq.includes(params.quoteId)?built({data:swapData+'0'.repeat(24)+'7977f3e8e063a4ee95b5f396d63485dbdea4515d'}):built();
       if(path.endsWith('/approve-transaction'))return approval(amount);
       throw new Error('unexpected '+path);},
     post:async(path)=>{seen.push(path);if(path.endsWith('/simulate'))return simulation;throw new Error('unexpected '+path);}};
   const rpc=async(method,params)=>{seen.push(method);
     if(method==='eth_getBalance')return '0x'+gas.toString(16);
+    if(method==='eth_estimateGas'){if(estimate==null)throw new Error('RPC eth_estimateGas: execution reverted');return '0x'+estimate.toString(16);}
     if(method==='eth_call')return '0x'+(params[0].data.startsWith('0x70a08231')?funds:allowance).toString(16).padStart(64,'0');return null;};
   return{client,rpc,seen};
 }
@@ -81,6 +83,25 @@ test('gateway: approval first, then a checked and simulated swap; refuses closed
   f=fakeClient({allowance:BigInt(amount)});
   r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
   assert.equal(r.body.data.step,'SWAP');assert.equal(r.body.data.tx.to,BSC_ROUTER);assert.ok(f.seen.some(p=>p.endsWith('/simulate')));
+  assert.equal(r.body.data.tx.gas,'450000');                                   // the route's limit stays when it is enough
+  // A market-maker (RFQ) route expires before a person can sign: the next route is used, and with none, nothing is signed.
+  const two=[{quoteId:'q1',vendorName:'LiquidMesh',executionMode:'SWAP',toTokenAmount:'103615607209127732',priceImpactPercent:'0.1',isBest:true},
+    {quoteId:'q2',vendorName:'OtherDex',executionMode:'SWAP',toTokenAmount:'103615607209127732',priceImpactPercent:'0.2'}];
+  f=fakeClient({allowance:BigInt(amount),routes:two,rfq:['q1']});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.data.step,'SWAP');assert.equal(r.body.data.quote.vendor,'OtherDex');assert.ok(!r.body.data.tx.data.includes('7977f3e8'));
+  f=fakeClient({allowance:BigInt(amount),routes:two,rfq:['q1','q2']});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'RFQ');assert.ok(r.body.error.quote);assert.ok(!f.seen.some(p=>p.endsWith('/simulate')));
+  f=fakeClient({allowance:BigInt(amount),estimate:1208871n});                  // a stock-token swap needing ~1.2M gas
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.data.tx.gas,'1571532');                                  // the node's estimate plus 30%
+  f=fakeClient({allowance:BigInt(amount),estimate:null});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'GAS');
+  f=fakeClient({allowance:BigInt(amount),estimate:2500000n});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'GAS');
   f=fakeClient({allowance:2n**256n-1n});                                       // an unlimited allowance left by another app
   r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
   assert.equal(r.body.data.step,'APPROVE');                                    // is set back to exactly this leg first
@@ -174,4 +195,22 @@ test('gateway: an unclear wallet answer is AGENTIC_UNKNOWN; fills are reported i
   assert.equal(r.body.error.orderId,'o-7');
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw:wrap,token:'t0k'}),'GET','/v1/agentic/order?orderId=o-9');
   assert.equal(r.body.data[0].filledTokenAtoms,(2n*10n**18n).toString());   // 10 shares at 5 shares a token
+  // The swap can return the id with its last digits off (the same double): the one record with that double answers,
+  // under the asked id; ids from other doubles never do.
+  let records=[{orderId:'26100800001950612010',status:'FINISHED',fromToken:BSC_USDT,toToken:stock,toTokenActualQty:'10'},{orderId:'26100800001950600000',status:'FINISHED'}];
+  const booked=async args=>args[1]==='address'?{addresses:[{binanceChainId:'56',address:user}]}:args[1]==='swap'?{orderId:'26100800001950611986'}
+    :args.includes('--orderId')?{total:0,list:[]}:{total:records.length,list:records};
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw:booked,token:'t0k'}),'GET','/v1/agentic/order?orderId=26100800001950611986');
+  assert.equal(r.body.data.list.length,1);assert.equal(r.body.data.list[0].orderId,'26100800001950611986');
+  assert.equal(r.body.data.list[0].bookedOrderId,'26100800001950612010');assert.equal(r.body.data.list[0].status,'FINISHED');
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw:booked,token:'t0k'}),'GET','/v1/agentic/order?orderId=26100800001950700000');
+  assert.equal(r.body.data.list.length,0);                                     // no record with that double: still pending
+  // Two records with the same double: ambiguous unless this gateway sent the swap and knows its tokens.
+  records=[{orderId:'26100800001950611970',status:'FINISHED',fromToken:stock,toToken:BSC_USDT},...records];
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw:booked,token:'t0k'}),'GET','/v1/agentic/order?orderId=26100800001950611986');
+  assert.equal(r.body.data.list.length,0);
+  const g=createGateway({client:f.client,rpc:f.rpc,baw:booked,token:'t0k'});
+  r=await call(g,'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
+  r=await call(g,'GET','/v1/agentic/order?orderId=26100800001950611986');
+  assert.equal(r.body.data.list.length,1);assert.equal(r.body.data.list[0].bookedOrderId,'26100800001950612010');   // the USDT -> stock record
 });

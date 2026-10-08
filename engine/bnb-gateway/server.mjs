@@ -9,13 +9,15 @@ import {readFileSync,appendFileSync,mkdirSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {timingSafeEqual,randomUUID} from 'node:crypto';
 import {web3Client,rwa,trading,transaction,wallet,BSC_USDT,BSC_USDC} from '../lib/binance-web3.mjs';
-import {checkApproval,checkSwap,checkSimulation,checkSlippage,isAddress,sameAddress,BSC_ROUTER,ExecutionCheckError} from '../lib/bsc-execution.mjs';
+import {checkApproval,checkSwap,checkSimulation,checkSlippage,isAddress,sameAddress,BSC_ROUTER,MAX_GAS,ExecutionCheckError} from '../lib/bsc-execution.mjs';
 
 const env=k=>process.env[k];
 function readEnvFile(path){return Object.fromEntries(readFileSync(path,'utf8').split('\n').filter(l=>/^[A-Z0-9_]+=/.test(l)).map(l=>[l.slice(0,l.indexOf('=')),l.slice(l.indexOf('=')+1).trim()]));}
 const RPC=env('BSC_RPC_URL')||'https://bsc-dataseed.bnbchain.org';
 const STABLES=[BSC_USDT,BSC_USDC];
 
+// Adapters that fill a swap from a market maker's signed, seconds-long order (address hex, lower case, no 0x).
+const RFQ_ADAPTERS=['7977f3e8e063a4ee95b5f396d63485dbdea4515d'];
 export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,log=()=>{},maxStable=200n*10n**18n,minGasWei=300000000000000n}){
   if(typeof token!=='string'||!token)throw new Error('The gateway needs a token.');
   let universe=null,loading=null;
@@ -97,11 +99,36 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
       const built=await trading.approve(client,{tokenContractAddress:fromToken,approveAmount:String(amount),vendor:route.vendorName});
       return {step:'APPROVE',tx:checkApproval(built,{user,token:fromToken,amount:String(amount)}),quote};
     }
-    const built=await trading.swap(client,{amount:String(amount),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:user,quoteId:route.quoteId,slippagePercent:String(slippagePercent)});
-    const tx=checkSwap(built,{user,fromToken,toToken,amount:String(amount),quotedOut:String(route.toTokenAmount),slippagePercent});
+    // A market-maker (RFQ) leg carries a signed order that expires seconds after the quote, before a person can confirm
+    // it in a wallet (2026-10-08: three hand-signed swaps through RFQ adapter 0x7977…515d reverted RFQ_OrderExpired;
+    // the six without it filled). Such a route gives way to the next-best one; with none left, nothing is signed.
+    const others=(Array.isArray(routes)?routes:[]).filter(r=>r!==route&&(!r.executionMode||r.executionMode==='SWAP'))
+      .sort((a,b)=>BigInt(String(b.toTokenAmount))>BigInt(String(a.toTokenAmount))?1:-1);
+    let tx=null,chosen=null;
+    for(const [i,r] of [route,...others].slice(0,3).entries()){
+      let t;
+      try{
+        if(i>0){impactBound(r);priceBound(stock,buying,BigInt(amount),BigInt(String(r.toTokenAmount)));}
+        const built=await trading.swap(client,{amount:String(amount),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:user,quoteId:r.quoteId,slippagePercent:String(slippagePercent)});
+        t=checkSwap(built,{user,fromToken,toToken,amount:String(amount),quotedOut:String(r.toTokenAmount),slippagePercent});
+      }catch(e){if(i===0)throw e;continue;}   // the best route's refusal stands; a weaker alternative is just skipped
+      if(RFQ_ADAPTERS.some(a=>t.data.toLowerCase().includes(a)))continue;
+      tx=t;chosen=r;break;
+    }
+    if(!tx)throw unfunded('RFQ','Only a market-maker route is available right now, and its quote expires before a wallet can sign. Try again in a minute.');
+    if(chosen!==route){
+      const p=priceBound(stock,buying,BigInt(amount),BigInt(String(chosen.toTokenAmount)));
+      Object.assign(quote,{vendor:chosen.vendorName,toTokenAmount:String(chosen.toTokenAmount),priceImpactPercent:chosen.priceImpactPercent,impliedPrice:p.implied});
+    }
     const sim=checkSimulation(await transaction.simulate(client,{from:tx.from,to:tx.to,value:tx.value,data:tx.data}),
       {user,fromToken,toToken,amount:String(amount),minReceiveAmount:tx.minReceiveAmount});
-    return {step:'SWAP',tx,quote,simulation:sim,preparedId:randomUUID()};
+    // The route's gas figure can be far too low for stock tokens (a 250k limit ran out on a swap that needs ~1.2M), so
+    // the wallet gets the node's own estimate plus 30%, never less than the route asked for.
+    let estimate;try{estimate=BigInt(await rpc('eth_estimateGas',[{from:tx.from,to:tx.to,value:'0x0',data:tx.data},'latest']));}
+    catch{throw new ExecutionCheckError('GAS','The network could not estimate this swap. Get a new quote.');}
+    const gas=estimate*13n/10n>BigInt(tx.gas)?estimate*13n/10n:BigInt(tx.gas);
+    if(gas>MAX_GAS)throw new ExecutionCheckError('GAS','The transaction asks for an unusual amount of gas.');
+    return {step:'SWAP',tx:{...tx,gas:gas.toString()},quote,simulation:sim,preparedId:randomUUID()};
   }
   // On-chain balances of listed stock tokens (balanceOf), for whole-holding sales. Only known tokens, at most 40.
   async function holdings(address,list){
@@ -137,6 +164,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     return r;
   }
   // Agentic Wallet: fixed commands only, always --json, arguments as an array (no shell).
+  const submitted=new Map();   // order id a swap returned -> its tokens (see order below)
   const agentic={
     status:()=>baw(['wallet','status']),address:()=>baw(['wallet','address']),settings:()=>baw(['wallet','settings']),quota:()=>baw(['wallet','left-quota']),
     signin:()=>baw(['auth','signin']),verify:qrCodeId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{3,79}$/.test(qrCodeId))throw new ExecutionCheckError('INPUT','Invalid QR id.');return baw(['auth','verify','--qrCodeId',qrCodeId],330000);},
@@ -156,10 +184,22 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
       if(!route)throw new ExecutionCheckError('NO_ROUTE','No route for this trade now.');
       impactBound(route);priceBound(stock,buying,payAtoms,BigInt(String(route.toTokenAmount)));
       const qty=buying?String(fromTokenQty):tokensToShares(payAtoms,stock);   // the CLI reads a stock-token amount as shares
-      return baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',qty,
+      const r=await baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',qty,
         '--slippage',String(slippage),'--mev','true'],120000);
+      if(r?.orderId!=null)submitted.set(String(r.orderId),{fromToken,toToken});
+      return r;
     },
-    order:async orderId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(orderId))throw new ExecutionCheckError('INPUT','Invalid order id.');return withTokenFills(await baw(['market-order','list','--orderId',orderId]));},
+    // The swap can return a market order's id with its last digits off (2026-10-08: 26100800001950611986 for the record
+    // booked as 26100800001950612010, 26100800001950643492 for 26100800001950643456): the same double, so precision is
+    // lost before the id reaches us. An exact miss takes the one record whose id is the same double, narrowed by the
+    // swap's tokens when this gateway sent it, and reports it under the submitted id. Two candidates left: still pending.
+    order:async orderId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(orderId))throw new ExecutionCheckError('INPUT','Invalid order id.');
+      const exact=await baw(['market-order','list','--orderId',orderId]),listOf=r=>Array.isArray(r)?r:r?.list??r?.orders??[];
+      if(listOf(exact).length||!/^\d{16,40}$/.test(orderId))return withTokenFills(exact);
+      const want=Number(orderId),mine=submitted.get(orderId);
+      const near=listOf(await baw(['market-order','list'])).filter(o=>/^\d{16,40}$/.test(String(o?.orderId??''))&&Number(o.orderId)===want
+        &&(!mine||sameAddress(o.fromToken,mine.fromToken)&&sameAddress(o.toToken,mine.toToken)));
+      return withTokenFills(near.length===1?{total:1,list:[{...near[0],orderId,bookedOrderId:near[0].orderId}]}:exact);},
   };
   const routes={
     'GET /v1/health':async()=>({ok:true,router:BSC_ROUTER}),

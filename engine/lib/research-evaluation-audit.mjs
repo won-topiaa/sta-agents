@@ -6,7 +6,7 @@ export function auditEvaluation(result,input){
  for(const c of result.candidates){
   if(c.weights.some(w=>!input.strategy.instruments.includes(w.instrument)||!Number.isSafeInteger(w.weightBps)||w.weightBps<0||w.weightBps>input.goal.maxWeightBps)||new Set(c.weights.map(w=>w.instrument)).size!==c.weights.length||c.weights.reduce((n,w)=>n+w.weightBps,0)>10000-input.goal.minCashBps)reject('Calculated weights violate research limits.');
   if(!['horizonMedianBps','holdoutDrawdownBps','stressHorizonMedianBps','holdoutReturnBps'].every(k=>Number.isSafeInteger(c[k]))||c.windowCount<3||!Array.isArray(c.curve?.dates)||c.curve.strategy.length!==c.curve.dates.length||c.curve.strategy.some(x=>!Number.isFinite(x)||x<=0))reject('Calculated research evidence is invalid.');
-  const pass=c.horizonMedianBps>=input.goal.targetReturnBps&&c.holdoutDrawdownBps<=input.goal.maxDrawdownBps&&c.stressHorizonMedianBps>=input.goal.targetReturnBps&&c.holdoutReturnBps>0&&c.weights.length>0;
+  const pass=c.horizonMedianBps>=input.goal.targetReturnBps&&c.holdoutDrawdownBps<=input.goal.maxDrawdownBps&&(c.fullDrawdownBps??0)<=input.goal.maxDrawdownBps&&c.stressHorizonMedianBps>=input.goal.targetReturnBps&&c.holdoutReturnBps>0&&c.weights.length>0;
   if(c.verdict==='ELIGIBLE'&&(!pass||c.reasons.length))reject('A failed calculation cannot authorize a strategy.');
   checks.push({candidateId:c.id,verdict:c.verdict,checks:['universe','integer_weights','concentration','cash','holdout','cost_stress','finite_curve'],specHash:c.specHash});
  }

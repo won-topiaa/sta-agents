@@ -59,8 +59,11 @@ export function createSellPlan(store,address,strategyId,{kind,holdings,wallet='P
     const now=Date.now(),contracts=new Set(legs.map(l=>l.productContract.toLowerCase()));
     const inFlight=id=>Boolean(store.db.prepare(`SELECT 1 FROM agent_steps WHERE plan_id=? AND phase IN (${IN_FLIGHT.map(()=>'?').join(',')}) LIMIT 1`).get(id,...IN_FLIGHT)
       ||store.db.prepare("SELECT 1 FROM agent_agentic_runs WHERE plan_id=? AND status IN ('RUNNING','PAUSED')").get(id));
+    // An Agentic sale whose run has ended (refused, failed or stopped) with nothing in flight is no longer trying, so
+    // the next daily check may queue the exit again even though the plan's window is still open.
+    const ended=id=>Boolean(store.db.prepare("SELECT 1 FROM agent_agentic_runs WHERE plan_id=? AND status NOT IN ('RUNNING','PAUSED')").get(id));
     const clash=store.db.prepare(`SELECT id,document FROM agent_plans WHERE owner=? AND strategy=? AND status IN (${OPEN.map(()=>'?').join(',')})`).all(owner,s.id,...OPEN)
-      .find(r=>{const d=JSON.parse(r.document);return (d.wallet??'PERSONAL')===wallet&&d.legs.some(l=>l.side==='SELL'&&contracts.has(String(l.productContract).toLowerCase()))&&(d.expiresAt>now||inFlight(r.id));});
+      .find(r=>{const d=JSON.parse(r.document);return (d.wallet??'PERSONAL')===wallet&&d.legs.some(l=>l.side==='SELL'&&contracts.has(String(l.productContract).toLowerCase()))&&((d.expiresAt>now&&!ended(r.id))||inFlight(r.id));});
     if(clash){const e=new ResearchStoreError('A sale of this holding is already open. Finish or revoke it first.',409);e.planId=clash.id;throw e;}
     const runId=`${kind.toLowerCase()}:${randomUUID()}`;
     const document={schema:'xtxc.research-plan/v1',kind,owner:address,strategyId:s.id,briefHash:briefHash(s),runId,candidateId:kind,reportHash:null,goal:null,

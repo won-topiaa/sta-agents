@@ -122,8 +122,8 @@ export async function POST(request:Request){
       let options={};
       if(bsc&&b.sellOutside===true){
         const {strategy}=s.reviewCandidate(address,str(b.runId),str(b.candidateId),str(b.reportHash)),wallet=saleWallet(s,address,strategy);
-        const held=ownHoldings(s,address,strategy,wallet.kind,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
-        options={sells:held.map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw})),wallet:wallet.kind};
+        const reply=await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)),own=ownHoldings(s,address,strategy,wallet.kind,reply);
+        options={sells:own.map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw})),held:heldForRun(s,address,strategy,wallet.kind,reply),wallet:wallet.kind};
       }
       // Independent strategy approvals never wait on another strategy's orders.
       const plan=await s.approveReplacingUnused(address,str(b.runId),str(b.candidateId),str(b.reportHash),b.draftId==null?null:str(b.draftId),async(rawOwner:string,id:string)=>{

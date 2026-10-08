@@ -21,6 +21,8 @@ const labels:Record<string,string>={QUEUED:'Queued',RUNNING:'Researching',WAITIN
 // Plain-language wording for results and plans; the stored values stay as the engine reports them.
 const signed=(bps:number)=>`${bps>0?'+':bps<0?'−':''}${pct(Math.abs(bps))}`;
 const drop=(bps:number)=>`−${pct(Math.abs(bps))}`;
+// The loss limit holds over the whole backtest and the held-out test; show the deeper of the two.
+const worstDrop=(c:ResearchCandidate)=>Math.max(c.holdoutDrawdownBps,c.fullDrawdownBps??0);
 export const horizonText=(days:number)=>({30:'1-month',90:'3-month',180:'6-month',365:'1-year'} as Record<number,string>)[days]??`${days}-day`;
 export const planStatusText:Record<string,string>={PROPOSED:'Needs your approval',APPROVED:'Ready to trade',PARTIAL:'In progress',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
 export const runActive=active;
@@ -107,12 +109,12 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
   // A run is approved at most once; an approval that lapsed needs a fresh run.
   const used=agent.data?.plans.find(p=>p.runId===run.id&&!p.kind),ended=used&&['EXPIRED','SUPERSEDED','REVOKED'].includes(used.status);
   return <div className="ra-results"><header><span className={`ra-verdict ${fits?'ra-ok':'ra-no'}`}>{fits?`${fits} of ${r.candidates.length} fit your limits`:'None fit your limits'}</span><h3>{labels[run.status]}</h3><p>{r.explanation}</p><small>Your goal: {signed(run.goal.targetReturnBps)} over {h.replace('-',' ')} · lose no more than {pct(run.goal.maxDrawdownBps)}{r.agent&&<> · Designed by {r.agent.name}</>}</small></header>
-    <div className="ra-compare" role="group" aria-label="Compare strategies">{r.candidates.map(c=><button key={c.id} aria-pressed={candidate?.id===c.id} onClick={()=>setSelectedCandidate(c.id)}><b>{c.name}</b><Verdict candidate={c}/><span className="ra-compare-num"><em>{signed(c.horizonMedianBps)}</em> typical {h} return</span><small>Worst drop {drop(c.holdoutDrawdownBps)}</small></button>)}</div>
+    <div className="ra-compare" role="group" aria-label="Compare strategies">{r.candidates.map(c=><button key={c.id} aria-pressed={candidate?.id===c.id} onClick={()=>setSelectedCandidate(c.id)}><b>{c.name}</b><Verdict candidate={c}/><span className="ra-compare-num"><em>{signed(c.horizonMedianBps)}</em> typical {h} return</span><small>Worst drop {drop(worstDrop(c))}</small></button>)}</div>
     {(candidate?[candidate]:[]).map(c=><article className="ra-candidate" key={c.id}><div className="ra-candidate-heading"><h4>{c.name}</h4><Verdict candidate={c}/></div>
-      <p className="ra-summary">Over past {h} periods, this strategy&apos;s typical return was <b>{signed(c.horizonMedianBps)}</b>. Its worst drop in the held-out test was <b>{drop(c.holdoutDrawdownBps)}</b>. With trading costs doubled, the typical return was <b>{signed(c.stressHorizonMedianBps)}</b>.</p>
+      <p className="ra-summary">Over past {h} periods, this strategy&apos;s typical return was <b>{signed(c.horizonMedianBps)}</b>. Its worst drop {c.fullDrawdownBps!=null?'over the whole test':'in the held-out test'} was <b>{drop(worstDrop(c))}</b>. With trading costs doubled, the typical return was <b>{signed(c.stressHorizonMedianBps)}</b>.</p>
       <HowItPicks candidate={c}/>
       <Curve candidate={c}/>
-      <dl className="ra-metrics"><div><dt>Typical {h} return</dt><dd>{signed(c.horizonMedianBps)}</dd><small>Median of {c.windowCount} past periods</small></div><div><dt>Worst drop</dt><dd>{drop(c.holdoutDrawdownBps)}</dd><small>Held-out test from {c.holdoutStart}</small></div><div><dt>With doubled costs</dt><dd>{signed(c.stressHorizonMedianBps)}</dd><small>Typical return if trading cost twice as much</small></div></dl>
+      <dl className="ra-metrics"><div><dt>Typical {h} return</dt><dd>{signed(c.horizonMedianBps)}</dd><small>Median of {c.windowCount} past periods</small></div><div><dt>Worst drop</dt><dd>{drop(worstDrop(c))}</dd><small>{c.fullDrawdownBps!=null?`Whole test; ${drop(c.holdoutDrawdownBps)} in the held-out test from ${c.holdoutStart}`:`Held-out test from ${c.holdoutStart}`}</small></div><div><dt>With doubled costs</dt><dd>{signed(c.stressHorizonMedianBps)}</dd><small>Typical return if trading cost twice as much</small></div></dl>
       <Allocation candidate={c} budget={budget} asset={asset} bsc={bsc}/>
       {c.agentChecks&&<AgentChecks checks={c.agentChecks} agentName={r.agent?.name}/>}
       {c.reasons.length>0&&<div className="ra-reasons"><b>{c.verdict==='ELIGIBLE'?'Notes':'Why it does not fit'}</b><ul>{c.reasons.map(x=><li key={x}>{reasonLabels[x]??x}</li>)}</ul>{c.verdict!=='ELIGIBLE'&&<small>Try a lower target, a longer period or different stocks, then run research again.</small>}</div>}

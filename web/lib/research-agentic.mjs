@@ -144,7 +144,7 @@ export async function agenticTick(store,gw,now=Date.now()){
       const walletRefusal=code==='AGENTIC'&&/limit|quota|closed|paused|minimum|invalid|not allowed|insufficient|no route/i.test(message);
       if(gatewayRefusal||walletRefusal){
         setStep(store,run.plan_id,index,'READY',{...doc,error:message});
-        // A closed market, a bad price or the daily limit pass: try again in an hour (the plan deadline still applies).
+        // A closed market, a bad price or the daily limit pass: try again in five minutes (the plan deadline still applies).
         const reason=code==='MARKET'||/closed|paused/i.test(message)?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':null;
         finishRun(store,run.plan_id,reason?'PAUSED':'ATTENTION',reason??`REFUSED_${code||'WALLET'}`);
         continue;

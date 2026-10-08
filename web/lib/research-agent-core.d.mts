@@ -28,8 +28,8 @@ export class AgentStore extends ResearchStore {
   cancel(address:string,id:string):void;
   reviewCandidate(address:string,runId:string,candidateId:string,reportHash:string):{strategy:ResearchStrategy;candidate:ResearchCandidate;input:unknown};
   saveRebalanceDraft(address:string,runId:string,candidateId:string,reportHash:string,allocation:unknown):RebalanceDraft;
-  approve(address:string,runId:string,candidateId:string,reportHash:string,draftId?:string|null,options?:{sells?:SaleHolding[]|null;wallet?:'PERSONAL'|'AGENTIC'}):AgentPlan;
-  approveReplacingUnused(address:string,runId:string,candidateId:string,reportHash:string,draftId:string|null,discardDraft:(owner:string,id:string)=>Promise<unknown>,options?:{sells?:SaleHolding[]|null;wallet?:'PERSONAL'|'AGENTIC'}):Promise<AgentPlan>;
+  approve(address:string,runId:string,candidateId:string,reportHash:string,draftId?:string|null,options?:{sells?:SaleHolding[]|null;held?:string[];wallet?:'PERSONAL'|'AGENTIC'}):AgentPlan;
+  approveReplacingUnused(address:string,runId:string,candidateId:string,reportHash:string,draftId:string|null,discardDraft:(owner:string,id:string)=>Promise<unknown>,options?:{sells?:SaleHolding[]|null;held?:string[];wallet?:'PERSONAL'|'AGENTIC'}):Promise<AgentPlan>;
   plan(address:string,id:string):AgentPlan;
   claimAutonomy(address:string,id:string,policyId:string):void;
   syncAutonomy(address:string,id:string,execution:unknown):void;

@@ -71,7 +71,13 @@ test('rebalance: holdings the approved design no longer holds are sold first, th
   const kept=s.approve(owner,run.id,'c1',run.result.reportHash,null,{sells:[{instrument:'NVDA',contract:nvda,raw:tokens(1)},{instrument:'AMD',contract:amd,raw:tokens(4)}],wallet:'PERSONAL'});
   assert.deepEqual(kept.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD']]);   // NVDA is held and stays in the target: neither sold nor bought again
   assert.deepEqual(kept.keptHoldings,['NVDA']);
+  assert.equal(kept.cashAtoms,tokens(60));   // the kept stock's 15 USDT is neither bought nor lost: it stays in cash
   s.revoke(owner,kept.id);
+  // A holding the run treated as held is kept even when its delivered amount is unknown (so it cannot be sized for sale).
+  const r1=strategyWith(s,{weights:[{instrument:'NVDA',weightBps:2500}]}).run;
+  const unsized=s.approve(owner,r1.id,'c1',r1.result.reportHash,null,{sells:[{instrument:'AMD',contract:amd,raw:tokens(4)}],held:['NVDA','AMD'],wallet:'PERSONAL'});
+  assert.deepEqual(unsized.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD']]);assert.deepEqual(unsized.keptHoldings,['NVDA']);
+  s.revoke(owner,unsized.id);
   const r2=strategyWith(s,{weights:[{instrument:'NVDA',weightBps:2500}]}).run;
   const plan=s.approve(owner,r2.id,'c1',r2.result.reportHash,null,{sells:[{instrument:'AMD',contract:amd,raw:tokens(4)}],wallet:'PERSONAL'});
   assert.deepEqual(plan.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD'],['BUY','NVDA']]);
@@ -192,6 +198,7 @@ test('a BSC preparation is refused when the step changed, the plan ended or the 
   assert.throws(()=>s.bscPrepared(owner,plan.id,0,'SWAP',{tx:tx0},'1',g2),/changed while/);   // never overwrite the other tab's step
   const g3=s.assertBscPreparable(owner,plan.id,0,'1').guard;s.bscSent(owner,plan.id,0,hash(900));
   assert.throws(()=>s.bscPrepared(owner,plan.id,0,'SWAP',{tx:tx0},'1',g3),/changed while|no longer current/);   // sent meanwhile: not re-prepared
+  s.bscReceipt(owner,plan.id,0,{status:'SUCCESS'});   // settled: a sent swap would otherwise hold up the wallet's next purchase
   const r2=strategyWith(s).run,p2=s.approve(owner,r2.id,'c1',r2.result.reportHash),g4=s.assertBscPreparable(owner,p2.id,0,'1').guard;
   s.revoke(owner,p2.id);assert.throws(()=>s.bscPrepared(owner,p2.id,0,'SWAP',{tx:tx0},'1',g4),/no longer current/);
   bindAgentic(s,owner,agenticWallet);
@@ -256,7 +263,7 @@ test('gateway: a stock -> USDT sale gets an exact token approval, then a checked
     // Swap head words: 1 receiver (0 = the sender), 3 input token, 4 amount, 5 output token, 6 minimum received.
     if(path.endsWith('/aggregator/swap'))return {executionMode:'SWAP',tx:{from:user,to:router,data:'0xad43f73d'+hex(0)+hex(0)+hex(0)+word(stock)+hex(amount)+word(BSC_USDT)+hex('356400000000000000000'),value:'0',gas:'450000',minReceiveAmount:'356400000000000000000'}};
     throw new Error('unexpected '+path);},post:async path=>{seen.push(path);return {status:'SUCCESS',balanceChanges:[{owner:user,contractAddress:stock,tokenType:'ERC20',change:'-'+amount},{owner:user,contractAddress:BSC_USDT,tokenType:'ERC20',change:'358000000000000000000'}]};}},
-    rpc:async(method,params)=>{if(method==='eth_getBalance')return '0x'+(10n**16n).toString(16);if(method==='eth_call')return '0x'+(params[0].data.startsWith('0x70a08231')?10n**19n:allowance).toString(16);return null;}};};
+    rpc:async(method,params)=>{if(method==='eth_getBalance')return '0x'+(10n**16n).toString(16);if(method==='eth_estimateGas')return '0x'+(100000n).toString(16);if(method==='eth_call')return '0x'+(params[0].data.startsWith('0x70a08231')?10n**19n:allowance).toString(16);return null;}};};
   let f=fake({});
   let r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:stock,toToken:BSC_USDT,amount});
   assert.equal(r.body.data.step,'APPROVE');assert.equal(r.body.data.tx.to,stock);assert.equal(r.body.data.quote.fromSymbol,'NVDAB');assert.equal(r.body.data.quote.toSymbol,'USDT');
@@ -281,4 +288,18 @@ test('rebalance sells only what this strategy bought in that wallet; an automati
   const b=strategyWith(s,{exit:{stop_loss:0.1}});
   const exit=createSellPlan(s,owner,b.strategy.id,{kind:'EXIT',holdings:[{instrument:'NVDA',contract:nvda,raw:tokens(1)}]});
   assert.ok(exit.expiresAt-exit.createdAt===AUTO_EXIT_MS&&AUTO_EXIT_MS>=3*86400000);
+});
+
+test('an automatic exit whose Agentic run ended with nothing in flight is queued again by the next check',t=>{
+  const s=setup(t),{strategy}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS',exit:{stop_loss:0.1}});bindAgentic(s,owner,agenticWallet);
+  const hold=[{instrument:'NVDA',contract:nvda,raw:tokens(1)}],sell=()=>createSellPlan(s,owner,strategy.id,{kind:'EXIT',wallet:'AGENTIC',holdings:hold});
+  const first=sell();startAgentic(s,owner,first.id,1000);
+  assert.throws(sell,/already open/);                                                     // still trying (running or paused)
+  s.db.prepare("UPDATE agent_agentic_runs SET status='ATTENTION',reason='REFUSED_NO_ROUTE' WHERE plan_id=?").run(first.id);
+  const second=sell();                                                                    // refused for good: the stop is proposed again
+  assert.notEqual(second.id,first.id);
+  startAgentic(s,owner,second.id,1000);
+  s.db.prepare("INSERT INTO agent_steps VALUES(?,0,'UNKNOWN','{}')").run(second.id);
+  s.db.prepare("UPDATE agent_agentic_runs SET status='ATTENTION',reason='NO_ORDER_ID' WHERE plan_id=?").run(second.id);
+  assert.throws(sell,/already open/);                                                     // an order that may have gone through still blocks
 });

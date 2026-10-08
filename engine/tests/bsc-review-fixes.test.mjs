@@ -149,3 +149,24 @@ test('a run treats as held only this strategy\'s own purchases still in the wall
   assert.deepEqual(heldForRun(s,owner,strategy,'PERSONAL',{holdings:[{contract:c0,raw:(BigInt(tokens(2))/50n).toString()}]}),[]);   // a fiftieth left: sold down
   assert.deepEqual(heldForRun(s,owner,strategy,'AGENTIC',{holdings:[{contract:c0,raw:tokens(2)}]}),[]);   // bought in the other wallet
 });
+
+test('one trade per token at a time in a wallet: a mined approval, a sent or a reverted swap blocks another purchase; a sale of a stock does not',t=>{
+  const s=setup(t),{run}=strategyWith(s),plan=s.approve(owner,run.id,'c1',run.result.reportHash);
+  const other=strategyWith(s),plan2=s.approve(owner,other.run.id,'c1',other.run.result.reportHash);
+  approved(s,plan.id);                                                                   // ALLOWANCE_READY: approval mined, no swap yet
+  assert.throws(()=>s.assertBscPreparable(owner,plan2.id,0,'7'),/Another plan has a trade in progress in this wallet \(BSC review\)/);
+  s.bscPrepared(owner,plan.id,0,'SWAP',{tx:swapTx('01')},'6');s.bscSent(owner,plan.id,0,hash(seq++));
+  assert.equal(s.plan(owner,plan.id).status,'UNKNOWN');                                  // a sent swap marks the plan UNKNOWN
+  assert.throws(()=>s.assertBscPreparable(owner,plan2.id,0,'7'),/Another plan has a trade in progress/);
+  s.bscReceipt(owner,plan.id,0,{status:'FAILED'});                                       // a reverted swap keeps its allowance
+  assert.throws(()=>s.assertBscPreparable(owner,plan2.id,0,'7'),/Another plan has a trade in progress/);
+  // A sale spends its stock token, not the stablecoin: closing a holding is not held up by a purchase.
+  const sale=createSellPlan(s,owner,other.strategy.id,{kind:'CLOSE',holdings:[{instrument:'NVDA',contract:nvda,raw:tokens(3)}]});
+  assert.ok(s.assertBscPreparable(owner,sale.id,0,'7').guard);
+  s.revoke(owner,sale.id);s.revoke(owner,plan.id);
+  // Checked again after the gateway call: a purchase another plan prepared meanwhile wins.
+  const {guard}=s.assertBscPreparable(owner,plan2.id,0,'7');
+  const third=strategyWith(s),plan3=s.approve(owner,third.run.id,'c1',third.run.result.reportHash);
+  s.bscPrepared(owner,plan3.id,0,'APPROVE',{tx:approveTx},'7',s.assertBscPreparable(owner,plan3.id,0,'7').guard);
+  assert.throws(()=>s.bscPrepared(owner,plan2.id,0,'APPROVE',{tx:approveTx},'7',guard),/Another plan has a trade in progress/);
+});
