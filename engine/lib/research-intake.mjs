@@ -22,6 +22,8 @@ const companyWords={NVDA:/엔비디아|\bnvidia\b/i,AMD:/에이엠디|\badvanced
 // from the research data (dev/gen_bsc_themes.py). Either way they only seed a draft the user reviews.
 export const CATALOGS={solana:{themes:RESEARCH_THEMES,starter:STARTER_UNIVERSE,executionChain:'solana:mainnet',evidenceChain:'solana:devnet'},
  bsc:{themes:BSC_THEMES,starter:BSC_STARTER,executionChain:'eip155:56',evidenceChain:'eip155:56'}};
+// Words that ask for a theme's other names next to the named ones.
+const addsTheme=/\b(?:other|others|plus|and more|as well as|including|along with|besides|in addition to|such as|e\.g\.)\b|\b(?:stocks?|names|companies)\s+like\b|외에|이외|말고도|포함|(?:^|[\s,])등(?:[\s의도]|$)|다른\s/i;
 const mentioned=(ticker,text)=>new RegExp(`(^|[^A-Za-z0-9])${ticker.replaceAll('.','\\.')}([^A-Za-z0-9]|$)`,'i').test(text)||companyWords[ticker]?.test(text);
 // A number counts only next to its unit: "$20 for 365 days" grounds a budget of 20, not 365.
 const moneyNumbers=e=>[...e.replaceAll(',','').matchAll(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:USDC|USDT|USD|달러|dollars?)/gi)].map(m=>Number(m[1]??m[2]));
@@ -112,11 +114,12 @@ export function resolveIntake(p,text,allowed,context=null,selected=[],catalog=CA
  // buy. Do not depend on the model reproducing the registry key perfectly.
  const aiMention=themeWords.ai.test(text)&&!/(?:exclude|avoid|without|not|no)\s+(?:all\s+)?(?:ai|artificial intelligence)\b|(?:AI|인공지능).{0,8}(?:제외|빼)/i.test(text);
  if(aiMention&&!p.themes.includes('ai'))p={...p,themes:[...p.themes,'ai']};
- const named=p.include.filter(t=>mentioned(t,text));
- // Two or more named stocks are the list itself: a theme word around them ("AI chip stocks (NVDA, AMD, …)") describes
- // them and adds no other names. One named stock with a theme still means the theme plus that stock.
- const proposed=[...named,...(named.length>=2?[]:p.themes.filter(t=>themeWords[t]?.test(text)&&(t!=='ai'||aiMention)).flatMap(t=>catalog.themes[t]))];
- const excluded=p.exclude.filter(t=>mentioned(t,text));
+ const named=p.include.filter(t=>mentioned(t,text)),excluded=p.exclude.filter(t=>mentioned(t,text));
+ // Two or more supported named stocks are the list itself: a theme word around them ("AI chip stocks (NVDA, AMD, …)")
+ // describes them and adds no other names, unless the words ask for more ("NVDA, AMD and other AI stocks", "AI stocks
+ // plus INTC and CRM", "엔비디아, AMD 등 반도체주"). One named stock with a theme still means the theme plus that stock.
+ const listed=named.filter(t=>allowed.includes(t)&&!excluded.includes(t)).length>=2&&!addsTheme.test(text);
+ const proposed=[...named,...(listed?[]:p.themes.filter(t=>themeWords[t]?.test(text)&&(t!=='ai'||aiMention)).flatMap(t=>catalog.themes[t]))];
  // Only grounded mentions control this branch. A model-invented theme must
  // neither add stocks nor suppress the documented starter research universe.
  const starter=!proposed.length&&!context&&!selected.length;

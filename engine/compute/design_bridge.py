@@ -106,16 +106,56 @@ def with_volume(prices, root, tickers):
     return volume.attach(prices, closes, volumes)
 
 
+def _firms(root):
+    try:
+        return json.loads((pathlib.Path(root) / 'fundamentals' / 'release.json').read_text()).get('tickers', {})
+    except (OSError, ValueError):
+        return {}
+
+
+def macro_unavailable(root, pairs):
+    """Why the official statistics these (series, change) pairs need cannot be used now, or None. Each series must have
+    been fetched within MAX_AGE_DAYS (a series that keeps failing keeps its old fetch time), and a sector guard needs the
+    company sectors from the fundamentals release."""
+    meta = macro.load_release_meta(root)
+    if not meta:
+        return 'Official statistics (FRED) are not available.'
+    for series in sorted({s for s, _ in pairs}):
+        age = macro.series_age_days(meta, series)
+        if age is None or age > macro.MAX_AGE_DAYS:
+            return f'Official statistics for {series} are out of date.'
+    if any(macro.SERIES[s][1] != 'market' for s, _ in pairs) and not _firms(root):
+        return 'Company sectors for the official-data guard are not available.'
+    return None
+
+
+def drop_unavailable_macro(designs, root, model_candidates):
+    """Candidates whose guards lack current statistics are rejected; the others still run. When none is left (e.g. the
+    agent's own guard is in every candidate) the run waits for data."""
+    pairs = {pc for c in designs['candidates'] for pc in macro_columns(c['design'])}
+    why = macro_unavailable(root, pairs) if pairs else None
+    if not why:
+        return
+    keep = [c for c in designs['candidates'] if not macro_columns(c['design'])]
+    if not keep:
+        raise ValueError('WAITING_DATA: ' + why)
+    names = [str(m.get('name', '')).strip() if isinstance(m, dict) else '' for m in model_candidates]
+    for c in designs['candidates']:
+        if macro_columns(c['design']):
+            designs['rejected'].append({'index': names.index(c['name']) if c['name'] in names else -1, 'name': c['name'], 'reason': why})
+    designs['candidates'] = keep
+
+
 def with_macro(prices, snapshot, root, tickers, candidates):
     """Add the official statistics the designs' macro guards read: "MACRO::<series>::<change>" (the change as published
     by the day before each session, from ALFRED vintages) and "<TICKER>::in::<scope>" (1 for stocks in the guard's
-    scope). A design that uses a guard needs a current macro release; without one the run waits for data."""
+    scope). drop_unavailable_macro has already removed the designs whose statistics are missing or stale."""
     pairs = sorted({pc for c in candidates for pc in macro_columns(c['design'])})
     if not pairs:
         return prices, snapshot
-    age = macro.release_age_days(root)
-    if age is None or age > macro.MAX_AGE_DAYS:
-        raise ValueError('WAITING_DATA: Official statistics (FRED) are not available or are out of date.')
+    why = macro_unavailable(root, pairs)
+    if why:
+        raise ValueError('WAITING_DATA: ' + why)
     meta = macro.load_release_meta(root)
     cols = {}
     for series, change in pairs:
@@ -123,10 +163,7 @@ def with_macro(prices, snapshot, root, tickers, candidates):
         if not rows:
             raise ValueError(f'WAITING_DATA: Official statistics for {series} are not available.')
         cols[f'MACRO::{series}::{change}'] = macro.change_column(rows, prices.index, change)
-    try:
-        firms = json.loads((pathlib.Path(root) / 'fundamentals' / 'release.json').read_text()).get('tickers', {})
-    except (OSError, ValueError):
-        firms = {}
+    firms = _firms(root)
     for scope in sorted({macro.SERIES[series][1] for series, _ in pairs} - {'market'}):
         for t in tickers:
             f = firms.get(t, {})
@@ -180,6 +217,7 @@ def evaluate_designs(request, root):
         if not merged:
             raise ValueError('None of the designs fits this agent: ' + '; '.join(r['reason'] for r in designs['rejected'])[:300])
         designs['candidates'] = merged
+    drop_unavailable_macro(designs, root, request['proposal']['designs'].get('candidates', []) if isinstance(request['proposal']['designs'], dict) else [])
     held = held_of(request, tickers)
     prices, snapshot = load_prices(root, sorted(set(tickers+['QQQ','SPY'])))
     prices, snapshot = with_fundamentals(prices, snapshot, root, tickers)

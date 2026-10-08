@@ -6,7 +6,7 @@ import {copyFileSync, readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const source = 'engine/agent/xtxc_agent/research/agent_rules.json';
-export const SHARED = ['research-agent-core.mjs', 'research-store.mjs', 'research-agent-profile.mjs', 'research-agent-suggest.mjs', 'binance-web3.mjs', 'bsc-execution.mjs', 'research-agentic.mjs', 'research-bsc-sell.mjs', 'bsc-research-universe.mjs', 'bsc-research-themes.mjs', 'research-intake.mjs',
+export const SHARED = ['research-agent-core.mjs', 'research-store.mjs', 'research-agent-profile.mjs', 'research-agent-suggest.mjs', 'binance-web3.mjs', 'bsc-execution.mjs', 'research-agentic.mjs', 'research-bsc-sell.mjs', 'bsc-research-universe.mjs', 'bsc-research-themes.mjs', 'research-intake.mjs', 'research-kiln.mjs',
   // Solana wallet and continuous-operation modules (merged from the live sta-continuous release, 2026-10-08).
   'research-autonomy-control.mjs', 'research-autonomy-devnet.mjs', 'research-autonomy-journal.mjs', 'research-autonomy-policy.mjs', 'research-autonomy-privy.mjs', 'research-autonomy-rpc.mjs', 'research-autonomy-runtime.mjs', 'research-autonomy-stockmesh.mjs', 'research-autonomy-wire.mjs', 'research-ongoing-control.mjs', 'research-ongoing-decision.mjs', 'research-ongoing-feed.mjs', 'research-ongoing-journal.mjs', 'research-ongoing-policy.mjs', 'research-ongoing-runtime.mjs'];
 export function catalogModule() {

@@ -125,6 +125,34 @@ def test_bridge_adds_columns_and_waits_for_stale_statistics(tmp_path):
     (d / "release.json").write_text(json.dumps({**rel, "fetched_at": (now - dt.timedelta(days=30)).isoformat()}))
     with pytest.raises(ValueError, match="WAITING_DATA"):
         with_macro(prices, {}, tmp_path, ["NVDA"], cands)
+    # a fresh release does not hide a series that kept failing: each series carries its own fetch time
+    old = (now - dt.timedelta(days=30)).isoformat()
+    for entry in ({"object": sha, "fetched_at": old, "kept_from_previous_release": True}, {"object": sha, "kept_from_previous_release": True}):
+        (d / "release.json").write_text(json.dumps({**rel, "series": {"IPG3344S": entry}}))
+        with pytest.raises(ValueError, match="IPG3344S are out of date"):
+            with_macro(prices, {}, tmp_path, ["NVDA"], cands)
+    # a sector guard needs the company sectors
+    (d / "release.json").write_text(json.dumps(rel))
+    (tmp_path / "fundamentals" / "release.json").unlink()
+    with pytest.raises(ValueError, match="Company sectors"):
+        with_macro(prices, {}, tmp_path, ["NVDA"], cands)
+
+
+def test_stale_statistics_drop_only_the_designs_that_need_them(tmp_path):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "compute"))
+    from design_bridge import drop_unavailable_macro
+    guarded = {"name": "Guarded", "design": {**BASE, "macro_off": [{**GUARD, "change": 1}]}}
+    plain = {"name": "Plain", "design": BASE}
+    designs = {"candidates": [guarded, plain], "rejected": []}
+    drop_unavailable_macro(designs, tmp_path, [{"name": "Guarded"}, {"name": "Plain"}])          # no statistics at all
+    assert designs["candidates"] == [plain] and designs["rejected"] == [{"index": 0, "name": "Guarded", "reason": "Official statistics (FRED) are not available."}]
+    with pytest.raises(ValueError, match="WAITING_DATA"):                                         # e.g. the agent's own guard everywhere
+        drop_unavailable_macro({"candidates": [guarded], "rejected": []}, tmp_path, [])
+    untouched = {"candidates": [plain], "rejected": []}
+    drop_unavailable_macro(untouched, tmp_path, [])
+    assert untouched == {"candidates": [plain], "rejected": []}
 
 
 def test_refresh_keeps_a_failed_series_and_refuses_copyright(tmp_path, monkeypatch):
@@ -139,6 +167,18 @@ def test_refresh_keeps_a_failed_series_and_refuses_copyright(tmp_path, monkeypat
     rel = macro.refresh_release(tmp_path, "k")
     assert set(rel["series"]) == set(macro.SERIES) - {"RSAFS"} and "RSAFS" in rel["errors"]
     assert macro.load_rows(tmp_path, "IPG3344S") == ROWS and macro.release_age_days(tmp_path) < 1
+    assert macro.series_age_days(rel, "IPG3344S") < 1
+    # a later refresh where IPG3344S fails keeps its object AND its original fetch time
+    later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=20)
+
+    def failing(series_id, key, start="2010-01-01"):
+        if series_id == "IPG3344S":
+            raise RuntimeError("FRED 503")
+        return fake(series_id, key, start)
+    monkeypatch.setattr(macro, "fetch_series", failing)
+    rel2 = macro.refresh_release(tmp_path, "k", now=later)
+    assert rel2["series"]["IPG3344S"]["kept_from_previous_release"] and rel2["series"]["IPG3344S"]["fetched_at"] == rel["series"]["IPG3344S"]["fetched_at"]
+    assert macro.series_age_days(rel2, "IPG3344S", now=later) > 19 and macro.series_age_days(rel2, "DCOILWTICO", now=later) < 1
 
 
 def test_refresh_without_a_readable_fred_key_still_refreshes_prices(tmp_path, monkeypatch):
@@ -156,3 +196,8 @@ def test_refresh_without_a_readable_fred_key_still_refreshes_prices(tmp_path, mo
     parts = json.loads((tmp_path / "refresh-status.json").read_text())["parts"]
     assert parts["prices"]["ok"] and parts["fundamentals"]["ok"]
     assert not parts["macro"]["ok"] and "FRED key file unreadable" in parts["macro"]["error"]
+    (tmp_path / "bad.env").write_bytes(b"FRED_API_KEY=\xff\xfe")                                   # not UTF-8
+    monkeypatch.setattr(sys, "argv", ["refresh", str(tmp_path), "--fred-env", str(tmp_path / "bad.env")])
+    assert mod.main() == 1
+    parts = json.loads((tmp_path / "refresh-status.json").read_text())["parts"]
+    assert parts["prices"]["ok"] and not parts["macro"]["ok"]

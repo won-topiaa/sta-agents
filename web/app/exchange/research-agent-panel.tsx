@@ -127,7 +127,7 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
       {draft?.candidateId===c.id&&<section className="ra-allocation-review" aria-label="Rebalance review"><h4>Rebalance selected stocks</h4><p>{usd(draft.heldValueAtoms)} already held · {usd(draft.portfolioValueAtoms)} total allocation</p><small>Other stocks stay untouched. Sales run first. {draft.snapshot?.owner&&draft.snapshot.owner!==wallet?'Review the full allocation, then approve your agent wallet.':'Review each transaction in your wallet.'}</small><div className="ra-trade-legs">{draft.legs.map((leg,i)=><div key={i}><span>{leg.side} {leg.instrument}</span><b>{legAmount(leg)}</b></div>)}</div><p>{usd(draft.cashAtoms)} retained as cash</p><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,draftId:draft.id});if(b){setDraft(null);onActivity();}}}>Approve this allocation</button></section>}
     </article>)}
     {agent.error&&<p className="ra-error" role="alert">{agent.error}</p>}
-    <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.inputTokens+r.model.outputTokens} tokens · Data through {r.dataset.asOf}</span></footer>
+    <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.reusedFrom?'Design reused from an earlier run · 0 model tokens':`${r.model.inputTokens+r.model.outputTokens} tokens`} · Data through {r.dataset.asOf}</span></footer>
   </div>;
 }
 

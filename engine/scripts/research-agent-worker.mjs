@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { AgentStore, briefHash } from '../lib/research-agent-core.mjs';
-import { kilnProposal, AgentUnavailable } from '../lib/research-kiln.mjs';
+import { kilnProposal, AgentUnavailable, proposalMessages, reusableProposal, modelId } from '../lib/research-kiln.mjs';
 import { agenticTick } from '../lib/research-agentic.mjs';
 import { exitWatch } from '../lib/research-bsc-sell.mjs';
 import { dirname, join } from 'node:path';
@@ -44,10 +44,20 @@ export async function processRun(store,run,config) {
     else store.db.prepare('UPDATE agent_runs SET lease_until=? WHERE id=? AND lease_token=?').run(Date.now()+300000,run.id,run.leaseToken);
   },5000);
   try{
-    const inspected=await evaluate(run.input,true,abort.signal);
-    const model=await kilnProposal(run.input,config,store,fetch,inspected.designMessages??null);
+    const inspected=await evaluate(run.input,true,abort.signal),designMessages=inspected.designMessages??null;
+    // An unchanged prompt reuses the last validated proposal (0 tokens); a reused one that no longer evaluates gets
+    // one fresh model call. A data wait does not: the design needs those prices or statistics, and the same prompt at
+    // temperature 0 asks for the same design (an agent's guard is forced in either way).
+    let model=reusableProposal(store,run,proposalMessages(run.input,designMessages),modelId(config))??await kilnProposal(run.input,config,store,fetch,designMessages);
     if(abort.signal.aborted)return;
-    const result=await evaluate({...run.input,proposal:model.proposal},false,abort.signal);
+    let result;
+    try{result=await evaluate({...run.input,proposal:model.proposal},false,abort.signal);}
+    catch(e){
+      if(!model.trace.reusedFrom||abort.signal.aborted||e.stage==='WAITING_DATA')throw e;
+      model=await kilnProposal(run.input,config,store,fetch,designMessages);
+      if(abort.signal.aborted)return;
+      result=await evaluate({...run.input,proposal:model.proposal},false,abort.signal);
+    }
     result.model=model.trace;result.proposal=model.proposal;
     result.engineVersion=result.engineVersion??'xtxc-pinned-backtest-20260929';
     store.finish(run,result.decision,result);

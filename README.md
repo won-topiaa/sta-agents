@@ -120,12 +120,12 @@ An agent can turn on a guard that holds part of a sector in cash while an offici
 | Guard | Series (FRED ID) | Stocks it scales |
 | --- | --- | --- |
 | Chip cycle | Semiconductor and electronic component production (`IPG3344S`, monthly) | semiconductor makers (SIC 3670–3679, 3559, QCOM, ARM, long chip funds) |
-| Consumer | Advance retail sales (`RSAFS`, monthly) | consumer discretionary and staples companies |
-| Oil | WTI crude oil spot price (`DCOILWTICO`, daily) | energy companies |
+| Consumer | Advance retail sales (`RSAFS`, monthly) | consumer discretionary and staples companies and funds (XLY, XLP, XRT, …) |
+| Oil | WTI crude oil spot price (`DCOILWTICO`, daily) | energy companies and funds (XLE, XOP, OIH, …) |
 | Dollar | Nominal broad US dollar index (`DTWEXBGS`, daily, published weekly) | every stock |
 
 - **No look-ahead**: a FRED observation is dated by the period it measures, not by its release, and is revised later. The engine reads every ALFRED vintage, so on day *t* a backtest sees only values published by the day before, as they stood then.
-- **Opt-in**: on 2021–2026 data the guards did not reduce the largest drawdown of a chip-momentum agent, so they are rules a user chooses, not defaults.
+- **Who turns them on**: an agent's guard rule is always enforced. The design model may also propose a guard when a request is about one of these industries or about macro risk; that candidate then shows an "Official-data guard" line and is tested like any other. No guard is on by default: on 2021–2026 data they did not reduce the largest drawdown of a chip-momentum agent.
 - A design with a guard waits for data when the statistics release is missing or more than 14 days old.
 
 This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
@@ -187,7 +187,7 @@ New in this project:
   patterns (range breakout, volatility squeeze, higher highs and lows, double bottom) and exit rules (stop loss,
   trailing stop)
 - point-in-time SEC fundamentals and the value style
-- official statistics (FRED/ALFRED vintages) as opt-in sector guards
+- official statistics (FRED/ALFRED vintages) as sector guards
 - BNB Smart Chain execution through the Binance Web3 API
 - Binance Agentic Wallet autonomy
 - the BNB gateway

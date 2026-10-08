@@ -102,4 +102,9 @@ test('named stocks are the list: a theme word around them adds no other names; o
  assert.deepEqual(listed.brief.instruments,chips);
  const plus=resolveIntake({...base,include:['QCOM']},'AI stocks plus QCOM',all,null,[],CATALOGS.bsc);
  assert.ok(plus.brief.instruments.includes('QCOM')&&CATALOGS.bsc.themes.ai.every(t=>plus.brief.instruments.includes(t)));
+ // words that ask for more keep the theme; unsupported or excluded names do not count toward the list
+ const withTheme=(include,text,exclude=[])=>resolveIntake({...base,include,exclude},text,all.filter(t=>t!=='ARM'),null,[],CATALOGS.bsc).brief.instruments;
+ for(const [include,text] of [[['NVDA','AMD'],'NVDA, AMD and other AI stocks'],[['QCOM','AMAT'],'AI stocks plus QCOM and AMAT'],[['NVDA','AMD'],'엔비디아, AMD 등 AI주'],[['QCOM','ARM'],'AI stocks plus QCOM and ARM']])
+  assert.ok(CATALOGS.bsc.themes.ai.every(t=>withTheme(include,text).includes(t)),text);
+ assert.deepEqual(withTheme(['NVDA','AMD'],'AI stocks with AMD but not NVDA',['NVDA']),['AMD',...CATALOGS.bsc.themes.ai.filter(t=>t!=='NVDA'&&t!=='AMD')]);
 });

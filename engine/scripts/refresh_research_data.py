@@ -85,7 +85,7 @@ def main() -> int:
     args = ap.parse_args()
     try:
         key, key_error = fred_key(args.fred_env), None
-    except OSError as exc:  # a missing key file fails only the macro part, never prices or fundamentals
+    except (OSError, ValueError) as exc:  # a missing or unreadable key file fails only the macro part, never prices or fundamentals
         key, key_error = "", f"FRED key file unreadable: {type(exc).__name__}"
     parts = [p for p, on in (("prices", args.prices), ("fundamentals", args.fundamentals), ("macro", args.macro)) if on] \
         or ["prices", "fundamentals"] + (["macro"] if key or args.fred_env else [])

@@ -282,7 +282,10 @@ class ResearchRunner:
                                           thinking=False, max_tokens=1600, wallet=brief.get("wallet"), ref=run_id)
         except (ModelUnavailable, ModelOutputInvalid) as exc:
             raise RuntimeError(tr("design.ai_failed")) from exc
-        cands = [dict(c) for c in res.value["candidates"]]
+        # This runner has no official-statistics columns, so a guard could not act here: such candidates are left out.
+        cands = [dict(c) for c in res.value["candidates"] if not c["design"].get("macro_off")]
+        if not cands:
+            raise RuntimeError(tr("design.ai_failed"))
         self._step(run_id, "design", detail=tr("step.detail.design", n=len(cands)))
         prices = self.r.marketdata.load_prices(snapshot.snapshot_id)
         i0, i1 = _resolve_period(prices.index, {"years": 5})

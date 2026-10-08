@@ -121,6 +121,7 @@ def refresh_release(root, api_key: str, now=None) -> dict:
     d = _dir(root)
     (d / "objects").mkdir(parents=True, exist_ok=True)
     old = load_release_meta(root) or {}
+    at = (now or dt.datetime.now(dt.timezone.utc)).isoformat(timespec="seconds")
     series, errors = {}, {}
     for sid in SERIES:
         try:
@@ -130,15 +131,16 @@ def refresh_release(root, api_key: str, now=None) -> dict:
             obj = d / "objects" / f"{sha}.json"
             if not obj.exists():
                 md._atomic_write(obj, body)
-            series[sid] = {"object": sha, "rows": len(got["rows"]), "last_updated": got["last_updated"],
+            series[sid] = {"object": sha, "rows": len(got["rows"]), "last_updated": got["last_updated"], "fetched_at": at,
                            "observation_end": got["observation_end"], "frequency": got["frequency"], "title": got["title"]}
         except Exception as exc:  # keep going: one series must not block the others
             errors[sid] = f"{type(exc).__name__}: {exc}"[:200]
-            if sid in old.get("series", {}):
-                series[sid] = {**old["series"][sid], "kept_from_previous_release": True}
+            if sid in old.get("series", {}):   # it keeps its own fetch time, so its age keeps counting
+                prev = old["series"][sid]
+                series[sid] = {**prev, "fetched_at": prev.get("fetched_at") or old.get("fetched_at"), "kept_from_previous_release": True}
     if not any(not v.get("kept_from_previous_release") for v in series.values()):
         raise RuntimeError(f"no macro series could be fetched: {errors}")
-    rel = {"schema": SCHEMA, "fetched_at": (now or dt.datetime.now(dt.timezone.utc)).isoformat(timespec="seconds"),
+    rel = {"schema": SCHEMA, "fetched_at": at,
            "series": series, "errors": errors, "source": "FRED/ALFRED (Federal Reserve Bank of St. Louis)", "notice": NOTICE}
     rel["release_id"] = md._sha256(md._canonical_json({k: v["object"] for k, v in series.items()}))
     md._atomic_write(d / "release.json", json.dumps(rel, indent=1, sort_keys=True).encode())
@@ -171,6 +173,18 @@ def release_age_days(root, now=None) -> float | None:
         return None
     at = dt.datetime.fromisoformat(meta["fetched_at"])
     return ((now or dt.datetime.now(dt.timezone.utc)) - at).total_seconds() / 86400
+
+
+def series_age_days(meta, series_id: str, now=None) -> float | None:
+    """Days since this series was last fetched. A series kept from an earlier release without its own fetch time has an
+    unknown age (None), so it is never mistaken for fresh."""
+    entry = (meta or {}).get("series", {}).get(series_id)
+    if not entry:
+        return None
+    at = entry.get("fetched_at") or (None if entry.get("kept_from_previous_release") else meta.get("fetched_at"))
+    if not at:
+        return None
+    return ((now or dt.datetime.now(dt.timezone.utc)) - dt.datetime.fromisoformat(at)).total_seconds() / 86400
 
 
 class Vintages:
