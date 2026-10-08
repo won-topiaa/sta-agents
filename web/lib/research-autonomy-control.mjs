@@ -111,6 +111,10 @@ export class AutonomyControl {
   r=this.row(owner,id);need(r.phase==='READY','POLICY_STOPPED');
   this.journal.transaction(()=>{
    r=this.row(owner,id);need(r.phase==='READY','POLICY_STOPPED');
+   if(this.db.prepare("SELECT name FROM sqlite_master WHERE name='ongoing_mandates'").get()) {
+    need(!this.db.prepare("SELECT id FROM ongoing_mandates WHERE wallet=? AND phase IN ('ACTIVE','PAUSED','RISK_EXIT')").get(r.config.wallet)&&
+     !this.db.prepare("SELECT id FROM ongoing_execution_orders WHERE wallet=? AND phase NOT IN ('RECONCILED','FAILED_FINALIZED','EXPIRED_NO_FILL','EXPIRED_UNSIGNED')").get(r.config.wallet),'WALLET_ALREADY_MANAGED');
+   }
    const reserve=this.reservedElsewhere(r),cash=integer(portfolio.cash.find(c=>c.symbol==='USDC')?.atoms);
    need(cash>=integer(r.approval.plan.budgetAtoms)+reserve.cash,'AGENT_WALLET_BUDGET_RESERVED');
    const sales=new Map();for(const l of r.approval.legs.filter(l=>l.side==='SELL'))sales.set(l.mint,(sales.get(l.mint)??0n)+integer(l.inputAtoms));

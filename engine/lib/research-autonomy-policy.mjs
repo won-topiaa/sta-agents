@@ -71,11 +71,20 @@ export async function policyInstruction(c,operation,args={}){
   data=Buffer.concat([Buffer.from([isPlanPolicy(c)?5:1]),u64(args.counter),u64(args.inputAtoms),keyBytes(args.mint),digest(args.messageHash)]);
   if(isPlanPolicy(c)){const index=Number(integer(args.counter)),t=c.trades[index];requirePolicy(t&&t.mint===args.mint&&t.inputAtoms===args.inputAtoms&&t.side===args.side,'TRADE_NOT_APPROVED');const {proof}=tradeTree(c.trades,index);data=Buffer.concat([data,Buffer.from([t.side==='SELL'?1:0]),u64(t.minimumCashAtoms??'0'),Buffer.from([proof.length]),...proof.map(digest)]);}
  }
- else if(operation==='SETTLE'){requirePolicy(['RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED'].includes(args.phase),'INVALID_RECEIPT_PHASE');data=Buffer.concat([Buffer.from([2]),digest(args.messageHash),digest(args.receiptHash),Buffer.from([args.phase==='RECONCILED'?1:2])]);}
+ else if(operation==='SETTLE'){requirePolicy(['RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED','EXPIRED_NO_FILL'].includes(args.phase),'INVALID_RECEIPT_PHASE');data=Buffer.concat([Buffer.from([2]),digest(args.messageHash),digest(args.receiptHash),Buffer.from([args.phase==='RECONCILED'?1:2])]);}
  else if(operation==='REVOKE'){actor=c.owner;data=Buffer.from([3]);}else throw new PolicyError('INVALID_OPERATION');
  return{programAddress:address(c.program),accounts:[{address:address(actor),role:operation==='APPROVE'?3:2},{address:state,role:1},...(operation==='APPROVE'?[{address:address(SYSTEM),role:0}]:[])],data};
 }
-export function policyTransaction(payer,instructions,lifetime){let m=createTransactionMessage({version:'legacy'});m=setTransactionMessageFeePayer(address(payer),m);m=setTransactionMessageLifetimeUsingBlockhash({blockhash:lifetime.blockhash,lastValidBlockHeight:integer(String(lifetime.lastValidBlockHeight))},m);for(const ix of instructions)m=appendTransactionMessageInstruction(ix,m);const tx=compileTransaction(m),wire=Buffer.from(getTransactionEncoder().encode(tx));requirePolicy(wire.length<=1232,'OVERSIZED_TRANSACTION');return{owner:payer,transactionBase64:wire.toString('base64'),messageHash:hash(tx.messageBytes),lastValidBlockHeight:String(lifetime.lastValidBlockHeight)};}
+export function policyTransaction(payer,instructions,lifetime,version='legacy'){requirePolicy(version==='legacy'||version===0,'UNSUPPORTED_MESSAGE_VERSION');let m=createTransactionMessage({version});m=setTransactionMessageFeePayer(address(payer),m);m=setTransactionMessageLifetimeUsingBlockhash({blockhash:lifetime.blockhash,lastValidBlockHeight:integer(String(lifetime.lastValidBlockHeight))},m);for(const ix of instructions)m=appendTransactionMessageInstruction(ix,m);const tx=compileTransaction(m),wire=Buffer.from(getTransactionEncoder().encode(tx));requirePolicy(wire.length<=1232,'OVERSIZED_TRANSACTION');return{owner:payer,transactionBase64:wire.toString('base64'),messageHash:hash(tx.messageBytes),lastValidBlockHeight:String(lifetime.lastValidBlockHeight)};}
+export async function ownerApprovalTransaction(c,lifetime){
+ // Wallets may insert missing compute-budget instructions during approval.
+ // Explicit zero priority price prevents that without weakening exact-wire
+ // validation. V0 also avoids legacy account recompilation by wallet SDKs.
+ const limit=Buffer.alloc(5);limit[0]=2;limit.writeUInt32LE(200000,1);
+ const price=Buffer.alloc(9);price[0]=3;
+ return policyTransaction(c.owner,[{programAddress:address(COMPUTE),accounts:[],data:limit},
+  {programAddress:address(COMPUTE),accounts:[],data:price},await policyInstruction(c,'APPROVE')],lifetime,0);
+}
 export async function observePolicy(c,observation,now=Date.now()){
  const {state,bump}=await policyAddress(c);
  requirePolicy(observation.genesisHash===DEVNET&&observation.commitment==='finalized'&&observation.address===state&&observation.owner===c.program,'UNVERIFIED_DEVNET_POLICY');

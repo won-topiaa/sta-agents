@@ -1,7 +1,7 @@
 "use client";
 import type React from 'react';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {AGENT_RULES,type AgentParamSpec} from '@/lib/agent-rules.mjs';
+import {AGENT_RULES,type AgentParamSpec,type AgentRuleSpec} from '@/lib/agent-rules.mjs';
 import {presetBody,profileBody,type AgentProfile,type AgentProfileBody,type AgentRule} from '@/lib/research-agent-profile.mjs';
 import type {RuleSuggestion} from '@/lib/research-agent-suggest.mjs';
 import {ensureResearchSession,researchPrincipalOf} from './research-session';
@@ -93,6 +93,12 @@ export function AgentBar({agents,selectedId,boundToStrategy,disabled,onSelect,on
 type Draft=AgentProfileBody;
 // Mounted only while open (keyed by agent and revision), so every opening starts from the saved agent.
 const EDITOR_STEPS=['Style','Rules','Limits & approval'] as const;
+// The rules step lists the catalog in these groups, by what each rule changes.
+const RULE_GROUPS=[['Which stocks qualify','Every holding must pass these.'],['When it buys','Checked only on the day it buys.'],['Market & economy guards','Invest less while the market or official statistics weaken.'],['Holding & selling','How many it holds and when it sells.']] as const;
+function ruleGroup(spec:AgentRuleSpec){
+  if(spec.filter)return spec.filter.entry?1:0;
+  return 'risk_off' in spec||'breadth_off' in spec||'macro_off' in spec?2:3;
+}
 export function AgentEditor({initial,start,bnb=false,controller,onClose,onSaved}:{initial:AgentProfile|null;start?:AgentStart|null;bnb?:boolean;controller:AgentsController;onClose:()=>void;onSaved:(a:AgentProfile)=>void}){
   const dialog=useRef<HTMLDialogElement>(null),requestId=useRef(''),body=useRef<HTMLDivElement>(null);
   const [draft,setDraft]=useState<Draft>(()=>initial?profileBody(initial):presetBody('My agent',start?.style,start?.preset));
@@ -144,7 +150,8 @@ export function AgentEditor({initial,start,bnb=false,controller,onClose,onSaved}
         {step===1&&<>
         <fieldset className="ap-group"><legend>Rules <span>{draft.rules.length}/{lim.rules} · filters {filters}/{lim.filters}</span></legend>
           <p className="ap-hint">Code adds these to every strategy your agent designs. The model cannot drop or loosen them.</p>
-          <div className="ap-rules">{Object.entries(AGENT_RULES.rules).filter(([,r])=>r.styles.includes(draft.style)).map(([id,spec])=>{
+          {RULE_GROUPS.map(([title,help],g)=>{const items=Object.entries(AGENT_RULES.rules).filter(([,r])=>r.styles.includes(draft.style)&&ruleGroup(r)===g);
+            return items.length>0&&<section key={title} className="ap-rule-group" aria-label={title}><h4>{title}<span>{help}</span></h4><div className="ap-rules">{items.map(([id,spec])=>{
             const rule=active.get(id),on=Boolean(rule),full=!on&&(draft.rules.length>=lim.rules||(Boolean(spec.filter)&&filters>=lim.filters));
             return <div key={id} className={`ap-rule ${on?'ap-on':''}`}>
               <label className="ap-rule-head"><input type="checkbox" checked={on} disabled={full} onChange={()=>toggle(id)}/><b>{spec.label}</b></label>
@@ -155,7 +162,7 @@ export function AgentEditor({initial,start,bnb=false,controller,onClose,onSaved}
                   :<label key={k}>{k.replace('_',' ')} <output>{formatParam(p,v)}</output><input type="range" min={p.min} max={p.max} step={p.step} value={v} onChange={e=>param(id,k,Number(e.target.value))}/></label>;
               })}</div>}
             </div>;})}
-          </div>
+          </div></section>;})}
         </fieldset>
 
         <fieldset className="ap-group"><legend>In your own words <span>optional</span></legend>

@@ -33,7 +33,13 @@ DESIGN_SYSTEM = (
     "optional \"hold_buffer\": 1..4 (a held stock stays while it ranks within that many times top_n; fewer trades), "
     "\"exit\": {{\"stop_loss\": 0.02..0.5 or null, \"trailing_stop\": 0.02..0.5 or null}} (sell a holding that falls that far "
     "below its entry / its highest close since entry), \"breadth_off\": {{\"lookback\": days, \"below\": 0.05..0.95, "
-    "\"exposure\": 0..1}} (when fewer than 'below' of the stocks trade above their average, invest only 'exposure'). "
+    "\"exposure\": 0..1}} (when fewer than 'below' of the stocks trade above their average, invest only 'exposure'), "
+    "\"macro_off\": [{{\"series\": \"IPG3344S\"|\"RSAFS\"|\"DCOILWTICO\"|\"DTWEXBGS\", \"change\": periods, \"below\" or "
+    "\"above\": -0.5..0.5, \"exposure\": 0..1}}] (official statistics as published by the day before; when the series' "
+    "change over 'change' observations is below/above the value, the stocks it covers get 'exposure' of their weight: "
+    "IPG3344S semiconductor production -> semiconductor makers, monthly, change 1..12; RSAFS retail sales -> consumer "
+    "companies, monthly, 1..12; DCOILWTICO WTI oil -> energy, daily, 5..252; DTWEXBGS broad dollar -> every stock, daily, "
+    "5..252; use only when the brief is about those industries or about macro risk). "
     "A term is {{\"signal\": s, \"lookback\": days 5..252, \"skip\": days 0..63 (momentum only), \"fast\": days "
     "2..lookback-1 (ma_cross only, required there), \"weight\": -3..3, not 0}}. "
     "A filter is {{\"signal\": s, \"lookback\": days, \"rule\": \"above\"|\"below\"|\"top_fraction\"|\"bottom_fraction\", "
@@ -208,6 +214,10 @@ def describe(design: dict) -> dict:
     if d.get("breadth_off"):
         bo = d["breadth_off"]
         out["breadth"] = tr("dz.breadth", b=f"{bo['below']:.0%}", span=_span(bo["lookback"]), e=f"{bo['exposure']:.0%}")
+    if d.get("macro_off"):
+        out["macro"] = i18n.join([tr(f"dz.macro.{g['series']}", n=g["change"], v=f"{g.get('below', g.get('above')):+.0%}",
+                                     dir=tr("dz.macro.below" if "below" in g else "dz.macro.above"), e=f"{g['exposure']:.0%}")
+                                  for g in d["macro_off"]])
     if d.get("hold_buffer"):
         out["hold"] = tr("dz.hold", x=f"{d['hold_buffer']:g}")
     ex = d.get("exit")

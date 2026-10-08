@@ -298,8 +298,35 @@ def test_refresh_fetches_only_companies_with_a_new_filing(tmp_path):
 def test_fx_rates_are_per_usd_and_stored_with_the_release(tmp_path):
     rows = F.fetch_fx({"TWD", "EUR", "USD", "XYZ"}, lambda url: b"observation_date,X\n2026-01-02,32.0\n2026-01-05,\n2026-01-06,40.0\n"
                       if "DEXTAUS" in url else b"observation_date,X\n2026-01-02,1.10\n")
-    assert rows["TWD"] == [["2026-01-02", "2026-01-02", 1 / 32.0], ["2026-01-06", "2026-01-06", 1 / 40.0]]
-    assert rows["EUR"] == [["2026-01-02", "2026-01-02", 1.10]] and "XYZ" not in rows and "USD" not in rows
+    assert rows["TWD"] == [["2026-01-05", "2026-01-02", 1 / 32.0], ["2026-01-12", "2026-01-06", 1 / 40.0]]
+    assert rows["EUR"] == [["2026-01-05", "2026-01-02", 1.10]] and "XYZ" not in rows and "USD" not in rows
+
+
+def test_an_h10_rate_counts_only_after_its_monday_release():
+    assert F.h10_published("2026-10-02") == "2026-10-05"          # a Friday: that Monday (FRED's DEXUSEU vintage)
+    assert F.h10_published("2026-09-28") == "2026-10-05"          # a Monday: the Monday after its week
+    assert F.h10_published("2024-08-30") == "2024-09-03"          # Labor Day: the next business day
+    assert F.h10_published("2025-01-17") == "2025-01-21"          # Martin Luther King Jr. Day
+    doc = _ifrs()
+    idx = pd.bdate_range("2024-07-01", "2024-10-31")
+    close = pd.Series(100.0, index=idx)
+    days = [str(d.date()) for d in pd.bdate_range("2024-06-03", "2024-09-30")]
+    rate = {d: 0.03 + i * 1e-5 for i, d in enumerate(days)}       # USD per TWD, a different rate every day
+    unit = F.ticker_panel(_ifrs("USD"), close, adr=5.0)["earnings_yield"]   # the same company reporting in USD
+    by_rate = {round(v, 9): d for d, v in rate.items()}
+
+    def used(fx):   # session -> the day whose rate it converted with
+        ey = F.ticker_panel(doc, close, fx=fx, adr=5.0)["earnings_yield"]
+        return {str(t.date()): by_rate.get(round(ey[i] / unit[i], 9), "?") if np.isfinite(ey[i]) else None
+                for i, t in enumerate(idx)}
+
+    new = used([[F.h10_published(d), d, rate[d]] for d in days])
+    assert used([[d, d, rate[d]] for d in days]) == new             # a release stored before publication days
+    assert new["2024-08-12"] == "2024-08-02"     # that Monday's release comes after the close: last week's Friday
+    assert new["2024-08-13"] == new["2024-08-16"] == "2024-08-09"
+    assert new["2024-09-03"] == "2024-08-23"     # Labor Day moved the release to Tuesday
+    assert new["2024-09-04"] == "2024-08-30"
+    assert new["2024-10-16"] == "2024-09-30" and new["2024-10-17"] is None   # stale ten days after its release
 
 
 

@@ -59,6 +59,9 @@ export function sellLegs(strategy, holdings, extra=[]) {
 // Designs whose target depends on what is already held (buying-only filters, a hold buffer).
 export const holdsAware = design => Boolean(design?.filters?.some(f=>f?.entry===true)||design?.hold_buffer!=null);
 
+// This step's own exact approval succeeded and no swap of the step has succeeded since: the router allowance then
+// equals the leg amount until a swap of this leg spends it.
+const approvedHere=doc=>{const r=doc.receipts??[];const a=r.findLastIndex(x=>x.kind==='APPROVE'&&x.status==='SUCCESS');return a>=0&&!r.slice(a).some(x=>x.kind==='SWAP'&&x.status==='SUCCESS');};
 export class AgentStore extends ResearchStore {
   constructor(path,allowed) {
     super(path,allowed);
@@ -78,6 +81,7 @@ export class AgentStore extends ResearchStore {
       CREATE TABLE IF NOT EXISTS agent_profile_requests(owner TEXT NOT NULL,request_id TEXT NOT NULL,digest TEXT NOT NULL,agent_id TEXT NOT NULL,PRIMARY KEY(owner,request_id));
       CREATE TABLE IF NOT EXISTS agent_agentic_binding(slot TEXT PRIMARY KEY,owner TEXT NOT NULL,address TEXT NOT NULL,bound_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS agent_agentic_runs(plan_id TEXT PRIMARY KEY,owner TEXT NOT NULL,address TEXT NOT NULL,status TEXT NOT NULL,reason TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS agent_operating_outbox(run_id TEXT PRIMARY KEY,document TEXT NOT NULL,next_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0);
     `);
   }
   // ---- the user's own agents (style + enforced rules + risk + approval mode)
@@ -185,6 +189,11 @@ export class AgentStore extends ResearchStore {
       else if(agent&&this.db.prepare('SELECT revision FROM agent_profiles WHERE owner=? AND id=?').get(r.owner,agent.id)?.revision!==agent.revision){status='SUPERSEDED';error='Your agent changed during research. Run it again with the current rules.';}
       if(result)result={...result,reportHash:hash(result)};
       this.db.prepare('UPDATE agent_runs SET status=?,result=?,error=?,lease_until=?,lease_token=NULL,updated_at=? WHERE id=?').run(status,result?JSON.stringify(result):null,error,Date.now()+300000,Date.now(),r.id);
+      const monitor=this.db.prepare('SELECT document FROM agent_monitors WHERE owner=? AND strategy=?').get(r.owner,r.strategy);
+      if(result&&['REVIEW','DECLINED'].includes(status)&&monitor&&JSON.parse(monitor.document).mode==='CONTINUOUS_TRADING') {
+        const input=JSON.parse(r.input),document={owner:input.owner.slice(7),strategy:s,input,result,runId:r.id,updatedAt:Date.now()};
+        this.db.prepare('INSERT OR IGNORE INTO agent_operating_outbox(run_id,document,next_at) VALUES(?,?,?)').run(r.id,JSON.stringify(document),Date.now());
+      }
       this.event(r.owner,r.strategy,status,{runId:r.id,message:error});return true;
     });
   }
@@ -267,7 +276,7 @@ export class AgentStore extends ResearchStore {
       if(bsc&&options.sells&&holdsAware(c.design)&&!Array.isArray(result.heldInstruments))reject('This result did not account for your current holdings. Run research again to rebalance.',409);
       const sells=bsc&&options.sells?sellLegs(s,options.sells).filter(l=>!c.weights.some(w=>w.instrument===l.instrument&&w.weightBps>0)):[];
       if(draftId){const draft=this.db.prepare('SELECT * FROM agent_rebalance_drafts WHERE id=? AND owner=?').get(draftId,owner);if(!draft||draft.run_id!==runId||draft.candidate_id!==candidateId||draft.report_hash!==reportHash)reject('Review the matching holdings allocation.',409);rebalance=JSON.parse(draft.document);if(rebalance.expiresAt<Date.now())reject('Refresh the holdings review before approving.',409);a=rebalance;}
-      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
+      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:bsc?100:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
       const id=hash(document),plan={...document,id};
       this.db.prepare('INSERT INTO agent_plans VALUES(?,?,?,?,?,?,?)').run(id,owner,s.id,runId,JSON.stringify(plan),'APPROVED',Date.now());this.event(owner,s.id,'APPROVED',{planId:id,runId});return plan;
     });
@@ -401,11 +410,12 @@ export class AgentStore extends ResearchStore {
     if(!['APPROVED','PARTIAL'].includes(p.status)||briefHash(s)!==p.briefHash||Date.now()>p.expiresAt)reject('This approval is no longer current.',409);
     if(index>0&&this.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=?').get(id,index-1)?.phase!=='RECONCILED')reject('Wait for the previous trade receipt.',409);
     if(['SUBMITTED','RECONCILED','UNKNOWN','APPROVE_SENT'].includes(phase))reject('Check this trade before preparing another. No automatic replay.',409);
-    // A prepared transaction that was never reported may still have been sent: if the wallet has
-    // sent anything since, do not build a second swap for the same leg.
-    if(['SWAP_PREPARED','APPROVE_PREPARED'].includes(phase)&&doc.prepared&&BigInt(nonceNow)>BigInt(doc.prepared.nonce))
-      reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
-    return {plan:p,doc,guard:{phase,preparedAt:doc.prepared?.at??null}};
+    // A prepared swap that was never reported may still have been sent. If the wallet has sent anything since, a second
+    // swap is built only when this step's own exact approval shows the first did not run: the quote must then still find
+    // the allowance unused (checked in bscPrepared). Rebuilding an unreported approval is harmless (same amount).
+    const moved=phase==='SWAP_PREPARED'&&doc.prepared&&BigInt(nonceNow)>BigInt(doc.prepared.nonce);
+    if(moved&&!approvedHere(doc))reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
+    return {plan:p,doc,guard:{phase,preparedAt:doc.prepared?.at??null,allowanceMustRemain:Boolean(moved)}};
   }
   // `guard` (from assertBscPreparable) is re-checked after the gateway call: the plan may have been revoked, handed
   // to the Agentic Wallet, or this step prepared or sent from another tab meanwhile. A stale preparation is refused
@@ -418,26 +428,39 @@ export class AgentStore extends ResearchStore {
         if(this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(id))reject('This plan runs in your Agentic Wallet. Use its controls.',409);
         if(phase!==guard.phase||(doc.prepared?.at??null)!==guard.preparedAt)reject('This trade changed while it was being prepared. Refresh and try again.',409);
       }
-      const next={...doc,leg:p.legs[index],prepared:{kind,tx:prepared.tx,quote:prepared.quote??null,simulation:prepared.simulation??null,nonce:String(nonce),at:Date.now()}};
+      // This step's exact approval succeeded and no swap of it is recorded, yet the router needs a new approval: the
+      // allowance was spent, so a swap of this leg may already have run (a second signature, or a swap reported as failed
+      // while an earlier one went through). Never buy or sell the leg again on that evidence.
+      if(kind==='APPROVE'&&approvedHere(doc))reject(`The allowance approved for this trade has been used, so it may already have gone through. If your wallet sent it, report that transaction's hash; otherwise stop this plan.`,409);
+      if(guard?.allowanceMustRemain&&kind!=='SWAP')reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
+      const entry={kind,tx:prepared.tx,quote:prepared.quote??null,simulation:prepared.simulation??null,nonce:String(nonce),at:Date.now()};
+      const next={...doc,leg:p.legs[index],...(prepared.product?.contract?{product:prepared.product}:{}),prepared:entry,preparedAll:[...(doc.preparedAll??[]),{kind,tx:entry.tx,nonce:entry.nonce,at:entry.at}].slice(-12)};
       this.db.prepare('INSERT INTO agent_steps VALUES(?,?,?,?) ON CONFLICT(plan_id,step) DO UPDATE SET phase=excluded.phase,document=excluded.document').run(id,index,kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED',JSON.stringify(next));
       this.event(this.owner(address),p.strategyId,'TRADE_STATUS',{planId:id,index,phase:kind==='APPROVE'?'APPROVE_PREPARED':'SWAP_PREPARED'});
       return next.prepared;
     });
   }
   // The caller has verified that `hash` carries exactly doc.prepared.tx (checkSent).
-  bscSent(address,id,index,hash) {
-    return this.transaction(()=>this.recordBscSent(address,id,index,hash));
+  bscSent(address,id,index,hash,earlier=null) {
+    return this.transaction(()=>this.recordBscSent(address,id,index,hash,earlier));
   }
-  recordBscSent(address,id,index,hash) {
+  // `earlier`: the step's earlier prepared transaction (from doc.preparedAll) the hash was matched to, when it is not
+  // the latest one. It becomes the step's prepared transaction, so its minimum received sizes later exits.
+  recordBscSent(address,id,index,hash,earlier=null) {
     const {plan:p,phase,doc}=this.bscStep(address,id,index);
     if(!/^0x[0-9a-fA-F]{64}$/.test(hash))reject('Invalid transaction hash.');
     if(doc.sent?.hash===hash)return doc;
+    if((doc.receipts??[]).some(r=>String(r.hash).toLowerCase()===hash.toLowerCase()))reject('This transaction is already recorded for this trade.',409);
     // One transaction settles one step: a hash already recorded anywhere for this owner cannot settle another.
     const used=this.db.prepare(`SELECT 1 FROM agent_steps s JOIN agent_plans p ON p.id=s.plan_id WHERE p.owner=? AND NOT (s.plan_id=? AND s.step=?)
       AND (lower(json_extract(s.document,'$.sent.hash'))=lower(?) OR EXISTS (SELECT 1 FROM json_each(s.document,'$.receipts') r WHERE lower(json_extract(r.value,'$.hash'))=lower(?)))`).get(this.owner(address),id,index,hash,hash);
     if(used)reject('This transaction is already recorded for another trade.',409);
-    if(!['SWAP_PREPARED','APPROVE_PREPARED'].includes(phase))reject('No prepared transaction for this step.',409);
-    const kind=doc.prepared.kind,next={...doc,sent:{hash,kind,at:Date.now()}};
+    if(!earlier&&(!['SWAP_PREPARED','APPROVE_PREPARED'].includes(phase)||!doc.prepared))reject('No prepared transaction for this step.',409);
+    // An earlier prepared transaction can be reported until the step is in flight or done.
+    if(earlier&&!['SWAP_PREPARED','APPROVE_PREPARED','READY','ALLOWANCE_READY','FAILED'].includes(phase))reject('This trade already has a transaction in flight or is done.',409);
+    const kind=earlier?earlier.kind:doc.prepared.kind;
+    if(!['APPROVE','SWAP'].includes(kind))reject('No prepared transaction for this step.',409);
+    const next={...doc,...(earlier?{prepared:{...earlier,quote:null,simulation:null}}:{}),sent:{hash,kind,at:Date.now()}};
     const nextPhase=kind==='APPROVE'?'APPROVE_SENT':'SUBMITTED';
     this.db.prepare('UPDATE agent_steps SET phase=?,document=? WHERE plan_id=? AND step=?').run(nextPhase,JSON.stringify(next),id,index);
     this.db.prepare("UPDATE agent_plans SET status='UNKNOWN' WHERE id=? AND status IN ('APPROVED','PARTIAL') AND ?='SUBMITTED'").run(id,nextPhase);
@@ -473,6 +496,17 @@ export class AgentStore extends ResearchStore {
     if(enabled&&this.db.prepare('SELECT count(*) n FROM agent_monitors WHERE owner=? AND strategy<>? AND json_extract(document,\'$.enabled\')=1').get(owner,strategyId).n>=3)reject('Monitor up to three research portfolios at a time.',429);
     const doc={enabled:enabled===true,mode:'RESEARCH_AND_ALERT',goal:g,briefHash:briefHash(s),owner:address,expiresAt:Date.now()+7*86400000,lastRelease:null,lastRunId:null,watch:null};
     this.db.prepare('INSERT INTO agent_monitors VALUES(?,?,?,?) ON CONFLICT(owner,strategy) DO UPDATE SET document=excluded.document,next_at=excluded.next_at').run(owner,strategyId,JSON.stringify(doc),Date.now());this.event(owner,strategyId,enabled?'MONITOR_ENABLED':'MONITOR_STOPPED');return doc;
+  }
+  operatingMonitor(address,execution) {
+    const owner=this.owner(address),c=execution.config,s=this.get(owner,c.strategyId);
+    if(c.owner!==address.slice(7)||briefHash(s)!==c.briefHash||execution.authorized!==true)reject('A matching signed operating mandate is required.',403);
+    const prior=this.db.prepare('SELECT document FROM agent_monitors WHERE owner=? AND strategy=?').get(owner,s.id);
+    const old=prior?JSON.parse(prior.document):{};
+    const enabled=['ACTIVE','RISK_EXIT'].includes(execution.phase);
+    const doc={...old,enabled,mode:'CONTINUOUS_TRADING',mandateId:execution.id,goal:c.goal,briefHash:c.briefHash,owner:address,
+      expiresAt:c.expiresAt==='0'?0:Number(c.expiresAt)*1000,maxResearchAgeMs:c.maxResearchAgeMs};
+    this.db.prepare('INSERT INTO agent_monitors VALUES(?,?,?,?) ON CONFLICT(owner,strategy) DO UPDATE SET document=excluded.document,next_at=excluded.next_at').run(owner,s.id,JSON.stringify(doc),Date.now());
+    return doc;
   }
   reserveTokens(maximum,cap=100000) {
     const day=new Date().toISOString().slice(0,10);

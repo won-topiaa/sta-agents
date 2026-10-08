@@ -73,7 +73,7 @@ export function web3Client({apiKey,secretKey,fetcher=fetch,now=()=>new Date(),ob
     }
   }
   // post(..., {once:true}) never retries: for requests that are not safe to repeat (an order submission).
-  return {get:(path,params)=>call('GET',path,{params}),post:(path,body,{once=false}={})=>call('POST',path,{body,retry:!once})};
+  return {get:(path,params)=>call('GET',path,{params}),post:(path,body,{once=true}={})=>call('POST',path,{body,retry:!once})};   // a POST is sent once unless it is known to be safe to repeat
 }
 
 // ---- typed helpers (paths and fields from the Binance Web3 API reference) ----
@@ -91,7 +91,7 @@ export const trading={
   order:(c,orderId)=>c.get(`/api/v1/dex/aggregator/order/${encodeURIComponent(orderId)}`),
 };
 export const transaction={
-  simulate:(c,evmTx)=>c.post('/api/v1/dex/pre-transaction/simulate',{binanceChainId:BSC,evmTx}),
+  simulate:(c,evmTx)=>c.post('/api/v1/dex/pre-transaction/simulate',{binanceChainId:BSC,evmTx},{once:false}),   // a dry run: safe to repeat
   detail:(c,txHash)=>c.get('/api/v1/dex/post-transaction/transaction-detail-by-txhash',{binanceChainId:BSC,txHash}),
 };
 export const wallet={

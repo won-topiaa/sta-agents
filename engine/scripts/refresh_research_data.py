@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scheduled refresh of the research data: the verified price release and the SEC fundamentals release.
 
-    refresh_research_data.py <data root> [--prices] [--fundamentals] [--store <quant store root>]
+    refresh_research_data.py <data root> [--prices] [--fundamentals] [--macro] [--store <quant store root>] [--fred-env <file>]
 
 With neither flag, both parts run. Each part replaces its release in one step, so a research run never reads a
 half-written release; a part that fails leaves the previous release in place, and research keeps using it until it
@@ -10,7 +10,9 @@ writes the latest outcome to <data root>/refresh-status.json. A second run while
 
 Prices: every ticker of the current price release is refreshed (cached history plus the newest sessions).
 Fundamentals: one SEC submissions request per company, companyfacts only for companies with a newer filing, and the
-FRED exchange rates for non-USD reporters (fundamentals.refresh_release)."""
+FRED exchange rates for non-USD reporters (fundamentals.refresh_release).
+Macro: every vintage of the official statistics the macro guards read (FRED/ALFRED, macro.refresh_release); it
+runs by default only when a FRED key is available (--fred-env file with FRED_API_KEY=..., or the environment)."""
 
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
-from xtxc_agent.research import fundamentals, quantstore  # noqa: E402
+from xtxc_agent.research import fundamentals, macro, quantstore  # noqa: E402
 from xtxc_agent.research import marketdata as md  # noqa: E402
 
 DEFAULT_STORE = Path("/home/ubuntu/xtxc_ai_quant")
@@ -56,14 +58,37 @@ def refresh_fundamentals(root: Path) -> dict:
             "fx": {c: row["through"] for c, row in rel.get("fx", {}).items()}, "fx_error": rel.get("fx_error")}
 
 
+def fred_key(path) -> str:
+    """FRED_API_KEY from ``path`` or the environment; an unreadable file raises OSError."""
+    if path:
+        for line in Path(path).read_text().splitlines():
+            if line.startswith("FRED_API_KEY="):
+                return line.split("=", 1)[1].strip()
+    return os.environ.get("FRED_API_KEY", "").strip()
+
+
+def refresh_macro(root: Path, key: str, key_error: str | None = None) -> dict:
+    if not key:
+        raise RuntimeError(key_error or "no FRED key (--fred-env file with FRED_API_KEY=..., or FRED_API_KEY)")
+    rel = macro.refresh_release(root, key)
+    return {"release": rel["release_id"], "series": {k: v.get("observation_end") for k, v in rel["series"].items()}, "errors": rel["errors"]}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("root", type=Path)
     ap.add_argument("--prices", action="store_true")
     ap.add_argument("--fundamentals", action="store_true")
+    ap.add_argument("--macro", action="store_true")
+    ap.add_argument("--fred-env", type=Path, default=None)
     ap.add_argument("--store", type=Path, default=DEFAULT_STORE)
     args = ap.parse_args()
-    parts = [p for p, on in (("prices", args.prices), ("fundamentals", args.fundamentals)) if on] or ["prices", "fundamentals"]
+    try:
+        key, key_error = fred_key(args.fred_env), None
+    except OSError as exc:  # a missing key file fails only the macro part, never prices or fundamentals
+        key, key_error = "", f"FRED key file unreadable: {type(exc).__name__}"
+    parts = [p for p, on in (("prices", args.prices), ("fundamentals", args.fundamentals), ("macro", args.macro)) if on] \
+        or ["prices", "fundamentals"] + (["macro"] if key or args.fred_env else [])
     root = args.root.resolve()
     lock = open(root / ".refresh.lock", "w")
     try:
@@ -75,7 +100,8 @@ def main() -> int:
     for part in parts:
         t0 = time.time()
         try:
-            out = refresh_prices(root, args.store) if part == "prices" else refresh_fundamentals(root)
+            out = (refresh_prices(root, args.store) if part == "prices" else refresh_fundamentals(root) if part == "fundamentals"
+                   else refresh_macro(root, key, key_error))
             run["parts"][part] = {"ok": True, **out}
         except Exception as exc:  # keep going: one part failing must not block the other
             run["parts"][part] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:300],

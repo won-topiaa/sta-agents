@@ -70,6 +70,9 @@ function claimLeg(store,run,index,doc){
     if(r?.status!=='RUNNING')return 'RUN_ENDED';
     const row=store.db.prepare('SELECT status,document FROM agent_plans WHERE id=?').get(run.plan_id),plan=JSON.parse(row.document);
     if(!LIVE.includes(row.status))return 'PLAN_ENDED';
+    // The same deadline as a step the owner signs: a run paused by the daily limit never buys hours later on an old
+    // research result (a purchase approval lasts an hour, a proposed exit a day).
+    if(!Number.isSafeInteger(plan.expiresAt)||Date.now()>plan.expiresAt)return 'PLAN_EXPIRED';
     if(!plan.kind){
       if(briefHash(store.get(run.owner,plan.strategyId))!==plan.briefHash)return 'BRIEF_CHANGED';
       let approval=null;try{approval=plan.agent?store.agentProfile(run.owner,plan.agent.id).approval:null;}catch{/* a deleted agent ends the run */}
@@ -98,9 +101,10 @@ export async function agenticTick(store,gw,now=Date.now()){
       if(open.phase==='AGENTIC_SUBMITTING'){setStep(store,run.plan_id,open.step,'UNKNOWN',{...doc,reason:'INTERRUPTED_BEFORE_ORDER_ID'});finishRun(store,run.plan_id,'ATTENTION','INTERRUPTED');continue;}
       let order;try{order=await gw('GET',`/v1/agentic/order?orderId=${encodeURIComponent(doc.orderId)}`);}catch{continue;}
       const list=Array.isArray(order)?order:order?.list??order?.orders??[order];
-      const o=list.find(x=>String(x?.orderId??x?.id??'')===doc.orderId)??(list.length===1?list[0]:null);
+      const o=list.find(x=>String(x?.orderId??x?.id??'')===doc.orderId);   // never another order's status
       const status=String(o?.status??o?.orderStatus??'PENDING').toUpperCase();
-      if(FILLED.includes(status)){setStep(store,run.plan_id,open.step,'RECONCILED',{...doc,order:o});planStatus(store,run.plan_id,plan.legs.length);}
+      // filledTokenAtoms: the bought quantity in token atoms (the gateway converts the CLI's shares); exits size by it.
+      if(FILLED.includes(status)){setStep(store,run.plan_id,open.step,'RECONCILED',{...doc,order:o,...(/^\d{1,40}$/.test(String(o?.filledTokenAtoms??''))?{filledTokenAtoms:String(o.filledTokenAtoms)}:{})});planStatus(store,run.plan_id,plan.legs.length);}
       else if(FAILED.includes(status)){setStep(store,run.plan_id,open.step,'FAILED',{...doc,order:o});finishRun(store,run.plan_id,'ATTENTION','ORDER_FAILED');continue;}
       else continue;
     }
@@ -110,10 +114,16 @@ export async function agenticTick(store,gw,now=Date.now()){
     // A sale names the exact token held (Ondo or bStock); a purchase buys the listed product.
     const index=done,leg=plan.legs[index],sell=leg.side==='SELL',product=sell?{contract:leg.productContract,symbol:leg.productSymbol,platform:leg.platform}:bscProduct(leg.instrument);
     if(!product?.contract){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue;}
+    // Quantities go to the wallet as 18-decimal amounts (USDT and every listed stock token today); anything else stops.
+    if(sell&&(leg.inputDecimals??18)!==18){finishRun(store,run.plan_id,'ATTENTION','UNSUPPORTED_DECIMALS');continue;}
     let quota;try{quota=await gw('GET','/v1/agentic/quota');}catch{continue;}
     // A purchase leg's USD value is known; a sale's is not until it fills, so Binance's own limit check covers it.
     const left=quotaLeftOf(quota);
     if(!sell&&Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue;}
+    // The gateway's Agentic Wallet session is shared: trade only while it is still signed in to this run's wallet.
+    let self;try{self=await gw('GET','/v1/agentic/address');}catch{continue;}
+    const signedIn=(Array.isArray(self?.addresses)?self.addresses:[]).find(x=>String(x?.binanceChainId)==='56')?.address;
+    if(!signedIn||String(signedIn).toLowerCase()!==String(run.address).toLowerCase()){finishRun(store,run.plan_id,'ATTENTION','WALLET_CHANGED');continue;}
     const doc={leg,product,mode:'AGENTIC',wallet:run.address,at:Date.now()};
     const refused=claimLeg(store,run,index,doc);
     if(refused){if(refused!=='RUN_ENDED')finishRun(store,run.plan_id,refused==='STEP_EXISTS'?'ATTENTION':'STOPPED',refused);continue;}
@@ -124,10 +134,22 @@ export async function agenticTick(store,gw,now=Date.now()){
       setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(orderId)});
       store.event(run.owner,run.strategy,'TRADE_STATUS',{planId:run.plan_id,index,phase:'AGENTIC_SUBMITTED'});
     }catch(e){
-      // A rejected request (limit, market closed) placed no order; an unreachable gateway might have.
-      const known=/limit|quota|closed|paused|minimum|invalid|not allowed/i.test(String(e?.message));
-      setStep(store,run.plan_id,index,known?'READY':'UNKNOWN',{...doc,error:String(e?.message??'').slice(0,200)});
-      finishRun(store,run.plan_id,known?'PAUSED':'ATTENTION',known?String(e.message).slice(0,120):'GATEWAY_UNCERTAIN');
+      const code=String(e?.code??''),message=String(e?.message??'').slice(0,200);
+      // The wallet named an order: it exists, so settle it like any other.
+      if(e?.orderId){setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(e.orderId),error:message});continue;}
+      // Refused before any order: the gateway's own checks, or the wallet's explicit refusals. Nothing was sent.
+      const gatewayRefusal=['MARKET','PRICE','LIMIT','INPUT','TOKEN','NO_ROUTE','MODE'].includes(code);
+      const walletRefusal=code==='AGENTIC'&&/limit|quota|closed|paused|minimum|invalid|not allowed|insufficient|no route/i.test(message);
+      if(gatewayRefusal||walletRefusal){
+        setStep(store,run.plan_id,index,'READY',{...doc,error:message});
+        // A closed market, a bad price or the daily limit pass: try again in an hour (the plan deadline still applies).
+        const reason=code==='MARKET'||/closed|paused/i.test(message)?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':null;
+        finishRun(store,run.plan_id,reason?'PAUSED':'ATTENTION',reason??`REFUSED_${code||'WALLET'}`);
+        continue;
+      }
+      // Timed out, unreadable or unreachable (AGENTIC_UNKNOWN, network): an order may exist.
+      setStep(store,run.plan_id,index,'UNKNOWN',{...doc,error:message,code});
+      finishRun(store,run.plan_id,'ATTENTION','GATEWAY_UNCERTAIN');
     }
   }
 }

@@ -44,7 +44,26 @@ export class AutonomyRuntime {
   return this.relay(orderId);
  }
  async relay(orderId){const before=this.journal.order(orderId),p=this.journal.policy(before.policy);await this.mainnet.pin(MAINNET);need(await this.mainnet.blockhashValid(before.facts.blockhash),'SIGNED_TRANSACTION_EXPIRED');const observed=await this.observed(p.config);this.beforeSign();const r=this.journal.beginRelay(orderId,observed);const reply=await this.stockmesh.submit({owner:r.wallet,quoteId:r.prepared.quoteId,preparedId:r.prepared.preparedId,signedTransactionBase64:r.signedTransactionBase64});need(reply.signature===r.signature,'SUBMISSION_SIGNATURE_MISMATCH');return this.check(orderId);}
- async check(orderId){let r=this.journal.order(orderId);need(r.signature||r.phase==='EXPIRED_UNSIGNED','NO_SIGNED_TRANSACTION');await this.mainnet.pin(MAINNET);if(!r.receipt){const tx=await this.mainnet.transaction(r.signature);if(!tx)return r;r=this.journal.recordReceipt(orderId,verifyMainnetReceipt(r,tx));}if(!r.settlementSignature){const p=this.journal.policy(r.policy),signature=await this.devnet.settle(p.config,r);r=this.journal.put({...r,settlementSignature:signature},r.phase);}return r;}
+ async check(orderId){
+  let r=this.journal.order(orderId);need(r.signature||r.phase==='EXPIRED_UNSIGNED','NO_SIGNED_TRANSACTION');await this.mainnet.pin(MAINNET);
+  // Reading chain success alone does not release the router's durable lock.
+  // Observe the same engine order before allowing the next allocation leg.
+  let engine;
+  if(!r.engineReconciled){engine=await this.stockmesh.order(r.wallet,r.prepared.preparedId);if(engine)need(engine.signature===r.signature,'ENGINE_RECEIPT_SIGNATURE_MISMATCH');}
+  if(!r.receipt){
+   const tx=await this.mainnet.transaction(r.signature);
+   if(tx)r=this.journal.recordReceipt(orderId,verifyMainnetReceipt(r,tx));
+   else{const proof=await this.mainnet.expiredNoFill(r);if(!proof)return r;r=this.journal.expireSigned(orderId,proof);}
+  }
+  if(!r.engineReconciled){
+   const ok=r.phase==='RECONCILED'?engine?.phase==='RECONCILED'&&engine.receiptVerified===true:
+    r.phase==='EXPIRED_NO_FILL'||r.phase==='EXPIRED_UNSIGNED'?!engine||['EXPIRED_NO_FILL','EXPIRED_UNSENT','FAILED','PREFLIGHT_REJECTED'].includes(engine.phase):engine?.phase==='FAILED';
+   need(ok,'STOCKMESH_RECONCILIATION_PENDING');
+   r=this.journal.put({...r,engineReconciled:{preparedId:r.prepared.preparedId,signature:r.signature,phase:engine?.phase??'NOT_ADMITTED',at:Date.now()}},r.phase);
+  }
+  if(!r.settlementSignature){const p=this.journal.policy(r.policy),signature=await this.devnet.settle(p.config,r);r=this.journal.put({...r,settlementSignature:signature},r.phase);}
+  return r;
+ }
 }
 export function normalizeBuyQuote(q,e){
  need(q.schema==='skew.stockmesh.exposure-quote/v2'&&q.instrument===e.instrument&&q.inputSymbol==='USDC'&&q.inAmountAtoms===e.inputAtoms&&q.exposure?.products?.length===1,'QUOTE_MISMATCH');

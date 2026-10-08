@@ -5,12 +5,12 @@ import {hash,canonical,validatePolicy,allowOrder,integer,requirePolicy as need,v
 export class AutonomyJournal {
  constructor(db){this.db=db;db.exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
  CREATE TABLE IF NOT EXISTS autonomy_policies(id TEXT PRIMARY KEY,wallet TEXT NOT NULL,owner TEXT NOT NULL,phase TEXT NOT NULL,config TEXT NOT NULL,config_hash TEXT NOT NULL,last_count TEXT NOT NULL,last_reserved TEXT NOT NULL,last_slot INTEGER NOT NULL);
- CREATE UNIQUE INDEX IF NOT EXISTS autonomy_wallet_active ON autonomy_policies(wallet) WHERE phase='ACTIVE';
+ DROP INDEX IF EXISTS autonomy_wallet_active;
  CREATE TABLE IF NOT EXISTS autonomy_orders(id TEXT PRIMARY KEY,policy TEXT NOT NULL,counter TEXT NOT NULL,wallet TEXT NOT NULL,phase TEXT NOT NULL,document TEXT NOT NULL,UNIQUE(policy,counter));
  DROP INDEX IF EXISTS autonomy_wallet_pending;
- CREATE UNIQUE INDEX autonomy_wallet_pending ON autonomy_orders(wallet) WHERE phase NOT IN ('RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED');
+ CREATE UNIQUE INDEX autonomy_wallet_pending ON autonomy_orders(wallet) WHERE phase NOT IN ('RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED','EXPIRED_NO_FILL');
  CREATE TABLE IF NOT EXISTS autonomy_events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,policy TEXT NOT NULL,kind TEXT NOT NULL,document TEXT NOT NULL,created_at INTEGER NOT NULL);`);}
- transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const x=fn();this.db.exec('COMMIT');return x;}catch(e){this.db.exec('ROLLBACK');throw e;}}
+ transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const x=fn();this.db.exec('COMMIT');return x;}catch(e){this.db.exec('ROLLBACK');throw e;}finally{this.inTransaction=false;}}
  event(policy,kind,document){this.db.prepare('INSERT INTO autonomy_events(policy,kind,document,created_at) VALUES(?,?,?,?)').run(policy,kind,JSON.stringify(document),Date.now());}
  policy(id){const r=this.db.prepare('SELECT * FROM autonomy_policies WHERE id=?').get(id);need(r,'POLICY_NOT_REGISTERED');return{...r,config:JSON.parse(r.config)};}
  order(id){const r=this.db.prepare('SELECT * FROM autonomy_orders WHERE id=?').get(id);need(r,'ORDER_NOT_FOUND');return{...JSON.parse(r.document),phase:r.phase};}
@@ -26,7 +26,7 @@ export class AutonomyJournal {
  stage(id,s,prepared,facts){return this.transaction(()=>{
   const p=this.policy(id);need(p.phase==='ACTIVE','POLICY_STOPPED');this.checkObservation(p,s);
   need(s.count===p.last_count&&s.reservedAtoms===p.last_reserved,'UNEXPECTED_EXTERNAL_RESERVATION');
-  need(!this.db.prepare("SELECT id FROM autonomy_orders WHERE wallet=? AND phase NOT IN ('RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED')").get(p.wallet),'ORDER_UNRESOLVED');
+  need(!this.db.prepare("SELECT id FROM autonomy_orders WHERE wallet=? AND phase NOT IN ('RECONCILED','FAILED_FINALIZED','EXPIRED_UNSIGNED','EXPIRED_NO_FILL')").get(p.wallet),'ORDER_UNRESOLVED');
   allowOrder(p.config,s,facts);
   need(prepared.owner===p.wallet&&prepared.submitAllowed===true&&prepared.transactionBase64&&prepared.preparedId&&prepared.quoteId,'PREPARED_TRADE_MISMATCH');
   const orderId=hash(canonical({policy:id,counter:s.count,messageHash:facts.messageHash}));
@@ -48,6 +48,10 @@ export class AutonomyJournal {
   this.event(r.policy,'EXPIRED_UNSIGNED',{orderId:id,receipt});return this.put({...r,receipt,receiptHash:hash(canonical(receipt))},'EXPIRED_UNSIGNED');
  });}
  beginRelay(id,s){return this.transaction(()=>{const r=this.order(id),p=this.policy(r.policy);need(p.phase==='ACTIVE'&&['SIGNED','UNKNOWN'].includes(r.phase)&&r.signedTransactionBase64&&r.relayAttempts<3,'RELAY_NOT_ALLOWED');this.assertReservation(p,r,s);this.event(r.policy,'RELAY',{orderId:id,signature:r.signature,attempt:r.relayAttempts+1});return this.put({...r,relayAttempts:r.relayAttempts+1,lastRelayAt:Date.now()},'UNKNOWN');});}
+ expireSigned(id,receipt){return this.transaction(()=>{
+  const r=this.order(id);need(['SIGNED','UNKNOWN'].includes(r.phase)&&r.signature&&receipt?.schema==='xtxc.signed-expiry/v1'&&receipt.phase==='EXPIRED_NO_FILL'&&receipt.signature===r.signature&&receipt.messageHash===r.facts.messageHash&&receipt.blockhashExpired===true&&receipt.historyAbsent===true&&Number.isSafeInteger(receipt.slot)&&BigInt(receipt.slot)>integer(r.facts.deadlineSlot)&&receipt.reason==='FINALIZED_UNCHANGED_STOCKMESH_NONCE','SIGNED_EXPIRY_NOT_PROVEN');
+  this.event(r.policy,'EXPIRED_NO_FILL',{orderId:id,receipt});return this.put({...r,receipt,receiptHash:hash(canonical(receipt))},'EXPIRED_NO_FILL');
+ });}
  // Receipt must first pass verifyMainnetReceipt. Not reachable from a client
  // 'mark success' request. Mainnet finalization precedes devnet attestation.
  recordReceipt(id,receipt){return this.transaction(()=>{const r=this.order(id);need(['UNKNOWN','SIGNED','RECONCILED','FAILED_FINALIZED'].includes(r.phase)&&receipt.signature===r.signature&&receipt.messageHash===r.facts.messageHash&&['RECONCILED','FAILED_FINALIZED'].includes(receipt.phase),'INVALID_RECEIPT');if(r.receipt){need(canonical(r.receipt)===canonical(receipt),'RECEIPT_CHANGED');return r;}this.event(r.policy,receipt.phase,{orderId:id,receipt});return this.put({...r,receipt,receiptHash:hash(canonical(receipt))},receipt.phase);});}

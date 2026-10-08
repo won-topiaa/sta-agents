@@ -100,6 +100,7 @@
 .ra-how div{display:contents}
 .ra-how dt{font-size:11.5px;color:#959595;white-space:nowrap}
 .ra-how dd{margin:0;font-size:12.5px;line-height:1.5;color:#dcdcdc}
+.ra-how-notice{display:block;margin:6px 0 0;padding:0 2px;max-width:720px;font-size:10.5px;line-height:1.55;color:#808080}
 @media(max-width:600px){.ra-how{grid-template-columns:1fr}.ra-how dt{margin-top:4px}}
 /* Sales: rebalance option, exit proposals, holdings. */
 .ra-check{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5;color:#bdbdbd;cursor:pointer}

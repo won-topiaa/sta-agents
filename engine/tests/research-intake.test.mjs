@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveIntake,interpretResearch,intakeContext} from '../lib/research-intake.mjs';
+import {resolveIntake,interpretResearch,intakeContext,CATALOGS} from '../lib/research-intake.mjs';
 const allowed=['NVDA','AMD','AVGO','ASML','TSM','MU','INTC','MRVL','QQQ'];
 const text='반도체로 1년에 5% 목표로 돌려봐';
 const slots={title:'반도체 연구',themes:['semiconductors'],include:[],exclude:[],budgetUSDC:null,budgetEvidence:null,targetPercent:'5',targetEvidence:'5%',horizonDays:365,horizonEvidence:'1년',maxLossPercent:null,maxLossEvidence:null};
@@ -61,4 +61,45 @@ test('numbers are grounded next to their unit and role; company names are whole 
  const ai=resolveIntake({...base,themes:[],include:['INTC']},'artificial intelligence names, not chips',['INTC','NVDA']);
  assert.ok(!ai.brief.instruments.includes('INTC'));                                                   // "intel" inside "intelligence"
  assert.ok(resolveIntake({...base,themes:[],include:['INTC']},'compare Intel please',['INTC','NVDA']).brief.instruments.includes('INTC'));
+});
+test('a bare loss number binds to the loss word nearest to it in the user text',()=>{
+ const base={...slots,targetPercent:null,targetEvidence:null};
+ const text='반도체 1년, maximum drawdown below 20%';
+ assert.equal(resolveIntake({...base,maxLossPercent:'20',maxLossEvidence:'20%'},text,allowed).goal.maxDrawdownBps,2000);
+ const both='반도체 1년 목표 30% 최대 손실 10%';
+ assert.throws(()=>resolveIntake({...base,maxLossPercent:'30',maxLossEvidence:'30%'},both,allowed),/loss limit/);
+ assert.equal(resolveIntake({...base,maxLossPercent:'10',maxLossEvidence:'10%'},both,allowed).goal.maxDrawdownBps,1000);
+ assert.equal(resolveIntake({...base,maxLossPercent:'15',maxLossEvidence:'15%'},'반도체 1년, 15% 손실까지',allowed).goal.maxDrawdownBps,1500);
+});
+test('loss, target and budget numbers belong to the word the user put them with',()=>{
+ const base={...slots,themes:['semiconductors'],targetPercent:null,targetEvidence:null,maxLossPercent:null,maxLossEvidence:null};
+ const loss=(text,v,e)=>resolveIntake({...base,maxLossPercent:v,maxLossEvidence:e},text,allowed).goal.maxDrawdownBps;
+ // the evidence holds a loss word, but 30 belongs to the target
+ assert.throws(()=>loss('반도체 1년 target 30%, max loss 10%','30','target 30%, max loss 10%'),/loss limit/);
+ assert.throws(()=>loss('반도체가 1년 30% 하락하면 사고 손실 10%','30','30% 하락'),/loss limit/);
+ assert.equal(loss('반도체가 1년 30% 하락하면 사고 손실 10%','10','10%'),1000);
+ for(const text of ['반도체 1년 목표 30% 손실 10%','반도체 1년 목표 30% 손실은 10%','반도체 1년 수익 30% 손실률 10%','반도체 1년 현금 30% 손실 10%']){
+  assert.throws(()=>loss(text,'30','30%'),/loss limit/,text);assert.equal(loss(text,'10','10%'),1000,text);
+ }
+ // several loss numbers: only the strictest is a limit
+ const story="반도체 1년, don't lose more than 10%, I had a 40% loss last year";
+ assert.throws(()=>loss(story,'40','40%'),/loss limit/);assert.equal(loss(story,'10','10%'),1000);
+ // a loss limit the model left out is still applied, never loosened
+ assert.equal(resolveIntake(base,'반도체 1년 손실 5%까지만',allowed).goal.maxDrawdownBps,500);
+ assert.equal(resolveIntake(base,'반도체 1년 손실 40%까지 괜찮아',allowed).goal.maxDrawdownBps,2000);   // the default stays
+ // the target never takes the loss number; a target word next to 하락 is still a target
+ assert.throws(()=>resolveIntake({...base,targetPercent:'10',targetEvidence:'10%'},'반도체 1년 목표 30% 손실 10%',allowed),/target/);
+ assert.equal(resolveIntake({...base,targetPercent:'10',targetEvidence:'10% 수익'},'반도체 1년 하락장에서도 10% 수익',allowed).goal.targetReturnBps,1000);
+ // two amounts: the budget is the one the user invests
+ const money="반도체 1년, I have $500 to invest; NVDA trades near $1000";
+ assert.throws(()=>resolveIntake({...base,budgetUSDC:'1000',budgetEvidence:'$1000'},money,allowed),/budget/);
+ assert.equal(resolveIntake({...base,budgetUSDC:'500',budgetEvidence:'$500'},money,allowed).brief.budget,'500');
+});
+test('named stocks are the list: a theme word around them adds no other names; one named stock still joins the theme',()=>{
+ const chips=['NVDA','AMD','AVGO','MU','TSM','QCOM','AMAT','LRCX'],all=[...new Set([...chips,...CATALOGS.bsc.themes.ai])];
+ const base={...slots,themes:['ai'],targetPercent:null,targetEvidence:null,horizonDays:null,horizonEvidence:null};
+ const listed=resolveIntake({...base,include:chips},`AI chip stocks (${chips.join(', ')})`,all,null,[],CATALOGS.bsc);
+ assert.deepEqual(listed.brief.instruments,chips);
+ const plus=resolveIntake({...base,include:['QCOM']},'AI stocks plus QCOM',all,null,[],CATALOGS.bsc);
+ assert.ok(plus.brief.instruments.includes('QCOM')&&CATALOGS.bsc.themes.ai.every(t=>plus.brief.instruments.includes(t)));
 });

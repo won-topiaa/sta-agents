@@ -58,13 +58,12 @@ export class DevnetPolicyTransport extends DevnetPolicyReader {
   return this.row(id);
  }
  async finish(id){
-  await this.submit(id);
-  for(let attempt=0;attempt<25;attempt++){
-   const r=await this.status(id);if(r.phase==='FINALIZED')return r.signature;need(r.phase!=='FAILED_FINALIZED','DEVNET_TRANSACTION_FAILED');
-   await new Promise(resolve=>setTimeout(resolve,1500));
-  }
+  // Persisted transport is polled by the scheduler. Never occupy every agent
+  // with a 37-second sleep loop while one devnet receipt is finalizing.
+  const r=await this.submit(id);if(r.phase==='FINALIZED')return r.signature;
+  need(r.phase!=='FAILED_FINALIZED','DEVNET_TRANSACTION_FAILED');
   throw Object.assign(new Error('DEVNET_CONFIRMATION_PENDING'),{code:'DEVNET_CONFIRMATION_PENDING',transportId:id});
  }
  async reserve(c,row){return this.finish((await this.create(c,'RESERVE',{counter:row.counter,inputAtoms:row.facts.inputAtoms,mint:row.facts.mint,side:row.facts.side,messageHash:row.facts.messageHash})).id);}
- async settle(c,row){need(row.receiptHash&&(['RECONCILED','FAILED_FINALIZED'].includes(row.phase)||(row.phase==='EXPIRED_UNSIGNED'&&row.receipt?.schema==='xtxc.unsigned-expiry/v1'&&!row.signature)),'MAINNET_RECEIPT_REQUIRED');return this.finish((await this.create(c,'SETTLE',{messageHash:row.facts.messageHash,receiptHash:row.receiptHash,phase:row.phase})).id);}
+ async settle(c,row){need(row.receiptHash&&(['RECONCILED','FAILED_FINALIZED'].includes(row.phase)||(row.phase==='EXPIRED_UNSIGNED'&&row.receipt?.schema==='xtxc.unsigned-expiry/v1'&&!row.signature)||(row.phase==='EXPIRED_NO_FILL'&&row.receipt?.schema==='xtxc.signed-expiry/v1'&&row.receipt.signature===row.signature&&row.engineReconciled)),'MAINNET_RECEIPT_REQUIRED');return this.finish((await this.create(c,'SETTLE',{messageHash:row.facts.messageHash,receiptHash:row.receiptHash,phase:row.phase})).id);}
 }

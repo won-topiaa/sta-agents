@@ -11,4 +11,6 @@ export function saleWallet(store:AgentStore,address:string,strategy:ResearchStra
 export function createSellPlan(store:AgentStore,address:string,strategyId:string,options:{kind:'CLOSE'|'EXIT';holdings:SaleHolding[];wallet?:'PERSONAL'|'AGENTIC';reason?:unknown;proposed?:boolean}):AgentPlan;
 export function approveProposed(store:AgentStore,address:string,id:string):AgentPlan;
 export function exitPositions(store:AgentStore):unknown[];
+export function heldForRun(store:AgentStore,address:string,strategy:ResearchStrategy,walletKind:'PERSONAL'|'AGENTIC',reply:unknown):string[];
+export function substantial(raw:string,decimals?:number):boolean;
 export function exitWatch(store:AgentStore,options:{gw:Gateway;check:(input:unknown)=>Promise<any>;release:string|null}):Promise<unknown>;

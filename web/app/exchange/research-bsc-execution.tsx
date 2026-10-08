@@ -24,7 +24,11 @@ function RefusedQuote({quote,code,message}:{quote:RefusalQuote;code?:string;mess
     <small>{message??(code==='NO_GAS'?'Add BNB for network fees to this wallet to execute.':'Add BNB (gas) and USDT to this wallet to execute.')}</small></div>;
 }
 const stageOf=(phase:string)=>phase==='RECONCILED'?3:phase==='SUBMITTED'?2:['ALLOWANCE_READY','SWAP_PREPARED'].includes(phase)?1:0;
-type Prepared={kind:'APPROVE'|'SWAP';tx:{from:string;to:string;data:string;value:string;gas:string;gasPrice?:string;minReceiveAmount?:string};quote?:{vendor:string;toTokenAmount:string;priceImpactPercent?:string}|null};
+// A quote is signed within a minute of the dry run; after that the owner gets a fresh one.
+const QUOTE_TTL_MS=60000,quoteStale=(receivedAt?:number)=>Date.now()-(receivedAt??0)>QUOTE_TTL_MS;
+// EIP-1193 user rejection: nothing was sent, so the same transaction may be offered again.
+const userRejected=(e:unknown)=>{const {code,message}=(e??{}) as {code?:unknown;message?:unknown};return code===4001||code==='ACTION_REJECTED'||/user (rejected|denied|cancel)/i.test(String(message??''));};
+type Prepared={receivedAt?:number;kind:'APPROVE'|'SWAP';tx:{from:string;to:string;data:string;value:string;gas:string;gasPrice?:string;minReceiveAmount?:string};quote?:{vendor:string;toTokenAmount:string;toSymbol?:string;toDecimals?:number;priceImpactPercent?:string}|null};
 
 export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:AgentController;wallet:string;onRefresh:()=>void}){
   const [busy,setBusy]=useState<number|null>(null),[error,setError]=useState<string|null>(null),[pending,setPending]=useState<Record<number,Prepared>>({});
@@ -38,17 +42,26 @@ export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:Ag
   const refused=agent.failure?.operation==='BSC_PREPARE'&&agent.failure.planId===plan.id?agent.failure:null;
   async function prepare(i:number){
     setBusy(i);setError(null);
-    try{const b=await agent.act({operation:'BSC_PREPARE',planId:plan.id,index:i,slippagePercent:'1'});if(b&&live.current)setPending(p=>({...p,[i]:b.prepared as Prepared}));}
+    try{const b=await agent.act({operation:'BSC_PREPARE',planId:plan.id,index:i});if(b&&live.current)setPending(p=>({...p,[i]:{...(b.prepared as Prepared),receivedAt:Date.now()}}));}
     finally{if(live.current)setBusy(null);}
   }
   async function sign(i:number){
-    const p=pending[i];if(!p)return;setBusy(i);setError(null);
+    const p=pending[i];if(!p)return;
+    const drop=()=>setPending(x=>{const n={...x};delete n[i];return n;});
+    if(quoteStale(p.receivedAt)){drop();setError('That quote is more than a minute old. Get a new quote.');return;}
+    setBusy(i);setError(null);
     try{
       const provider=evmProvider();if(!provider)throw new Error('Enable your BNB Chain wallet.');
       if(await provider.request({method:'eth_chainId'})!=='0x38')await provider.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x38'}]});
       const toHex=(v:string)=>'0x'+BigInt(v).toString(16);
-      // The wallet shows and signs exactly the checked transaction; the server re-reads it on chain.
-      const hash=await provider.request({method:'eth_sendTransaction',params:[{from:p.tx.from,to:p.tx.to,data:p.tx.data,value:toHex(p.tx.value),gas:toHex(p.tx.gas),...(p.tx.gasPrice?{gasPrice:toHex(p.tx.gasPrice)}:{})}]}) as string;
+      // The wallet shows and signs exactly the checked transaction (the wallet prices the gas); the server re-reads it on chain.
+      let hash:string;
+      try{hash=await provider.request({method:'eth_sendTransaction',params:[{from:p.tx.from,to:p.tx.to,data:p.tx.data,value:toHex(p.tx.value),gas:toHex(p.tx.gas)}]}) as string;}
+      catch(e){
+        // Anything but a rejection (a timeout, a dropped connection) may still have sent it: never offer the same signature twice.
+        if(!userRejected(e)){if(live.current)drop();throw new Error('Your wallet did not confirm in time. If it sent the transaction anyway, report its hash below; otherwise get a new quote.');}
+        throw e;
+      }
       try{sessionStorage.setItem(sentKey(i),hash);}catch{}
       if(live.current){setSent(x=>({...x,[i]:hash}));setPending(x=>{const n={...x};delete n[i];return n;});}
       await report(i,hash);onRefresh();
@@ -69,6 +82,10 @@ export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:Ag
     return false;
   }
   async function reportNow(i:number,hash:string){setBusy(i);setError(null);try{await report(i,hash);onRefresh();}finally{if(live.current)setBusy(null);}}
+  // A quote older than a minute is dropped, so the step asks for a fresh one (not while its wallet prompt is open).
+  useEffect(()=>{const ends=Object.entries(pending).filter(([k])=>Number(k)!==busy).map(([,p])=>(p.receivedAt??0)+QUOTE_TTL_MS);if(!ends.length)return;
+    const t=setTimeout(()=>setPending(x=>Object.fromEntries(Object.entries(x).filter(([k,p])=>Number(k)===busy||Date.now()-(p.receivedAt??0)<=QUOTE_TTL_MS))),Math.max(0,Math.min(...ends)-Date.now())+50);
+    return()=>clearTimeout(t);},[pending,busy]);
   const checking=plan.steps.some(s=>['APPROVE_SENT','SUBMITTED'].includes(s.phase));
   useEffect(()=>{if(!checking)return;const t=setInterval(()=>{const s=plan.steps.find(s=>['APPROVE_SENT','SUBMITTED'].includes(s.phase));if(s&&!agent.busy)void agent.act({operation:'BSC_CHECK',planId:plan.id,index:s.index}).then(onRefresh);},5000);return()=>clearInterval(t);},[checking,plan.id,plan.steps,agent,onRefresh]);
   const planLive=['APPROVED','PARTIAL','UNKNOWN'].includes(plan.status);
@@ -78,6 +95,8 @@ export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:Ag
     <div className="ra-trade-legs">{plan.legs.map((leg,i)=>{
       const step=stepOf(i),phase=step?.phase??'READY',p=pending[i],prevDone=i===0||stepOf(i-1)?.phase==='RECONCILED';
       const prepared=['APPROVE_PREPARED','SWAP_PREPARED'].includes(phase),sentHash=prepared?sent[i]??storedSent(i):null;
+      // An earlier prepared transaction of this step can still be reported after a failed or interrupted attempt.
+      const earlier=!prepared&&['READY','ALLOWANCE_READY','FAILED'].includes(phase)&&Boolean((step as {preparedAll?:unknown[]}|undefined)?.preparedAll?.length);
       const canPrepare=!sentHash&&prevDone&&['READY','ALLOWANCE_READY','FAILED','APPROVE_PREPARED','SWAP_PREPARED'].includes(phase)&&['APPROVED','PARTIAL'].includes(plan.status);
       const receipt=(step as {receipts?:{hash:string;kind:string;status:string}[]}|undefined)?.receipts?.filter(r=>r.kind==='SWAP').at(-1);
       const stage=stageOf(phase),started=Boolean(p)||!['READY','FAILED'].includes(phase);
@@ -85,11 +104,11 @@ export function BscPlanExecution({plan,agent,onRefresh}:{plan:AgentPlan;agent:Ag
       const sell=leg.side==='SELL',paying=sell?leg.productSymbol??'token':'USDT',amount=sell?`${tokenUnits(leg.inputAtoms,leg.inputDecimals??18)} ${leg.productSymbol??leg.instrument}`:usdt(leg.inputAtoms);
       return <div key={i} className="bsc-leg"><span><small className="bsc-leg-count">Trade {i+1} of {plan.legs.length}</small><b>{sell?'Sell':'Buy'} {leg.instrument}</b><small>{amount} · {sell&&phase==='RECONCILED'?'Sold':phaseText[phase]??phase}</small>
           <ol className="bsc-track" aria-label={`Trade ${i+1} progress`}>{[`Approve ${paying}`,'Swap','Confirmed'].map((t,k)=><li key={t} className={k<stage?'done':started&&k===stage?'now':''}>{t}</li>)}</ol>
-          {p&&<small>{p.kind==='APPROVE'?`Lets the Binance router spend exactly ${amount}`:`Route: ${p.quote?.vendor??'Binance'} · dry run passed`}</small>}
+          {p&&<small>{p.kind==='APPROVE'?`Lets the Binance router spend exactly ${amount}`:<>Route: {p.quote?.vendor??'Binance'} · dry run passed{p.quote&&p.tx.minReceiveAmount&&<> · you get ≈ {units(p.quote.toTokenAmount,p.quote.toDecimals??18)} {p.quote.toSymbol??''}, at least {units(p.tx.minReceiveAmount,p.quote.toDecimals??18)}</>}</>}</small>}
           {receipt&&<a href={`https://bscscan.com/tx/${receipt.hash}`} target="_blank" rel="noreferrer">View on BscScan ↗</a>}
           {refused?.index===i&&refused.quote&&<RefusedQuote quote={refused.quote} code={refused.code} message={agent.error}/>}
           {sentHash&&<small className="bsc-sent">Sent from your wallet: <a href={`https://bscscan.com/tx/${sentHash}`} target="_blank" rel="noreferrer">{sentHash.slice(0,10)}…{sentHash.slice(-6)} ↗</a>. Report it so this trade can continue.</small>}
-          {prepared&&!sentHash&&!p&&<details className="bsc-paste"><summary>Already sent this step from your wallet?</summary>
+          {(prepared||earlier)&&!sentHash&&!p&&<details className="bsc-paste"><summary>{earlier?'Did an earlier attempt of this trade go through?':'Already sent this step from your wallet?'}</summary>
             <span><input aria-label="Transaction hash" placeholder="0x… transaction hash" value={typed[i]??''} onChange={e=>setTyped(x=>({...x,[i]:e.target.value}))}/><button disabled={busy!==null||!(typed[i]??'').trim()} onClick={()=>void reportNow(i,typed[i]??'')}>Report</button></span>
             <small>Copy it from your wallet&apos;s activity or BscScan. Do not sign the step again.</small></details>}</span>
         {phase==='RECONCILED'?<span className="bsc-done">{sell?'Sold':'Purchased'}</span>:sentHash?<button className="ra-primary" disabled={busy!==null} onClick={()=>void reportNow(i,sentHash)}>{busy===i?'Reporting…':'Report sent transaction'}</button>:p&&planLive?<button className="ra-primary" disabled={busy!==null} onClick={()=>void sign(i)}>{busy===i?'Waiting for wallet…':p.kind==='APPROVE'?`Approve ${paying} in wallet`:'Confirm swap in wallet'}</button>
@@ -133,18 +152,44 @@ export function AgenticConnect({agentic}:{agentic:ReturnType<typeof useAgentic>}
     {error&&<p className="ra-error" role="alert">{error}</p>}
   </div>;
 }
+// Why an Agentic run is not running, in the owner's words. An uncertain order is never retried automatically.
+const runTitle:Record<string,string>={RUNNING:'Agent running',PAUSED:'Agent paused',STOPPED:'Agent stopped',ATTENTION:'Agent needs your attention',COMPLETE:'Agent finished'};
+const until=' It tries again every hour until the plan expires.',none=' Nothing was ordered.';
+const runReason:Record<string,string>={
+  OWNER_STOPPED:'You stopped this agent. Orders already placed stay as they are.',
+  DAILY_LIMIT:`Paused: the next order is above the daily limit left in your Binance app.${until}`,
+  MARKET_CLOSED:`Paused: this stock is not trading right now.${until}`,
+  PRICE_CHECK:`Paused: the route price was too far from the listed token price.${until}`,
+  INTERRUPTED:'Stopped: the agent was interrupted while placing an order, so an order may exist. Check Orders in your Binance app before trading this plan again.',
+  NO_ORDER_ID:'Stopped: Binance did not return an order id, so an order may exist. Check Orders in your Binance app.',
+  GATEWAY_UNCERTAIN:'Stopped: the connection to Binance dropped while placing an order, so an order may exist. Check Orders in your Binance app.',
+  ORDER_FAILED:'Stopped: Binance reports an order as failed or cancelled. See its details in your Binance app.',
+  WALLET_CHANGED:'Stopped: a different Binance account is now signed in to the Agentic Wallet, so nothing more was ordered. Reconnect your account, then approve again.',
+  REFUSED_LIMIT:`Stopped: Binance refused the next order under a limit set in your Binance app.${none}`,
+  REFUSED_INPUT:`Stopped: Binance refused the next order's amount.${none}`,
+  REFUSED_TOKEN:`Stopped: this token is outside your Agentic Wallet's token scope in the Binance app.${none}`,
+  REFUSED_NO_ROUTE:`Stopped: Binance found no route for the next order.${none}`,
+  REFUSED_MODE:`Stopped: your Agentic Wallet's mode in the Binance app does not allow this trade.${none}`,
+  REFUSED_WALLET:`Stopped: Binance refused the Agentic Wallet for this order. Reconnect it in your Binance app.${none}`,
+  UNSUPPORTED_DECIMALS:`Stopped: a token in this plan uses a unit the agent cannot size.${none}`,
+  NOT_TRADABLE:'Stopped: a stock in this plan is not tradable on BNB Chain right now.',
+  STEP_EXISTS:'Stopped: a trade in this plan was already started another way.',
+  PLAN_ENDED:'Stopped: this plan was stopped or has ended.',
+  PLAN_EXPIRED:'Stopped: this plan\'s approval expired before all its trades ran. Approve the strategy again for a fresh plan.',
+  BRIEF_CHANGED:'Stopped: the strategy changed after you approved this plan. Approve it again to trade.',
+  AGENT_SETTING_CHANGED:'Stopped: this agent no longer trades on its own. Change Trade approval in its settings and approve again.'};
 export function AgenticPanel({plan,wallet}:{plan:AgentPlan;wallet:string;onRefresh?:()=>void}){
   const agentic=useAgentic(wallet,plan.id),run=agentic.state?.run;
   if(plan.agent?.approval!=='AUTO_WITHIN_LIMITS'&&plan.wallet!=='AGENTIC')return !['APPROVED','PARTIAL','UNKNOWN'].includes(plan.status)?null:<p className="ap-note"><b>{plan.agent?`${plan.agent.name}: ${approvalText.PER_TRADE.toLowerCase()}.`:'You confirm every trade.'}</b> Confirm each trade with your wallet below.{plan.agent?' To let the agent trade on its own within Binance limits, change Trade approval in its settings.':''}</p>;
   return <section className="ra-autonomy" aria-label="Agentic Wallet">
-    <header><div><h4>{run?`Agent ${run.status.toLowerCase()}`:'Let your agent trade within limits'}</h4><p>Binance Agentic Wallet · Binance enforces the limits you set in its app.</p></div></header>
+    <header><div><h4>{run?runTitle[run.status]??`Agent ${run.status.toLowerCase()}`:'Let your agent trade within limits'}</h4><p>Binance Agentic Wallet · Binance enforces the limits you set in its app.</p></div></header>
     <AgenticConnect agentic={agentic}/>
     {agentic.connected&&<>
       <p className="ra-caption">{(()=>{const sales=plan.legs.filter(l=>l.side==='SELL').length,buys=plan.legs.length-sales;
         return [sales?`This plan sells ${sales} holding${sales===1?'':'s'} for USDT`:'',buys?`${sales?'then buys':'This plan buys'} ${usdt((BigInt(plan.budgetAtoms)-BigInt(plan.cashAtoms)).toString())} of stocks`:''].filter(Boolean).join(', ')+`, in ${plan.legs.length} order${plan.legs.length===1?'':'s'}, one at a time.`;})()}</p>
       {!run&&<button className="ra-primary" disabled={agentic.busy||plan.status!=='APPROVED'} onClick={()=>void agentic.post({operation:'START',planId:plan.id})}>Start agent</button>}
       {run?.status==='RUNNING'&&<button className="ra-text" disabled={agentic.busy} onClick={()=>void agentic.post({operation:'STOP',planId:plan.id})}>Stop remaining trades</button>}
-      {run&&run.status!=='RUNNING'&&run.reason&&<p className="ra-caption">{run.reason}</p>}
+      {run&&run.status!=='RUNNING'&&run.reason&&<p className="ra-caption">{runReason[run.reason]??run.reason}</p>}
     </>}
   </section>;
 }

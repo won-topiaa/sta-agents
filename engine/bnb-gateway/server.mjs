@@ -20,7 +20,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
   if(typeof token!=='string'||!token)throw new Error('The gateway needs a token.');
   let universe=null,loading=null;
   async function tokens(){
-    if(universe&&now()-universe.at<300000)return universe;
+    if(universe&&now()-universe.at<30000)return universe;   // trading status changes at the open and close
     if(loading)return loading;   // one refresh at a time, however many requests arrive
     loading=refreshTokens().finally(()=>{loading=null;});
     return loading;
@@ -43,6 +43,26 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     return fromStable;
   }
   const atoms18=qty=>{const [i,f='']=String(qty).split('.');return BigInt(i)*10n**18n+BigInt((f+'0'.repeat(18)).slice(0,18));};
+  const dec18=a=>{const w=a/10n**18n,f=(a%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
+  // Stock tokens: one token is `ratio` shares (tokenToShareRatio). The Agentic Wallet CLI takes and reports stock-token
+  // quantities in shares, so sales convert tokens -> shares (rounded up; the CLI caps at the balance) and fills
+  // convert shares -> tokens (rounded down).
+  const ratioAtoms=stock=>{const r=atoms18(String(stock.ratio??'1'));if(r<=0n)throw new ExecutionCheckError('TOKEN','This token has no share ratio.');return r;};
+  const tokensToShares=(tokenAtoms,stock)=>dec18((tokenAtoms*ratioAtoms(stock)+10n**18n-1n)/10n**18n);
+  const sharesToTokenAtoms=(shares,stock)=>(atoms18(shares)*10n**18n)/ratioAtoms(stock);
+  // An independent price check: the route's price may not be worse than the token's listed price (tokenPrice, which is
+  // the underlying share price x ratio) by more than MAX_DEVIATION, and the route's own price impact stays small.
+  const MAX_DEVIATION=0.03,MAX_IMPACT_PERCENT=2;
+  function priceBound(stock,buying,payAtoms,getAtoms){
+    const ref=Number(stock?.tokenPrice),dec=Number(stock?.decimals??18);
+    if(!(ref>0))throw new ExecutionCheckError('PRICE','No reference price for this token right now.');
+    const tokens=Number(buying?getAtoms:payAtoms)/10**dec,usd=Number(buying?payAtoms:getAtoms)/1e18;
+    if(!(tokens>0&&usd>0))throw new ExecutionCheckError('PRICE','This quote has no usable price.');
+    const implied=usd/tokens,off=buying?implied/ref-1:1-implied/ref;
+    if(off>MAX_DEVIATION)throw new ExecutionCheckError('PRICE',`This route prices ${stock.symbol} ${(off*100).toFixed(1)}% worse than its listed price ($${ref.toFixed(2)}). Try again later.`);
+    return {implied,reference:ref};
+  }
+  function impactBound(route){const v=Number(route?.priceImpactPercent);if(Number.isFinite(v)&&Math.abs(v)>MAX_IMPACT_PERCENT)throw new ExecutionCheckError('PRICE',`Price impact ${v}% is above ${MAX_IMPACT_PERCENT}%. Try a smaller amount.`);}
   async function allowance(owner,tokenAddr){
     const data='0xdd62ed3e'+owner.toLowerCase().slice(2).padStart(64,'0')+BSC_ROUTER.toLowerCase().slice(2).padStart(64,'0');
     return BigInt(await rpc('eth_call',[{to:tokenAddr,data},'latest']));
@@ -55,13 +75,15 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     const buying=await pair(fromToken,toToken);
     if(buying&&BigInt(amount)>maxStable)throw new ExecutionCheckError('LIMIT','This gateway caps a single purchase leg.');
     const stock=(await tokens()).tokens.find(t=>sameAddress(t.contract,buying?toToken:fromToken));
-    if(stock&&stock.status.reason!=='TRADING')throw new ExecutionCheckError('MARKET',`${stock.symbol} is not trading now (${stock.status.reason}).`);
+    if(!stock||stock.status.reason!=='TRADING')throw new ExecutionCheckError('MARKET',`${stock?.symbol??'This token'} is not trading now (${stock?.status?.reason??'UNLISTED'}).`);
     const routes=await trading.quote(client,{amount:String(amount),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:user});
     const route=(Array.isArray(routes)?routes:[]).find(r=>r.isBest)??routes?.[0];
     if(!route)throw new ExecutionCheckError('NO_ROUTE','No route for this trade now.');
+    if(route.executionMode&&route.executionMode!=='SWAP')throw new ExecutionCheckError('MODE','This route cannot be signed as a swap now. Try again later.');
+    impactBound(route);const price=priceBound(stock,buying,BigInt(amount),BigInt(String(route.toTokenAmount)));
     const stable=sameAddress(buying?fromToken:toToken,BSC_USDT)?'USDT':'USDC';
     const quote={vendor:route.vendorName,fromAmount:String(amount),fromSymbol:buying?stable:stock?.symbol,toTokenAmount:String(route.toTokenAmount),
-      toSymbol:buying?stock?.symbol:stable,toDecimals:buying?stock?.decimals:18,priceImpactPercent:route.priceImpactPercent,quotedAt:new Date(now()).toISOString()};
+      toSymbol:buying?stock?.symbol:stable,toDecimals:buying?stock?.decimals:18,priceImpactPercent:route.priceImpactPercent,impliedPrice:price.implied,referencePrice:price.reference,quotedAt:new Date(now()).toISOString()};
     // Never ask a wallet to sign something that cannot succeed: gas first, then the input token. The live quote is
     // still returned, so an unfunded wallet sees the route and price it would get.
     const unfunded=(code,message)=>Object.assign(new ExecutionCheckError(code,message),{quote});
@@ -99,6 +121,21 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
       receipt:receipt&&{status:receipt.status==='0x1'?'SUCCESS':'FAILED',blockNumber:parseInt(receipt.blockNumber,16),gasUsed:BigInt(receipt.gasUsed).toString()},
       indexed:indexed?{txStatus:indexed.txStatus??null}:null};
   }
+  let selfCache=null;
+  async function agenticBscAddress(){
+    if(selfCache&&now()-selfCache.at<600000)return selfCache.address;
+    const r=await baw(['wallet','address']),list=Array.isArray(r?.addresses)?r.addresses:[];
+    const a=list.find(x=>String(x.binanceChainId)==='56')?.address??list.find(x=>isAddress(x.address))?.address;
+    if(!isAddress(a))throw new ExecutionCheckError('AGENTIC_UNKNOWN','The Agentic Wallet address could not be read.');
+    selfCache={at:now(),address:a};return a;
+  }
+  // Fills of stock-token purchases in token atoms (the CLI reports shares).
+  async function withTokenFills(r){
+    const list=Array.isArray(r)?r:r?.list??r?.orders??(r?[r]:[]),rows=(await tokens()).tokens;
+    for(const o of list){const stock=rows.find(t=>sameAddress(t.contract,o?.toToken));
+      if(stock&&/^\d+(\.\d+)?$/.test(String(o.toTokenActualQty??'')))o.filledTokenAtoms=sharesToTokenAtoms(String(o.toTokenActualQty),stock).toString();}
+    return r;
+  }
   // Agentic Wallet: fixed commands only, always --json, arguments as an array (no shell).
   const agentic={
     status:()=>baw(['wallet','status']),address:()=>baw(['wallet','address']),settings:()=>baw(['wallet','settings']),quota:()=>baw(['wallet','left-quota']),
@@ -111,10 +148,18 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
       if(buying&&atoms18(fromTokenQty)>maxStable)throw new ExecutionCheckError('LIMIT','This gateway caps a single purchase leg.');
       const stock=(await tokens()).tokens.find(t=>sameAddress(t.contract,buying?toToken:fromToken));
       if(!stock||stock.status.reason!=='TRADING')throw new ExecutionCheckError('MARKET',`${stock?.symbol??'This token'} is not trading now.`);
-      return baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',String(fromTokenQty),
+      if(!buying&&Number(stock.decimals)!==18)throw new ExecutionCheckError('TOKEN','Only 18-decimal tokens are sold from the Agentic Wallet.');
+      // The same independent price check as a hand-signed leg, on a fresh quote for the Agentic Wallet's own address.
+      const payAtoms=atoms18(fromTokenQty),self=await agenticBscAddress();
+      const routes=await trading.quote(client,{amount:payAtoms.toString(),fromTokenAddress:fromToken,toTokenAddress:toToken,userWalletAddress:self});
+      const route=(Array.isArray(routes)?routes:[]).find(r=>r.isBest)??routes?.[0];
+      if(!route)throw new ExecutionCheckError('NO_ROUTE','No route for this trade now.');
+      impactBound(route);priceBound(stock,buying,payAtoms,BigInt(String(route.toTokenAmount)));
+      const qty=buying?String(fromTokenQty):tokensToShares(payAtoms,stock);   // the CLI reads a stock-token amount as shares
+      return baw(['market-order','swap','--binanceChainId','56','--fromToken',fromToken,'--toToken',toToken,'--fromTokenQty',qty,
         '--slippage',String(slippage),'--mev','true'],120000);
     },
-    order:orderId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(orderId))throw new ExecutionCheckError('INPUT','Invalid order id.');return baw(['market-order','list','--orderId',orderId]);},
+    order:async orderId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/.test(orderId))throw new ExecutionCheckError('INPUT','Invalid order id.');return withTokenFills(await baw(['market-order','list','--orderId',orderId]));},
   };
   const routes={
     'GET /v1/health':async()=>({ok:true,router:BSC_ROUTER}),
@@ -139,7 +184,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     if(req.method==='POST'){const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>16000)return send(413,{error:{code:'TOO_LARGE',message:'Request too large.'}});chunks.push(c);}
       try{body=chunks.length?JSON.parse(Buffer.concat(chunks).toString()):{};}catch{return send(400,{error:{code:'BAD_JSON',message:'Invalid JSON.'}});}}
     try{send(200,{data:await handler(body,url.searchParams)});}
-    catch(e){send(e instanceof ExecutionCheckError?422:502,{error:{code:e.code??'UPSTREAM',message:String(e.message??'Gateway error').slice(0,300),httpStatus:e.httpStatus,...(e.quote?{quote:e.quote}:{})}});}
+    catch(e){send(e?.code==='AGENTIC_UNKNOWN'?504:e instanceof ExecutionCheckError?422:502,{error:{code:e.code??'UPSTREAM',message:String(e.message??'Gateway error').slice(0,300),httpStatus:e.httpStatus,...(e.quote?{quote:e.quote}:{}),...(e.orderId?{orderId:e.orderId}:{})}});}
   });
 }
 
@@ -154,8 +199,11 @@ function bawRun(args,timeout=60000){
       // A command succeeded only if it exited cleanly AND said so. The CLI's own message is passed on; the process error
       // (command line, stderr) is not, since it names local paths.
       if(!err&&parsed&&parsed.success!==false)return resolve(parsed.data??parsed);
+      // Killed by the timeout, ended by a signal, or a clean exit we cannot read: an order may have been placed.
+      if(err?.killed||err?.signal||(!err&&!parsed))return reject(new ExecutionCheckError('AGENTIC_UNKNOWN','The Agentic Wallet did not answer clearly; an order may exist.'));
       const message=typeof parsed?.error?.message==='string'?parsed.error.message:typeof parsed?.message==='string'?parsed.message:'Agentic Wallet command failed.';
-      reject(new ExecutionCheckError('AGENTIC',message.slice(0,200)));
+      const orderId=parsed?.error?.data?.orderId??parsed?.data?.orderId;
+      reject(Object.assign(new ExecutionCheckError('AGENTIC',message.slice(0,200)),orderId?{orderId:String(orderId).slice(0,80)}:{}));
     });
   });
 }
@@ -166,5 +214,6 @@ if(process.argv[1]?.endsWith('server.mjs')){
   const client=web3Client({apiKey:keys.BINANCE_WEB3_API_KEY,secretKey:keys.BINANCE_WEB3_SECRET_KEY,observe:e=>evidence&&appendFileSync(evidence,JSON.stringify(e)+'\n')});
   const port=Number(env('GATEWAY_PORT')||4590);
   if(typeof gw.GATEWAY_TOKEN!=='string'||gw.GATEWAY_TOKEN.length<32){console.error('GATEWAY_TOKEN (32+ characters) is missing from GATEWAY_ENV_FILE; not starting.');process.exit(1);}
-  createGateway({client,token:gw.GATEWAY_TOKEN}).listen(port,'127.0.0.1',()=>console.log(`bnb gateway on 127.0.0.1:${port}`));
+  const requests=evidence?evidence.replace(/[^/]+$/,'gateway-requests.jsonl'):null;   // route, status, ms and error code only
+  createGateway({client,token:gw.GATEWAY_TOKEN,log:e=>requests&&appendFileSync(requests,JSON.stringify(e)+'\n')}).listen(port,'127.0.0.1',()=>console.log(`bnb gateway on 127.0.0.1:${port}`));
 }

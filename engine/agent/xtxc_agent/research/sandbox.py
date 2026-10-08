@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -320,6 +321,8 @@ def check_backtest(spec: dict, res: dict, universe: set[str]) -> None:
         if any(x > cap + band + 1e-6 for x in w.values()) or sum(w.values()) > 1 - floor + band + 1e-6:
             raise SandboxError("held weights break the cap or the cash floor")
     lt = (res.get("latest_target") or {}).get("weights") or {}
+    if not all(isinstance(x, (int, float)) and math.isfinite(x) and x >= 0 for x in lt.values()):
+        raise SandboxError("the latest target has a weight that is not a finite non-negative number")
     if set(lt) - universe or any(x > cap + 1e-9 for x in lt.values()) or sum(lt.values()) > 1 - floor + 1e-9:
         raise SandboxError("the latest target breaks the rules")
 

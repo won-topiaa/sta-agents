@@ -73,10 +73,11 @@ function Curve({candidate}:{candidate:ResearchCandidate}){
 }
 // The engine's own plain-English description of the tested design (report field howItPicks).
 function HowItPicks({candidate}:{candidate:ResearchCandidate}){
-  const how=(candidate as ResearchCandidate&{howItPicks?:Partial<Record<'score'|'filters'|'pick'|'weighting'|'risk_off'|'breadth'|'hold'|'exit',string>>}).howItPicks;
-  const rows=how?([['Ranks stocks by','score'],['Filters','filters'],['Buys','pick'],['Splits the money','weighting'],['Market guard','risk_off'],['Breadth guard','breadth'],['Keeps','hold'],['Exits','exit']] as const).filter(([,k])=>how[k]&&how[k]!=='none'):[];
+  const how=(candidate as ResearchCandidate&{howItPicks?:Partial<Record<'score'|'filters'|'pick'|'weighting'|'risk_off'|'breadth'|'macro'|'hold'|'exit',string>>}).howItPicks;
+  const rows=how?([['Ranks stocks by','score'],['Filters','filters'],['Buys','pick'],['Splits the money','weighting'],['Market guard','risk_off'],['Breadth guard','breadth'],['Official-data guard','macro'],['Keeps','hold'],['Exits','exit']] as const).filter(([,k])=>how[k]&&how[k]!=='none'):[];
   if(!rows.length)return null;
-  return <dl className="ra-how">{rows.map(([label,k])=><div key={k}><dt>{label}</dt><dd>{how![k]}</dd></div>)}</dl>;
+  return <><dl className="ra-how">{rows.map(([label,k])=><div key={k}><dt>{label}</dt><dd>{how![k]}</dd></div>)}</dl>
+    {how?.macro&&<small className="ra-how-notice">Official statistics: FRED®/ALFRED®, as published by the day before. This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.</small>}</>;
 }
 function Verdict({candidate}:{candidate:ResearchCandidate}){
   return candidate.verdict==='ELIGIBLE'?<span className="ra-verdict ra-ok">Fits your limits</span>:<span className="ra-verdict ra-no">Outside your limits</span>;
@@ -100,7 +101,7 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
   const [selectedCandidate,setSelectedCandidate]=useState<string|null>(null),[sellOutside,setSellOutside]=useState(false);
   useEffect(()=>{setDraft(null);setSelectedCandidate(null);setSellOutside(false);},[run?.id,agent.data?.owner]);
   if(!run)return <div className="ra-empty"><h3>Set a target. Test the possibilities.</h3><p>Your agent designs up to three strategies and tests each one on past prices, after trading costs. The results appear here.</p></div>;
-  if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3>{active(run)&&<div className="ra-progress" role="progressbar" aria-label="Research in progress"><span/></div>}<p>{run.error??'Designing strategies, then testing each one on past prices after costs. This usually takes about a minute.'}</p><small>Started {new Date(run.createdAt).toLocaleString()}</small></div>;
+  if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3>{active(run)&&<div className="ra-progress" role="progressbar" aria-label="Research in progress"><span/></div>}<p>{run.error??'Designing strategies, then testing each one on past prices after costs. This usually takes about a minute.'}</p><small>Started {new Date(run.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div>;
   const r=run.result,h=horizonText(run.goal.horizonDays),fits=r.candidates.filter(c=>c.verdict==='ELIGIBLE').length;
   const candidate=r.candidates.find(c=>c.id===selectedCandidate)??r.candidates.find(c=>c.verdict==='ELIGIBLE')??r.candidates[0];
   // A run is approved at most once; an approval that lapsed needs a fresh run.

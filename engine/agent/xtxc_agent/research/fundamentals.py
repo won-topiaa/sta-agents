@@ -29,15 +29,17 @@ a price file, use share-count jumps that look like splits instead). Which count 
 
 US filers tag us-gaap facts; foreign filers (20-F / 40-F) tag ifrs-full facts, often only for fiscal years and half
 years: twelve-month values then come from fiscal years and from first halves rolled forward. Values stay in the
-reporting currency in the digest and are converted to USD with FRED daily rates (each session at the previous
-session's rate) where they meet a USD market value; ratios inside one currency (ROE, debt to equity, growth) need no
-rate. ETFs and trusts have no company facts.
+reporting currency in the digest and are converted to USD with FRED daily rates (H.10) where they meet a USD market
+value. H.10 publishes a business week's daily rates the following Monday at 4:15 p.m. ET, after the close, so each
+session uses the latest rate published before it (``h10_published``). Ratios inside one currency (ROE, debt to
+equity, growth) need no rate. ETFs and trusts have no company facts.
 """
 
 from __future__ import annotations
 
 import collections
 import datetime as dt
+import functools
 import gzip
 import hashlib
 import json
@@ -101,6 +103,24 @@ FX_SERIES = {"EUR": ("DEXUSEU", False), "GBP": ("DEXUSUK", False), "AUD": ("DEXU
              "NOK": ("DEXNOUS", True), "INR": ("DEXINUS", True), "SGD": ("DEXSIUS", True), "BRL": ("DEXBZUS", True),
              "MXN": ("DEXMXUS", True), "ZAR": ("DEXSFUS", True)}
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={}"
+
+
+@functools.lru_cache(maxsize=1)
+def _federal_holidays() -> frozenset[str]:
+    from pandas.tseries.holiday import USFederalHolidayCalendar
+    return frozenset(str(d.date()) for d in USFederalHolidayCalendar().holidays("1990-01-01", "2045-12-31"))
+
+
+@functools.lru_cache(maxsize=None)
+def h10_published(day: str) -> str:
+    """The day H.10 made the rate observed on ``day`` public: the Monday after its business week (4:15 p.m. ET, after
+    the US close, so it is usable from the next session), or the next business day when that Monday is a federal
+    holiday. FRED's vintages agree (DEXUSEU 2026-10-02, a Friday, first appeared on 2026-10-05)."""
+    d = dt.date.fromisoformat(day)
+    out = d + dt.timedelta(days=7 - d.weekday())
+    while out.weekday() >= 5 or str(out) in _federal_holidays():
+        out += dt.timedelta(days=1)
+    return str(out)
 FLOWS = ("net_income", "revenue", "ocf", "capex", "dividends", "operating_income", "dna")
 UA = "XTXC STA research skewlabs@skew.deals"
 # Issuers that moved to a new SEC registrant (e.g. a holding-company reorganisation): ticker -> earlier CIKs whose
@@ -275,7 +295,7 @@ def _split_basis(out: list) -> list[tuple[str, str, float]]:
 
 
 MAX_AGE_DAYS = 400
-FX_MAX_AGE_DAYS = 10   # an exchange rate older than this is not used
+FX_MAX_AGE_DAYS = 10   # an exchange rate is not used more than this many days after its publication
 
 
 def _asof(series: list[tuple[str, str, float]], index: pd.DatetimeIndex, value=lambda rows, i: rows[i][2],
@@ -420,11 +440,14 @@ def ticker_panel(doc: dict, close: pd.Series, fx: list | None = None, splits: li
                  adr: float = 1.0) -> dict[str, np.ndarray]:
     """Signals per session for one company; ``doc`` is a digest (or raw companyfacts, digested here).
 
-    ``fx`` [(date, date, USD per unit)] converts a non-USD reporting currency (each day at the previous session's
-    rate); without it such a company gets no money-based values. ``adr`` is ordinary shares per listed share."""
+    ``fx`` [(published, date, USD per unit)] converts a non-USD reporting currency (each day at the latest rate
+    published before it); without it such a company gets no money-based values. ``adr`` is ordinary shares per
+    listed share."""
     d = doc if doc.get("version") == DIGEST_VERSION else digest(doc)
     idx = close.index
     mcap = close.to_numpy(dtype=float) * _shares_per_day(d["shares"], idx, splits) / adr
+    # Releases stored before 2026-10-08 keyed each rate by its own date; the publication day is never earlier.
+    fx = [(max(r[0], h10_published(r[1])), r[1], r[2]) for r in fx] if fx else None
     usd = np.ones(len(idx)) if d["currency"] == "USD" else _asof(fx, idx, max_age=FX_MAX_AGE_DAYS) if fx else np.full(len(idx), np.nan)
     flows = {k: _asof(d["flows"][k], idx) for k in FLOWS}
     equity, debt, cash = (_asof(d["instants"][k], idx) for k in ("equity", "debt", "cash"))
@@ -630,7 +653,8 @@ def _http(fetcher=None):
 
 
 def fetch_fx(currencies, get) -> dict[str, list]:
-    """[(date, date, USD per unit)] per currency from FRED; a rate is used from the session after its date."""
+    """[(published, date, USD per unit)] per currency from FRED; a rate is used from the session after its H.10
+    publication (``h10_published``)."""
     out = {}
     for c in sorted(set(currencies) - {"USD"}):
         if c not in FX_SERIES:
@@ -644,7 +668,7 @@ def fetch_fx(currencies, get) -> dict[str, list]:
             except ValueError:
                 continue
             if x > 0 and len(day) == 10 and day[4] == "-" and day[7] == "-":
-                rows.append([day, day, 1 / x if per_usd else x])
+                rows.append([h10_published(day), day, 1 / x if per_usd else x])
         if not rows:
             raise ValueError(f"FRED {series}: no rates in the response")
         out[c] = rows
@@ -661,7 +685,7 @@ def _store_fx(root: Path, rel: dict, get) -> None:
     rel.pop("fx_error", None)
     fx = rel.setdefault("fx", {})
     for c, rows in rates.items():
-        fx[c] = {"series": FX_SERIES[c][0], "through": rows[-1][0],
+        fx[c] = {"series": FX_SERIES[c][0], "through": rows[-1][1],
                  "object": _put(root, json.dumps(rows, separators=(",", ":")).encode(), ".fx.json.gz")}
 
 

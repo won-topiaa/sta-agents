@@ -34,6 +34,10 @@
 .ap-presets button{border:1px solid #393939;border-radius:999px;padding:6px 12px;font-size:11px;background:#151515;color:#d8d8d8}
 .ap-presets button[aria-pressed=true]{background:#ededed;color:#191919;border-color:#ededed;font-weight:600}
 .ap-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:10px}
+.ap-rule-group{margin-top:18px}
+.ap-rule-group h4{display:flex;flex-wrap:wrap;gap:4px 9px;align-items:baseline;margin:0;font-size:11.5px;font-weight:600;color:#d6d6d6}
+.ap-rule-group h4 span{font-size:10.5px;font-weight:400;color:#858585}
+.ap-rule-group .ap-rules{margin-top:8px}
 .ap-rule{border:1px solid #303030;border-radius:7px;padding:10px 11px;background:#121212;min-width:0}
 .ap-rule.ap-on{border-color:#6a6a6a;background:#191919}
 .ap-rule-head{display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer}

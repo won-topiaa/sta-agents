@@ -26,9 +26,35 @@ const mentioned=(ticker,text)=>new RegExp(`(^|[^A-Za-z0-9])${ticker.replaceAll('
 // A number counts only next to its unit: "$20 for 365 days" grounds a budget of 20, not 365.
 const moneyNumbers=e=>[...e.replaceAll(',','').matchAll(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:USDC|USDT|USD|달러|dollars?)/gi)].map(m=>Number(m[1]??m[2]));
 const percentNumbers=e=>[...e.replaceAll(',','').matchAll(/(\d+(?:\.\d+)?)\s*(?:%|퍼센트|퍼|프로|percent)/gi)].map(m=>Number(m[1]));
-// The loss limit is the slot that protects the user, so its evidence must say it is about a loss, and the target's
-// evidence must not: a model cannot swap "target 30%, max loss 10%" into a 30% loss limit.
-const LOSS_WORDS=/loss|lose|losing|drawdown|draw-down|down more than|손실|손해|낙폭|하락|잃|손절|마이너스/i;
+// Each percentage or amount belongs to the word it sits with in the user's own text, never to whatever number the
+// model quoted. "target 30%, max loss 10%", "목표 30% 손실은 10%" and "30% 하락하면 … 손실 10%" all bind 10 to the loss.
+const LOSS_WORDS=/loss|lose|losing|drawdown|draw-down|down more than|\bmdd\b|손실|손해|낙폭|하락|잃|손절|마이너스/i;
+const TARGET_WORDS=/target|goal|return|profit|gain|목표|수익|이익/i,CASH_WORDS=/cash|reserve|현금/i;
+const BUDGET_WORDS=/budget|invest|\bhave\b|spend|\bput\b|\bwith\b|capital|원금|예산|자금|투자|넣|가지고/i;
+const PERCENT_G=/(\d+(?:\.\d+)?)\s*(?:%|퍼센트|퍼|프로|percent)/gi;
+const MONEY_G=/\$\s*(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s*(?:USDC|USDT|USD|달러|dollars?)/gi;
+const NEAR=24;
+// The number a keyword governs: the first one after it in the same clause (no other kind of keyword in between),
+// else the last one before it. Clauses end at ; , . (followed by a space), a line break, "and" or "그리고".
+function boundNumbers(text,words,others,numberRe=PERCENT_G){
+  const t=String(text),cuts=[...t.matchAll(/[;\n]|[,.](?=\s|$)|\band\b|그리고/gi)].map(m=>m.index);
+  const clause=i=>cuts.filter(c=>c<i).length;
+  const nums=[...t.matchAll(numberRe)].map(m=>({n:Number(String(m[1]??m[2]).replaceAll(',','')),at:m.index,end:m.index+m[0].length}));
+  const other=[...t.matchAll(new RegExp(others.source,'gi'))].map(m=>[m.index,m.index+m[0].length]);
+  const clear=(a,b)=>!other.some(([x,y])=>x>=a&&y<=b);
+  const out=new Set();
+  for(const w of t.matchAll(new RegExp(words.source,'gi'))){
+    const a=w.index,b=a+w[0].length,c=clause(a);
+    const after=nums.find(x=>x.at>=b&&x.at-b<=NEAR&&clause(x.at)===c&&clear(b,x.at));
+    const before=[...nums].reverse().find(x=>x.end<=a&&a-x.end<=NEAR&&clause(x.at)===c&&clear(x.end,a));
+    const pick=after??before;if(pick&&Number.isFinite(pick.n))out.add(pick.n);
+  }
+  return out;
+}
+const OTHER_THAN=(...words)=>new RegExp(words.map(w=>w.source).join('|'),'i');
+const lossNumbers=text=>boundNumbers(text,LOSS_WORDS,OTHER_THAN(TARGET_WORDS,CASH_WORDS));
+const targetNumbers=text=>boundNumbers(text,TARGET_WORDS,OTHER_THAN(LOSS_WORDS,CASH_WORDS));
+const budgetNumbers=text=>boundNumbers(text,BUDGET_WORDS,/price|trades?|near|주가|가격/i,MONEY_G);
 const percent=s=>typeof s==='string'&&/^\d{1,5}(?:\.\d{1,2})?$/.test(s)?Math.round(Number(s)*100):reject('The requested percentage needs clarification.');
 const comparable=text=>text.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
 const containsEvidence=(text,evidence)=>typeof evidence==='string'&&!!evidence.trim()&&comparable(text).includes(comparable(evidence));
@@ -86,7 +112,10 @@ export function resolveIntake(p,text,allowed,context=null,selected=[],catalog=CA
  // buy. Do not depend on the model reproducing the registry key perfectly.
  const aiMention=themeWords.ai.test(text)&&!/(?:exclude|avoid|without|not|no)\s+(?:all\s+)?(?:ai|artificial intelligence)\b|(?:AI|인공지능).{0,8}(?:제외|빼)/i.test(text);
  if(aiMention&&!p.themes.includes('ai'))p={...p,themes:[...p.themes,'ai']};
- const proposed=[...p.include.filter(t=>mentioned(t,text)),...p.themes.filter(t=>themeWords[t]?.test(text)&&(t!=='ai'||aiMention)).flatMap(t=>catalog.themes[t])];
+ const named=p.include.filter(t=>mentioned(t,text));
+ // Two or more named stocks are the list itself: a theme word around them ("AI chip stocks (NVDA, AMD, …)") describes
+ // them and adds no other names. One named stock with a theme still means the theme plus that stock.
+ const proposed=[...named,...(named.length>=2?[]:p.themes.filter(t=>themeWords[t]?.test(text)&&(t!=='ai'||aiMention)).flatMap(t=>catalog.themes[t]))];
  const excluded=p.exclude.filter(t=>mentioned(t,text));
  // Only grounded mentions control this branch. A model-invented theme must
  // neither add stocks nor suppress the documented starter research universe.
@@ -99,10 +128,17 @@ export function resolveIntake(p,text,allowed,context=null,selected=[],catalog=CA
  if(p.budgetUSDC!=null){
   const e=grounded(p.budgetUSDC,p.budgetEvidence,text);
   if(typeof p.budgetUSDC!=='string'||!/^\d{1,8}(?:\.\d{1,2})?$/.test(p.budgetUSDC)||Number(p.budgetUSDC)<=0||/[원₩]/.test(e)||!moneyNumbers(e).includes(Number(p.budgetUSDC)))reject('State the research budget in USDC or dollars.');
+  if(new Set(moneyNumbers(text)).size>1&&!budgetNumbers(text).has(Number(p.budgetUSDC)))reject('Your message has more than one amount. Say which one is the research budget.');
   budget=p.budgetUSDC;
  }
- if(p.targetPercent!=null){const e=grounded(p.targetPercent,p.targetEvidence,text);if(!percentNumbers(e).includes(Number(p.targetPercent))||LOSS_WORDS.test(e))reject('State the target as a percentage.');goal.targetReturnBps=percent(p.targetPercent);}
- if(p.maxLossPercent!=null){const e=grounded(p.maxLossPercent,p.maxLossEvidence,text);if(!percentNumbers(e).includes(Number(p.maxLossPercent))||!LOSS_WORDS.test(e))reject('State the loss limit as a percentage.');goal.maxDrawdownBps=percent(p.maxLossPercent);}
+ const losses=lossNumbers(text);
+ if(p.targetPercent!=null){const e=grounded(p.targetPercent,p.targetEvidence,text),v=Number(p.targetPercent),targets=targetNumbers(text);
+  // A number the user tied to a loss word can never become the target, unless they also tied it to a target word.
+  if(!percentNumbers(e).includes(v)||(losses.has(v)&&!targets.has(v))||(LOSS_WORDS.test(e)&&!targets.has(v)))reject('State the target as a percentage.');goal.targetReturnBps=percent(p.targetPercent);}
+ if(p.maxLossPercent!=null){const e=grounded(p.maxLossPercent,p.maxLossEvidence,text),v=Number(p.maxLossPercent);
+  // The loss limit must be a number the user tied to a loss word; with several, only the strictest is accepted.
+  if(!percentNumbers(e).includes(v)||!losses.has(v)||v!==Math.min(...losses))reject('State the loss limit as a percentage.');goal.maxDrawdownBps=percent(p.maxLossPercent);}
+ else if(losses.size){const strict=percent(String(Math.min(...losses)));if(strict<goal.maxDrawdownBps)goal.maxDrawdownBps=strict;}   // never looser than written
  const allDurations=durations(text);
  const quotedDurations=containsEvidence(text,p.horizonEvidence)?durations(p.horizonEvidence):[];
  const statedDuration=quotedDurations.length===1?quotedDurations[0]:allDurations.length===1?allDurations[0]:null;

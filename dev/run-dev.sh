@@ -18,10 +18,18 @@ running() { [ -f "$T/run/$1.pid" ] && kill -0 "$(cat "$T/run/$1.pid")" 2>/dev/nu
 case "${1:-status}" in
   start)
     load
+    # Agentic sign-in and start need XTXC_AGENTIC_OWNER (the operator's wallet); without XTXC_DEV_AGENTIC=1 it is unset,
+    # so the dev web cannot sign the shared gateway in to another account.
+    [ "${XTXC_DEV_AGENTIC:-}" = 1 ] || unset XTXC_AGENTIC_OWNER
     running web || { (cd "$ROOT/web" && nohup "$NODE" node_modules/next/dist/bin/next start -p 4391 -H 127.0.0.1 >> "$T/logs/web.log" 2>&1 < /dev/null & echo $! > "$T/run/web.pid"); }
-    running worker || { (cd "$ROOT/engine" && nohup "$NODE" scripts/research-agent-worker.mjs >> "$T/logs/worker.log" 2>&1 < /dev/null & echo $! > "$T/run/worker.pid"); }
+    # Production shares the gateway and its one Agentic Wallet, so the dev worker never drives it (no agenticTick or
+    # exitWatch) unless XTXC_DEV_AGENTIC=1 is set for a deliberate test.
+    running worker || { (cd "$ROOT/engine" && if [ "${XTXC_DEV_AGENTIC:-}" = 1 ]; then exec nohup "$NODE" scripts/research-agent-worker.mjs; else exec env -u XTXC_BNB_GATEWAY_URL nohup "$NODE" scripts/research-agent-worker.mjs; fi >> "$T/logs/worker.log" 2>&1 < /dev/null & echo $! > "$T/run/worker.pid"); }
     sleep 1; "$0" status ;;
   stop) for s in web worker; do running $s && kill "$(cat "$T/run/$s.pid")"; rm -f "$T/run/$s.pid"; done
+    # Also any worker left from an earlier start (a lost pid file once left 15 of them running with the gateway URL).
+    for p in $(pgrep -u "$(id -u)" -f "scripts/research-agent-worker.mjs"); do
+      [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$ROOT/engine" ] && kill "$p"; done
     # `next start` forks next-server; stop whatever still listens on the dev port.
     for p in $(ss -ltnp 2>/dev/null | grep ':4391 ' | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do kill "$p"; done; sleep 2; "$0" status ;;
   status) for s in web worker; do running $s && echo "$s running ($(cat "$T/run/$s.pid"))" || echo "$s stopped"; done ;;

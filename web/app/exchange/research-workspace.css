@@ -89,6 +89,7 @@
 .rw-import-shortcut svg{width:13px;height:13px}
 .rw-root .rw-tabs{height:48px}
 .rw-root .rw-start{padding-top:70px}
+.rw-root .ap-bar+.rw-start{padding-top:28px}
 .rw-root .rw-start h2{font-size:26px;margin-bottom:24px}
 .rw-suggestions{display:flex;flex-wrap:wrap;gap:8px}
 .rw-root .rw-suggestions .rw-starter{width:auto;border:1px solid #303030;background:transparent;border-radius:6px;padding:9px 10px;font-size:11px;font-weight:400}

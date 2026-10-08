@@ -6,6 +6,7 @@ import { kilnProposal, AgentUnavailable } from '../lib/research-kiln.mjs';
 import { agenticTick } from '../lib/research-agentic.mjs';
 import { exitWatch } from '../lib/research-bsc-sell.mjs';
 import { dirname, join } from 'node:path';
+import {flushOperatingResearch} from '../lib/research-ongoing-feed.mjs';
 
 export function evaluate(input,inspect=false,signal) {
   return new Promise((resolve,reject)=>{
@@ -53,18 +54,19 @@ export async function processRun(store,run,config) {
   }catch(e){if(!abort.signal.aborted)store.finish(run,e.stage??'FAILED',null,e.message?.slice(0,350)??'Research failed.');}
   finally{clearInterval(timer);}
 }
-function monitors(store) {
+export function monitors(store) {
   let release;
   try{release=JSON.parse(readFileSync(process.env.XTXC_RESEARCH_DATA_ROOT+'/prices/quant_release.json','utf8')).release_id;}catch{return;}
   for(const row of store.db.prepare('SELECT * FROM agent_monitors WHERE next_at<=? LIMIT 20').all(Date.now())){
     const m=JSON.parse(row.document);
     store.db.prepare('UPDATE agent_monitors SET next_at=? WHERE owner=? AND strategy=?').run(Date.now()+900000,row.owner,row.strategy);
     if(!m.enabled)continue;
-    if(m.expiresAt<=Date.now()){m.enabled=false;m.reason='EXPIRED';store.db.prepare('UPDATE agent_monitors SET document=? WHERE owner=? AND strategy=?').run(JSON.stringify(m),row.owner,row.strategy);continue;}
+    if(m.expiresAt!==0&&m.expiresAt<=Date.now()){m.enabled=false;m.reason='EXPIRED';store.db.prepare('UPDATE agent_monitors SET document=? WHERE owner=? AND strategy=?').run(JSON.stringify(m),row.owner,row.strategy);continue;}
     const strategy=store.get(row.owner,row.strategy);
     if(briefHash(strategy)!==m.briefHash){m.enabled=false;m.reason='BRIEF_CHANGED';}
-    else if(m.lastRelease!==release){
-      try{m.lastRunId=store.enqueue(m.owner,row.strategy,m.goal,randomUUID());m.lastRelease=release;store.event(row.owner,row.strategy,'MONITOR_RESEARCH',{runId:m.lastRunId});}catch{continue;}
+    else if(m.lastRelease!==release||(m.mode==='CONTINUOUS_TRADING'&&Date.now()-(m.lastResearchAt??0)>m.maxResearchAgeMs/2)){
+      if(store.db.prepare("SELECT id FROM agent_runs WHERE owner=? AND strategy=? AND status IN ('QUEUED','RUNNING','WAITING_DATA','WAITING_MODEL')").get(row.owner,row.strategy))continue;
+      try{m.lastRunId=store.enqueue(m.owner,row.strategy,m.goal,randomUUID());m.lastRelease=release;m.lastResearchAt=Date.now();store.event(row.owner,row.strategy,'MONITOR_RESEARCH',{runId:m.lastRunId});}catch{continue;}
     }
     store.db.prepare('UPDATE agent_monitors SET document=? WHERE owner=? AND strategy=?').run(JSON.stringify(m),row.owner,row.strategy);
   }
@@ -73,13 +75,19 @@ function monitors(store) {
 export async function gatewayCall(method,path,body){
   const r=await fetch(process.env.XTXC_BNB_GATEWAY_URL+path,{method,headers:{Authorization:`Bearer ${process.env.XTXC_BNB_GATEWAY_TOKEN}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(130000)});
   const j=await r.json().catch(()=>null);if(r.ok&&j&&'data' in j)return j.data;
-  throw new Error(j?.error?.message??`Gateway HTTP ${r.status}`);
+  // The gateway's error code (MARKET, PRICE, AGENTIC_UNKNOWN …) and any order id travel with the error.
+  throw Object.assign(new Error(j?.error?.message??`Gateway HTTP ${r.status}`),{code:j?.error?.code??null,status:r.status,orderId:j?.error?.orderId??null});
 }
 async function main() {
   const store=new AgentStore(process.env.XTXC_RESEARCH_DB,[]);
   let stopping=false,exitAt=0;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
+  // Agentic orders settle on their own timer, so a research run (minutes) never holds them up; one tick at a time.
+  let ticking=false;
+  const tick=async()=>{if(ticking||!process.env.XTXC_BNB_GATEWAY_URL)return;ticking=true;
+    try{await agenticTick(store,gatewayCall);}catch(e){process.stderr.write(`Agentic tick failed: ${String(e?.message??'').slice(0,200)}\n`);}finally{ticking=false;}};
+  const timer=setInterval(()=>{void tick();},5000);
   while(!stopping){
-    try{monitors(store);if(process.env.XTXC_BNB_GATEWAY_URL)await agenticTick(store,gatewayCall);const run=store.claim();if(run)await processRun(store,run,process.env);}
+    try{await flushOperatingResearch(store);monitors(store);await tick();const run=store.claim();if(run)await processRun(store,run,process.env);await flushOperatingResearch(store);}
     catch{process.stderr.write('Research worker cycle failed; no transaction was sent.\n');}
     // Daily exit rules (once per price release). A failure retries after 10 minutes; nothing is sent from here
     // except Agentic Wallet sales of an agent allowed to trade on its own (through agenticTick on the next cycle).
@@ -90,6 +98,7 @@ async function main() {
     if(process.argv.includes('--once'))break;
     await new Promise(r=>setTimeout(r,3000));
   }
+  clearInterval(timer);while(ticking)await new Promise(r=>setTimeout(r,200));
   store.close();
 }
 if(process.argv[1]?.endsWith('research-agent-worker.mjs'))await main();

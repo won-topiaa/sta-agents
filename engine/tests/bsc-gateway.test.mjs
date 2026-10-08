@@ -59,11 +59,11 @@ async function call(server,method,path,body,token='t0k'){
   try{const r=await fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return{status:r.status,body:await r.json()};}
   finally{server.close();}
 }
-function fakeClient({allowance=0n,status='TRADING',simulation=received(),gas=10n**16n,funds=10n**21n}={}){
+function fakeClient({allowance=0n,status='TRADING',simulation=received(),gas=10n**16n,funds=10n**21n,price='241',ratio='1',impact='0.1',out='103615607209127732'}={}){
   const seen=[];
   const client={get:async(path)=>{seen.push(path);
-      if(path.endsWith('/rwa/tokens'))return [{tokenContractAddress:stock,platformId:'bstock',tokenSymbol:'NVDAB',decimals:'18',underlyingTicker:'NVDA',tokenToShareRatio:'1',statusInfo:{reasonCode:status}}];
-      if(path.endsWith('/aggregator/quote'))return [{quoteId:'q1',vendorName:'LiquidMesh',executionMode:'SWAP',toTokenAmount:'103615607209127732',isBest:true}];
+      if(path.endsWith('/rwa/tokens'))return [{tokenContractAddress:stock,platformId:'bstock',tokenSymbol:'NVDAB',decimals:'18',underlyingTicker:'NVDA',tokenToShareRatio:ratio,tokenPrice:price,statusInfo:{reasonCode:status}}];
+      if(path.endsWith('/aggregator/quote'))return [{quoteId:'q1',vendorName:'LiquidMesh',executionMode:'SWAP',toTokenAmount:out,priceImpactPercent:impact,isBest:true}];
       if(path.endsWith('/aggregator/swap'))return built();
       if(path.endsWith('/approve-transaction'))return approval(amount);
       throw new Error('unexpected '+path);},
@@ -110,9 +110,10 @@ test('gateway: approval first, then a checked and simulated swap; refuses closed
 
 test('gateway: Agentic Wallet runs fixed commands with --json and validated arguments only',async()=>{
   const f=fakeClient(),calls=[];
-  const baw=async(args)=>{calls.push(args);return {orderId:'o-1'};};
+  const baw=async(args)=>{calls.push(args);return args[1]==='address'?{addresses:[{binanceChainId:'56',address:user}]}:{orderId:'o-1'};};
   let r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
-  assert.equal(r.status,200);assert.deepEqual(calls[0],['market-order','swap','--binanceChainId','56','--fromToken',BSC_USDT,'--toToken',stock,'--fromTokenQty','25','--slippage','1','--mev','true']);
+  const swaps=()=>calls.filter(c=>c[0]==='market-order');
+  assert.equal(r.status,200);assert.deepEqual(swaps()[0],['market-order','swap','--binanceChainId','56','--fromToken',BSC_USDT,'--toToken',stock,'--fromTokenQty','25','--slippage','1','--mev','true']);
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'500'});
   assert.equal(r.body.error.code,'LIMIT');                                     // the same purchase cap as a signed leg
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25',slippagePercent:'9'});
@@ -121,9 +122,52 @@ test('gateway: Agentic Wallet runs fixed commands with --json and validated argu
   assert.equal(r.body.error.code,'INPUT');
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/verify',{qrCodeId:'--help'});
   assert.equal(r.body.error.code,'INPUT');   // an id can never look like a flag
-  assert.equal(calls.length,1);
+  assert.equal(swaps().length,1);
   const closed=fakeClient({status:'MARKET_CLOSED'});
   r=await call(createGateway({client:closed.client,rpc:closed.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
   assert.equal(r.body.error.code,'MARKET');
   assert.throws(()=>createGateway({client:f.client,rpc:f.rpc,baw,token:''}),/token/);
+});
+
+
+test('gateway: an independent price bound for signed and Agentic legs; Agentic sales are sent in shares',async()=>{
+  // 25 USDT for 0.1036 NVDAB is $241.3 a token: fine against a listed $241, refused against $200 (20% worse).
+  let f=fakeClient({allowance:BigInt(amount),price:'200'});
+  let r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'PRICE');assert.match(r.body.error.message,/worse than its listed price/);
+  f=fakeClient({allowance:BigInt(amount),impact:'4.5'});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'PRICE');assert.match(r.body.error.message,/impact/);
+  f=fakeClient({allowance:BigInt(amount),price:''});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'POST','/v1/prepare',{user,fromToken:BSC_USDT,toToken:stock,amount});
+  assert.equal(r.body.error.code,'PRICE');                                     // no reference, no trade
+  const calls=[],baw=async args=>{calls.push(args);return args[1]==='address'?{addresses:[{binanceChainId:'56',address:user}]}:{orderId:'o-2'};};
+  f=fakeClient({price:'200'});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
+  assert.equal(r.body.error.code,'PRICE');assert.equal(calls.filter(c=>c[0]==='market-order').length,0);   // no order
+  // A sale of 2 tokens of a 5-shares-per-token stock: the CLI is told 10 (shares); 2 tokens for $2,410 is $1,205 each.
+  f=fakeClient({ratio:'5',price:'1205',out:(2410n*10n**18n).toString()});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:stock,toToken:BSC_USDT,fromTokenQty:'2'});
+  assert.equal(r.status,200);assert.deepEqual(calls.at(-1).slice(0,9),['market-order','swap','--binanceChainId','56','--fromToken',stock,'--toToken',BSC_USDT,'--fromTokenQty']);
+  assert.equal(calls.at(-1)[9],'10');
+});
+
+test('gateway: an unclear wallet answer is AGENTIC_UNKNOWN; fills are reported in token atoms; an order id survives a refusal',async()=>{
+  const f=fakeClient({ratio:'5'});
+  let mode='timeout';
+  const baw=async args=>{
+    if(args[1]==='address')return {addresses:[{binanceChainId:'56',address:user}]};
+    if(args[1]==='list')return [{orderId:'o-9',toToken:stock,toTokenActualQty:'10',status:'FINISHED'}];
+    if(mode==='timeout')throw Object.assign(new Error('The Agentic Wallet did not answer clearly; an order may exist.'),{code:'AGENTIC_UNKNOWN'});
+    throw Object.assign(new Error('Confirmation required on App'),{code:'AGENTIC',orderId:'o-7'});
+  };
+  const {ExecutionCheckError}=await import('../lib/bsc-execution.mjs');
+  const wrap=async args=>{try{return await baw(args);}catch(e){throw Object.assign(new ExecutionCheckError(e.code,e.message),e.orderId?{orderId:e.orderId}:{});}};
+  let r=await call(createGateway({client:f.client,rpc:f.rpc,baw:wrap,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
+  assert.equal(r.status,504);assert.equal(r.body.error.code,'AGENTIC_UNKNOWN');
+  mode='refused';
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw:wrap,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});
+  assert.equal(r.body.error.orderId,'o-7');
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw:wrap,token:'t0k'}),'GET','/v1/agentic/order?orderId=o-9');
+  assert.equal(r.body.data[0].filledTokenAtoms,(2n*10n**18n).toString());   // 10 shares at 5 shares a token
 });

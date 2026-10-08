@@ -6,7 +6,11 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AgentStore} from '../lib/research-agent-core.mjs';
 import {presetBody} from '../lib/research-agent-profile.mjs';
-import {bindAgentic,startAgentic,stopAgentic,agenticRun,agenticTick,decimal18} from '../lib/research-agentic.mjs';
+import {bindAgentic,startAgentic,stopAgentic,agenticRun,agenticTick as tickOnce,decimal18} from '../lib/research-agentic.mjs';
+
+// The gateway's Agentic session must be signed in to the bound wallet; these fakes answer as the bound one.
+const boundAddress=s=>s.db.prepare('SELECT address FROM agent_agentic_binding LIMIT 1').get()?.address;
+const agenticTick=(s,gw,...rest)=>tickOnce(s,async(m,p,b)=>p.startsWith('/v1/agentic/address')?{addresses:[{binanceChainId:'56',address:boundAddress(s)}]}:gw(m,p,b),...rest);
 import {bscProduct} from '../lib/bsc-research-universe.mjs';
 
 const owner='eip155:56:0x1111111111111111111111111111111111111111',other='eip155:56:0x2222222222222222222222222222222222222222';
@@ -90,7 +94,7 @@ test('the worker submits legs in order, marks before ordering, and never resubmi
   const gw=async(method,path,body)=>{calls.push([method,path.split('?')[0],body]);
     if(path==='/v1/agentic/quota')return {quotaLeft:'100'};
     if(path==='/v1/agentic/swap')return {orderId:`o-${calls.filter(c=>c[1]==='/v1/agentic/swap').length}`};
-    if(path.startsWith('/v1/agentic/order'))return [{orderId:'x',status:orderStatus}];
+    if(path.startsWith('/v1/agentic/order'))return [{orderId:new URL('http://g'+path).searchParams.get('orderId'),status:orderStatus}];
     throw new Error('unexpected '+path);};
   await agenticTick(s,gw);
   const swaps=()=>calls.filter(c=>c[1]==='/v1/agentic/swap');
@@ -127,4 +131,34 @@ test('BSC purchases below the minimum order stay in cash; a plan of only tiny le
   s.finish(run2,'REVIEW',{candidates:[{id:'c1',verdict:'ELIGIBLE',weights:[{instrument:'NVDA',weightBps:4000},{instrument:'AMD',weightBps:4000}]}]});
   const r2=s.view(owner,tiny.id).runs[0];
   assert.throws(()=>s.approve(owner,r2.id,'c1',r2.result.reportHash),/minimum order/);
+});
+
+test('Agentic: a changed gateway wallet, a lapsed approval or a refused order never trades or leaves a leg uncertain',async t=>{
+  const s=setup(t);bindAgentic(s,owner,'0x3333333333333333333333333333333333333333');
+  let plan=approved(s,{approval:'AUTO_WITHIN_LIMITS'}).plan;startAgentic(s,owner,plan.id,100);
+  const swaps=[];
+  const other=async(m,p,b)=>{if(p.startsWith('/v1/agentic/address'))return {addresses:[{binanceChainId:'56',address:'0x9999999999999999999999999999999999999999'}]};
+    if(p==='/v1/agentic/quota')return {quotaLeft:'100'};if(p==='/v1/agentic/swap'){swaps.push(b);return {orderId:'o-1'};}throw new Error('unexpected '+p);};
+  await tickOnce(s,other);
+  assert.equal(swaps.length,0);assert.equal(agenticRun(s,plan.id).reason,'WALLET_CHANGED');
+  // A refusal before any order (the gateway's price check) leaves the leg READY and pauses the run.
+  const s2=setup(t);bindAgentic(s2,owner,'0x3333333333333333333333333333333333333333');
+  plan=approved(s2,{approval:'AUTO_WITHIN_LIMITS'}).plan;startAgentic(s2,owner,plan.id,100);
+  const refuse=code=>async(m,p)=>{if(p==='/v1/agentic/quota')return {quotaLeft:'100'};if(p==='/v1/agentic/swap')throw Object.assign(new Error('refused'),{code});throw new Error('unexpected '+p);};
+  await agenticTick(s2,refuse('PRICE'));
+  assert.equal(agenticRun(s2,plan.id).status,'PAUSED');assert.equal(agenticRun(s2,plan.id).reason,'PRICE_CHECK');
+  assert.equal(s2.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=?').get(plan.id).phase,'READY');
+  // An unclear answer (timeout) may have placed an order: UNKNOWN, never retried.
+  const s3=setup(t);bindAgentic(s3,owner,'0x3333333333333333333333333333333333333333');
+  plan=approved(s3,{approval:'AUTO_WITHIN_LIMITS'}).plan;startAgentic(s3,owner,plan.id,100);
+  await agenticTick(s3,refuse('AGENTIC_UNKNOWN'));
+  assert.equal(agenticRun(s3,plan.id).status,'ATTENTION');
+  assert.equal(s3.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=?').get(plan.id).phase,'UNKNOWN');
+  // Past the approval deadline the run stops instead of buying on an old result.
+  const s4=setup(t);bindAgentic(s4,owner,'0x3333333333333333333333333333333333333333');
+  plan=approved(s4,{approval:'AUTO_WITHIN_LIMITS'}).plan;startAgentic(s4,owner,plan.id,100);
+  const row=s4.db.prepare('SELECT document FROM agent_plans WHERE id=?').get(plan.id),doc=JSON.parse(row.document);
+  s4.db.prepare('UPDATE agent_plans SET document=? WHERE id=?').run(JSON.stringify({...doc,expiresAt:Date.now()-1}),plan.id);
+  const sent=[];await agenticTick(s4,async(m,p,b)=>{if(p==='/v1/agentic/quota')return {quotaLeft:'100'};if(p==='/v1/agentic/swap'){sent.push(b);return {orderId:'o-1'};}throw new Error('unexpected '+p);});
+  assert.equal(sent.length,0);assert.equal(agenticRun(s4,plan.id).reason,'PLAN_EXPIRED');
 });

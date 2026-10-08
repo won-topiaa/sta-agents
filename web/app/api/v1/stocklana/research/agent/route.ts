@@ -1,7 +1,7 @@
 import { requireRequesterSession, RequesterAuthError } from '@/lib/requester-auth';
 import { researchPrincipal, allowedStocksFor, isBscPrincipal, bscWallet } from '@/lib/research-principal';
 import { gateway, binanceTokenPrice } from '@/lib/bnb-gateway';
-import { createSellPlan, approveProposed, strategyContracts, holdingsFor, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
+import { createSellPlan, approveProposed, strategyContracts, holdingsFor, heldForRun, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
 import { agenticBinding } from '@/lib/research-agentic.mjs';
 import { checkSent } from '@/lib/bsc-execution.mjs';
 import { bscProduct } from '@/lib/bsc-research-universe.mjs';
@@ -43,18 +43,26 @@ export async function POST(request:Request){
         // A sale spends the exact token the plan names (validated against the listed contracts when it was made).
         const product=sell?{contract:String(leg.productContract),symbol:leg.productSymbol}:bscProduct(leg.instrument);
         if(!product?.contract)reject(`${leg.instrument} is not tradable on BNB Chain.`,409);
-        const slippage=b.slippagePercent==null?'1':String(b.slippagePercent);
+        // The plan states the most slippage it accepts; a request can ask for less, never more.
+        const cap=Number(plan.maxSlippageBps??100)/100,asked=b.slippagePercent==null?cap:Number(b.slippagePercent);
+        if(!(asked>0))reject('Invalid slippage.');
+        const slippage=String(Math.min(asked,cap));
         const prepared=await gateway<{step:'APPROVE'|'SWAP';tx:Record<string,string>;quote?:unknown;simulation?:unknown}>('POST','/v1/prepare',sell?{user,fromToken:product.contract,toToken:BSC_USDT,amount:leg.inputAtoms,slippagePercent:slippage}:{user,fromToken:BSC_USDT,toToken:product.contract,amount:leg.inputAtoms,slippagePercent:slippage},60000);
-        return Response.json({prepared:s.bscPrepared(address,id,i,prepared.step,prepared,pending,guard),product},{headers});
+        return Response.json({prepared:s.bscPrepared(address,id,i,prepared.step,{...prepared,product:{contract:String(product.contract),symbol:product.symbol??null}},pending,guard),product},{headers});
       }
       const step=s.bscStep(address,id,i);
       if(b.operation==='BSC_SENT'){
         const hash=str(b.txHash);if(!/^0x[0-9a-fA-F]{64}$/.test(hash))reject('Invalid transaction hash.');
-        if(!step.doc.prepared)reject('No prepared transaction for this step.',409);
+        // The latest prepared transaction first, then earlier ones of this step: the wallet may still have sent an older one.
+        type Prep={kind:'APPROVE'|'SWAP';tx:Record<string,string>;nonce:string};
+        const latest=step.doc.prepared as Prep|undefined,candidates:Prep[]=[...(latest?[latest]:[]),...[...((step.doc.preparedAll??[]) as Prep[])].reverse()];
+        if(!candidates.length)reject('No prepared transaction for this step.',409);
         const observed=await gateway<{tx:{from:string;to:string;input:string;value:string}|null;receipt:{status:string}|null}>('GET',`/v1/tx?hash=${hash}`);
-        // The sent transaction must be the prepared one, and not older than the wallet's pending nonce at preparation.
-        try{checkSent(observed.tx,step.doc.prepared.tx,{minNonce:step.doc.prepared.nonce});}catch(e){reject(e instanceof Error?e.message:'Transaction mismatch.',409);}
-        s.bscSent(address,id,i,hash);
+        // The sent transaction must be one prepared for this step, and not older than the wallet's pending nonce at its preparation.
+        let match:Prep|null=null,why='Transaction mismatch.';
+        for(const [n,c] of candidates.entries()){try{checkSent(observed.tx,c.tx,{minNonce:c.nonce});match=c;break;}catch(e){if(n===0&&e instanceof Error)why=e.message;}}
+        if(!match)reject(why,409);
+        s.bscSent(address,id,i,hash,match===latest?null:match);
         return Response.json({step:s.bscReceipt(address,id,i,observed.receipt)},{headers});
       }
       if(!step.doc.sent)return Response.json({step:step.doc,phase:step.phase},{headers});
@@ -87,7 +95,8 @@ export async function POST(request:Request){
       if(bsc){const strategy=s.get(s.owner(address),str(b.strategyId)),wallet=saleWallet(s,address,strategy);
         // A short cap: starting research never waits on an unreachable gateway (a read takes about 2 s for 40 tokens).
         const quick=(m:'GET'|'POST',path:string,body?:unknown)=>gateway(m,path,body,8000);
-        try{held=holdingsFor(strategy,await readHoldings(quick,wallet.address,strategyContracts(strategy).map(c=>c.contract))).map(h=>h.instrument);}catch{held=null;}}
+        // Only this strategy's own purchases count as held: dust or tokens from elsewhere must still pass its entry rules.
+        try{held=heldForRun(s,address,strategy,wallet.kind,await readHoldings(quick,wallet.address,strategyContracts(strategy).map(c=>c.contract)));}catch{held=null;}}
       const runId=s.enqueue(address,str(b.strategyId),b.goal,str(b.requestId),held);return Response.json({runId},{headers});
     }
     if(b.operation==='CANCEL'){s.cancel(address,str(b.runId));return Response.json({cancelled:true},{headers});}

@@ -11,6 +11,7 @@ import {AutonomyJournal} from '../lib/research-autonomy-journal.mjs';
 import {inspectStockMeshBuy,inspectStockMeshTrade,decodeMessage} from '../lib/research-autonomy-wire.mjs';
 import {AutonomyRuntime,verifyMainnetReceipt,PrivyDelegatedSigner,normalizeBuyQuote} from '../lib/research-autonomy-runtime.mjs';
 import {getProgramDerivedAddress} from '@solana/kit';
+import {MainnetObservationRpc,verifyUnchangedNonce} from '../lib/research-autonomy-rpc.mjs';
 const key=n=>keyString(Buffer.alloc(32,n));
 const config=()=>({schema:'xtxc.autonomy-policy/v1',executionChain:'solana:mainnet',evidenceChain:'solana:devnet',program:key(191),owner:key(192),verifier:key(193),wallet:key(194),id:'ab'.repeat(32),approvalHash:'cd'.repeat(32),startsAt:'0',expiresAt:'0',buyBudgetAtoms:'3000000',perBuyAtoms:'2000000',maxOrders:'2',mints:[key(195)],maxSlippageBps:20,feeBudgetLamports:null});
 const lifetime={blockhash:key(201),lastValidBlockHeight:'9999999'};
@@ -46,7 +47,7 @@ test('ambiguous signing cannot be relabeled as unsigned expiry',async()=>{
 test('finalized mainnet receipt proves actual debit and delivery, not just a hash',async()=>{const x=await sample(),signature=verifyExactSignature(x.prepared.transactionBase64,x.signed,x.wallet),row={...x,signedTransactionBase64:x.signed,signature};const src=x.facts.keys.indexOf(x.facts.source),dst=x.facts.keys.indexOf(x.facts.destination);const b=(accountIndex,mint,amount)=>({accountIndex,mint,owner:x.wallet,uiTokenAmount:{amount}});const o={genesisHash:MAINNET,status:{confirmationStatus:'finalized',slot:1000,err:null},tx:{slot:1000,transaction:[x.signed,'base64'],meta:{err:null,fee:5000,preTokenBalances:[b(src,USDC,'3000000')],postTokenBalances:[b(src,USDC,'1000000'),b(dst,x.c.mints[0],'100')]}}};assert.equal(verifyMainnetReceipt(row,o).phase,'RECONCILED');o.tx.meta.postTokenBalances[1].uiTokenAmount.amount='1';assert.throws(()=>verifyMainnetReceipt(row,o),/TOKEN_DELIVERY_MISMATCH/);});
 test('Privy signing requires exact additional signer and configured policy',async()=>{const c=config(),binding={owner:c.owner,address:c.wallet,walletId:'wallet',signerId:'signer',policyId:'policy',enabled:true};let signed=0;const client={wallets:()=>({get:async()=>({chain_type:'solana',address:c.wallet,additional_signers:[]}),solana:()=>({signTransaction:async()=>{signed++;return{signedTransaction:'x'};}})})};const s=new PrivyDelegatedSigner(client,{},binding);await assert.rejects(s.signTransaction(c,'wire'));assert.equal(signed,0);});
 test('real StockMesh exposure schema is converted without token/UI scaling confusion',()=>{const q={schema:'skew.stockmesh.exposure-quote/v2',quoteId:'q',instrument:'NVDA',inputSymbol:'USDC',inAmountAtoms:'2000000',exposure:{estimatedQ32:'100000000',minimumQ32:'99800000',products:[{mint:config().mints[0],rawOutputAtoms:'50000000'}]}};const e={instrument:'NVDA',mint:config().mints[0],inputAtoms:'2000000',maxSlippageBps:20};assert.equal(normalizeBuyQuote(q,e).minimumOutputAtoms,'49900000');assert.throws(()=>normalizeBuyQuote({...q,inputSymbol:'SOL'},e));assert.throws(()=>normalizeBuyQuote({...q,exposure:{...q.exposure,products:[...q.exposure.products,...q.exposure.products]}},e));assert.throws(()=>normalizeBuyQuote(q,{...e,maxSlippageBps:10}));});
-test('approval is immutable and a parallel policy cannot bypass the wallet lock',()=>{const c=config(),db=new DatabaseSync(':memory:'),j=new AutonomyJournal(db);j.register(c,state());assert.throws(()=>j.register({...c,buyBudgetAtoms:'10000000'},state()),/APPROVAL_CHANGED/);assert.throws(()=>j.register({...c,id:'de'.repeat(32)},state()));j.stop(c.id,c.owner);assert.equal(j.register({...c,id:'de'.repeat(32)},state()).phase,'ACTIVE');db.close();});
+test('immutable independent policies coexist; pending transaction lock remains wallet scoped',async()=>{const x=await sample(),c=x.c,db=new DatabaseSync(':memory:'),j=new AutonomyJournal(db);j.register(c,state());assert.throws(()=>j.register({...c,buyBudgetAtoms:'10000000'},state()),/APPROVAL_CHANGED/);const other={...c,id:'de'.repeat(32)};assert.equal(j.register(other,state()).phase,'ACTIVE');j.stage(c.id,state(),x.prepared,x.facts);assert.throws(()=>j.stage(other.id,state(),x.prepared,x.facts),/ORDER_UNRESOLVED/);db.close();});
 
 test('runtime contract: devnet reservation precedes signing and exact mainnet delivery precedes result evidence',async()=>{
  const x=await sample(),db=new DatabaseSync(':memory:'),journal=new AutonomyJournal(db);let observation=await observed(x.c);journal.register(x.c,await observePolicy(x.c,observation));const events=[];let settleFail=true;
@@ -55,6 +56,7 @@ test('runtime contract: devnet reservation precedes signing and exact mainnet de
  const mainnet={pin:async()=>{},lookup:async()=>null,simulate:async()=>({genesisHash:MAINNET,messageHash:x.facts.messageHash,err:null}),blockhashValid:async()=>true,transaction:async()=>({genesisHash:MAINNET,status:{confirmationStatus:'finalized',slot:1000,err:null},tx:{slot:1000,transaction:[x.signed,'base64'],meta:{err:null,fee:5000,preTokenBalances:[balance(src,USDC,'3000000')],postTokenBalances:[balance(src,USDC,'1000000'),balance(dst,x.c.mints[0],'100')]}}})};
  const devnet={observe:async()=>observation,reserve:async(c,row)=>{events.push('reserve');const d=Buffer.from(observation.dataBase64,'base64');d.writeBigUInt64LE(2000000n,192);d.writeBigUInt64LE(1n,200);d[224]=1;Buffer.from(row.facts.messageHash,'hex').copy(d,232);d.writeBigUInt64LE(2000000n,264);keyBytes(x.c.mints[0]).copy(d,272);observation={...observation,slot:101,dataBase64:d.toString('base64')};return 'v'.repeat(88);},settle:async(c,row)=>{assert.equal(row.phase,'RECONCILED');events.push('settle');if(settleFail){settleFail=false;throw Error('DEVNET_CONFIRMATION_PENDING');}return 'r'.repeat(88);}};
  const stockmesh={quote:async()=>({schema:'skew.stockmesh.exposure-quote/v2',quoteId:x.prepared.quoteId,instrument:'NVDA',inputSymbol:'USDC',inAmountAtoms:'2000000',exposure:{estimatedQ32:'1000',minimumQ32:'998',products:[{mint:x.c.mints[0],rawOutputAtoms:'90'}]}}),prepare:async()=>x.prepared,submit:async()=>{events.push('submit');return{signature};}};
+ stockmesh.order=async()=>({preparedId:x.prepared.preparedId,signature,phase:'RECONCILED',receiptVerified:true});
  const signer={assertBinding:async()=>{},signTransaction:async()=>{events.push('sign');return x.signed;}};
  try{const runtime=new AutonomyRuntime({journal,mainnet,devnet,stockmesh,signer}),r=await runtime.prepare(x.c.id,{instrument:'NVDA',mint:x.c.mints[0],inputAtoms:'2000000'});await assert.rejects(runtime.execute(r.id),/DEVNET_CONFIRMATION_PENDING/);assert.equal(journal.order(r.id).phase,'RECONCILED');assert.deepEqual(events,['reserve','sign','submit','settle']);const restarted=new AutonomyRuntime({journal,mainnet,devnet,stockmesh,signer});const done=await restarted.check(r.id);assert.equal(done.receipt.outputAtoms,'100');assert.equal(done.settlementSignature,'r'.repeat(88));assert.deepEqual(events,['reserve','sign','submit','settle','settle']);await assert.rejects(restarted.execute(r.id));assert.equal(events.filter(e=>e==='sign').length,1);}finally{db.close();}
 });
@@ -75,4 +77,38 @@ test('SELL exact-wire receipt accounts for stock debit and USDC credit, not BUY 
  observed.tx.meta.postTokenBalances[1].uiTokenAmount.amount='96';
  assert.throws(()=>verifyMainnetReceipt(row,observed),/TOKEN_DELIVERY_MISMATCH/);
  await assert.rejects(inspectStockMeshTrade(unsigned,x.wallet,{side:'BUY',mint:x.c.mints[0],inputAtoms:'2000000',minimumOutputAtoms:'90'},async()=>null));
+});
+
+test('signed expiry requires exact wire, expired blockhash, absent history and unchanged finalized nonce',async()=>{
+ const x=await sample(),signature=verifyExactSignature(x.prepared.transactionBase64,x.signed,x.wallet);
+ const row={...x,signedTransactionBase64:x.signed,signature};const d=Buffer.alloc(64);d.write('SKEWSEQ1');keyBytes(x.wallet).copy(d,8);d.writeBigUInt64LE(BigInt(x.facts.nonceSequence),40);
+ let value={context:{slot:Number(x.facts.deadlineSlot)+1},value:{owner:STOCKMESH,executable:false,data:[d.toString('base64'),'base64']}};
+ let valid=false,status=null;const calls=[];
+ const rpc=Object.create(MainnetObservationRpc.prototype);rpc.call=async(method,params)=>{calls.push(method);if(method==='getGenesisHash')return MAINNET;if(method==='isBlockhashValid'){assert.equal(params[1].commitment,'finalized');return{value:valid};}if(method==='getSignatureStatuses')return{value:[status]};if(method==='getAccountInfo'){assert.equal(params[0],x.facts.nonceAddress);assert.equal(params[1].minContextSlot,Number(x.facts.deadlineSlot)+1);return value;}throw Error('forbidden call '+method);};
+ const proof=await rpc.expiredNoFill(row);assert.equal(proof.phase,'EXPIRED_NO_FILL');assert.equal(proof.networkFeeStatus,'UNKNOWN');
+ valid=true;assert.equal(await rpc.expiredNoFill(row),null);valid=false;status={confirmationStatus:'processed'};assert.equal(await rpc.expiredNoFill(row),null);status=null;
+ d.writeBigUInt64LE(BigInt(x.facts.nonceSequence)+1n,40);value.value.data[0]=d.toString('base64');assert.equal(await rpc.expiredNoFill(row),null);
+ assert.equal(verifyUnchangedNonce(x.facts,x.wallet,{context:{slot:Number(x.facts.deadlineSlot)},value:value.value}),null);
+ assert.equal(verifyUnchangedNonce(x.facts,x.wallet,{context:{slot:Number(x.facts.deadlineSlot)+1},value:null}),null);
+ assert.equal(calls.includes('sendTransaction'),false);
+});
+
+test('router lock is reconciled after mainnet receipt and before any next leg',async()=>{
+ const x=await sample(),db=new DatabaseSync(':memory:'),j=new AutonomyJournal(db);try{
+  j.register(x.c,state());let r=j.stage(x.c.id,state(),x.prepared,x.facts);const s=permitted(r,state());j.permitted(r.id,s,'a'.repeat(88));j.beginSigning(r.id,s);r=j.signed(r.id,x.signed);
+  j.recordReceipt(r.id,{phase:'RECONCILED',signature:r.signature,messageHash:r.facts.messageHash});let phase='SUBMITTED',settled=0;
+  const runtime=new AutonomyRuntime({journal:j,mainnet:{pin:async()=>{}},stockmesh:{order:async()=>({phase,signature:r.signature,receiptVerified:phase==='RECONCILED'})},devnet:{settle:async()=>{settled++;return'settlement';}},signer:{signTransaction:()=>{throw Error('must not sign');}}});
+  await assert.rejects(runtime.check(r.id),/STOCKMESH_RECONCILIATION_PENDING/);assert.equal(settled,0);assert.equal(j.order(r.id).engineReconciled,undefined);
+  phase='RECONCILED';const done=await runtime.check(r.id);assert.equal(done.engineReconciled.phase,'RECONCILED');assert.equal(settled,1);await runtime.check(r.id);assert.equal(settled,1);
+ }finally{db.close();}
+});
+
+test('expired signed order is closed without submitting, replacement or refunding its allowance',async()=>{
+ const x=await sample(),db=new DatabaseSync(':memory:'),j=new AutonomyJournal(db);try{
+  j.register(x.c,state());let r=j.stage(x.c.id,state(),x.prepared,x.facts);const s=permitted(r,state());j.permitted(r.id,s,'a'.repeat(88));j.beginSigning(r.id,s);r=j.signed(r.id,x.signed);r=j.beginRelay(r.id,s);
+  const proof={schema:'xtxc.signed-expiry/v1',phase:'EXPIRED_NO_FILL',signature:r.signature,messageHash:r.facts.messageHash,blockhashExpired:true,historyAbsent:true,slot:Number(r.facts.deadlineSlot)+1,reason:'FINALIZED_UNCHANGED_STOCKMESH_NONCE'};
+  for(const patch of [{historyAbsent:false},{blockhashExpired:false},{slot:Number(r.facts.deadlineSlot)},{signature:'other'}])assert.throws(()=>j.expireSigned(r.id,{...proof,...patch}),/SIGNED_EXPIRY_NOT_PROVEN/);
+  const runtime=new AutonomyRuntime({journal:j,mainnet:{pin:async()=>{},transaction:async()=>null,expiredNoFill:async()=>proof},stockmesh:{order:async()=>null,submit:()=>{throw Error('must not send');}},devnet:{settle:async()=> 'devnet-failed-result'}});
+  const done=await runtime.check(r.id);assert.equal(done.phase,'EXPIRED_NO_FILL');assert.equal(done.engineReconciled.phase,'NOT_ADMITTED');assert.equal(done.signature,r.signature);assert.equal(done.relayAttempts,1);assert.equal(j.policy(x.c.id).last_reserved,'2000000');assert.throws(()=>j.beginRelay(r.id,s),/RELAY_NOT_ALLOWED/);
+ }finally{db.close();}
 });

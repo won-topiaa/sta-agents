@@ -11,7 +11,7 @@ export function reject(message:string,status?:number):never;
 export function validateGoal(value:unknown):ResearchGoal;
 export function briefHash(value:unknown):string;
 export function budgetAtoms(value:string,decimals?:number):string;
-export type BscPrepareGuard={phase:string;preparedAt:number|null};
+export type BscPrepareGuard={phase:string;preparedAt:number|null;allowanceMustRemain?:boolean};
 export type SaleHolding={instrument:string;contract:string;raw:string};
 export type SaleLeg={side:'SELL';instrument:string;productContract:string;productSymbol:string;platform:string;inputAtoms:string;inputDecimals:number};
 export function holdsAware(design:unknown):boolean;
@@ -48,12 +48,12 @@ export class AgentStore extends ResearchStore {
   assertAutonomyAllowed(address:string,plan:AgentPlan):void;
   bscStep(address:string,id:string,index:number):{plan:AgentPlan;phase:string;doc:BscStepDoc};
   assertBscPreparable(address:string,id:string,index:number,nonceNow:string):{plan:AgentPlan;doc:BscStepDoc;guard:BscPrepareGuard};
-  bscPrepared(address:string,id:string,index:number,kind:'APPROVE'|'SWAP',prepared:{tx:Record<string,string>;quote?:unknown;simulation?:unknown},nonce:string,guard?:BscPrepareGuard|null):BscPrepared;
-  bscSent(address:string,id:string,index:number,hash:string):BscStepDoc;
+  bscPrepared(address:string,id:string,index:number,kind:'APPROVE'|'SWAP',prepared:{tx:Record<string,string>;quote?:unknown;simulation?:unknown;product?:{contract:string;symbol?:string|null}},nonce:string,guard?:BscPrepareGuard|null):BscPrepared;
+  bscSent(address:string,id:string,index:number,hash:string,earlier?:{kind:'APPROVE'|'SWAP';tx:Record<string,string>;nonce:string;at?:number}|null):BscStepDoc;
   bscReceipt(address:string,id:string,index:number,receipt:{status:string;blockNumber?:number}|null):BscStepDoc;
 }
 export type BscPrepared={kind:'APPROVE'|'SWAP';tx:Record<string,string>;quote:unknown;simulation:unknown;nonce:string;at:number};
-export type BscStepDoc={leg:unknown;prepared?:BscPrepared;sent?:{hash:string;kind:string;at:number};receipts?:unknown[]};
+export type BscStepDoc={leg:unknown;product?:{contract:string;symbol?:string|null};prepared?:BscPrepared;preparedAll?:{kind:'APPROVE'|'SWAP';tx:Record<string,string>;nonce:string;at:number}[];sent?:{hash:string;kind:string;at:number};receipts?:unknown[]};
 export function chainOf(address:string):'bsc'|'solana';
 export function budgetUnit(address:string):{asset:'USDT'|'USDC';decimals:number};
 export const BSC_MIN_LEG_ATOMS:bigint;

@@ -1049,6 +1049,156 @@ export const AGENT_RULES = {
     "value": 0,
     "entry": true
    }
+  },
+  "semis_cycle_guard": {
+   "label": "Chip cycle guard",
+   "help": "Holds semiconductor makers at {exposure} of their weight while US semiconductor production (official statistics) is lower than {months} months earlier.",
+   "styles": [
+    "technical",
+    "value"
+   ],
+   "params": {
+    "months": {
+     "options": [
+      3,
+      6
+     ],
+     "default": 3,
+     "display": "months"
+    },
+    "exposure": {
+     "options": [
+      0.3,
+      0.5,
+      0.7
+     ],
+     "default": 0.5,
+     "display": "percent"
+    }
+   },
+   "macro_off": {
+    "series": "IPG3344S",
+    "change": "$months",
+    "below": 0,
+    "exposure": "$exposure"
+   }
+  },
+  "consumer_guard": {
+   "label": "Consumer slowdown guard",
+   "help": "Holds consumer companies at {exposure} of their weight while US retail sales (official statistics) are lower than {months} months earlier.",
+   "styles": [
+    "technical",
+    "value"
+   ],
+   "params": {
+    "months": {
+     "options": [
+      3,
+      6
+     ],
+     "default": 3,
+     "display": "months"
+    },
+    "exposure": {
+     "options": [
+      0.3,
+      0.5,
+      0.7
+     ],
+     "default": 0.5,
+     "display": "percent"
+    }
+   },
+   "macro_off": {
+    "series": "RSAFS",
+    "change": "$months",
+    "below": 0,
+    "exposure": "$exposure"
+   }
+  },
+  "oil_guard": {
+   "label": "Oil slump guard",
+   "help": "Holds energy companies at {exposure} of their weight while the WTI oil price is more than {drop} lower than {days} trading days earlier.",
+   "styles": [
+    "technical",
+    "value"
+   ],
+   "params": {
+    "days": {
+     "options": [
+      63,
+      126
+     ],
+     "default": 63,
+     "display": "days"
+    },
+    "drop": {
+     "options": [
+      0.1,
+      0.2
+     ],
+     "default": 0.1,
+     "display": "percent"
+    },
+    "exposure": {
+     "options": [
+      0.3,
+      0.5,
+      0.7
+     ],
+     "default": 0.5,
+     "display": "percent"
+    }
+   },
+   "macro_off": {
+    "series": "DCOILWTICO",
+    "change": "$days",
+    "below": {
+     "neg": "$drop"
+    },
+    "exposure": "$exposure"
+   }
+  },
+  "dollar_guard": {
+   "label": "Strong dollar guard",
+   "help": "Invests only {exposure} of the usual amount while the broad US dollar index is more than {rise} higher than {days} trading days earlier.",
+   "styles": [
+    "technical",
+    "value"
+   ],
+   "params": {
+    "days": {
+     "options": [
+      63,
+      126
+     ],
+     "default": 63,
+     "display": "days"
+    },
+    "rise": {
+     "options": [
+      0.03,
+      0.05
+     ],
+     "default": 0.03,
+     "display": "percent"
+    },
+    "exposure": {
+     "options": [
+      0.3,
+      0.5,
+      0.7
+     ],
+     "default": 0.5,
+     "display": "percent"
+    }
+   },
+   "macro_off": {
+    "series": "DTWEXBGS",
+    "change": "$days",
+    "above": "$rise",
+    "exposure": "$exposure"
+   }
   }
  },
  "limits": {

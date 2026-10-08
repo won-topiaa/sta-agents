@@ -134,14 +134,15 @@ export function createIsolatedPrivyClient(PrivyClient, {appId, appSecret}) {
 }
 
 export class PrivyDelegatedSigner {
- #client; #authorizationContext; #binding;
- constructor(client, authorizationContext, binding) {
+ #client; #authorizationContext; #binding; #validateConfig;
+ constructor(client, authorizationContext, binding, validateConfig=validatePolicy) {
   this.#client=client;
   this.#authorizationContext=authorizationContext;
   this.#binding=structuredClone(binding);
+  this.#validateConfig=validateConfig;
  }
  async assertBinding(config) {
-  validatePolicy(config);
+  this.#validateConfig(config);
   const b=this.#binding;
   need(b?.schema==='xtxc.privy-binding/v1' && b.appId===PRIVY_APP_ID && b.enabled===true &&
    b.owner===config.owner && b.address===config.wallet && b.configId===config.id &&

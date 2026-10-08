@@ -60,5 +60,5 @@ export async function inspectStockMeshTrade(base64,wallet,expected,resolveLookup
   need(false,'UNAPPROVED_TOP_LEVEL_INSTRUCTION');
  }
  need(cu!==null&&price!==null,'EXPLICIT_NETWORK_FEE_REQUIRED');
- return{...m,inputAtoms:String(input),minimumOutputAtoms:String(minOutput),mint:expected.mint,side:expected.side,sourceMint:assets[0].mint,destinationMint:assets.at(-1).mint,source:assets[0].account,destination:assets.at(-1).account,deadlineSlot:String(deadline),networkFeeLamports:String(5000n+(BigInt(cu)*price+999999n)/1000000n),setupAccounts:[...created,...(initialized?[nonce]:[])]};
+ return{...m,nonceAddress:nonce,nonceSequence:String(u64(d,4)),createsNonce:initialized,inputAtoms:String(input),minimumOutputAtoms:String(minOutput),mint:expected.mint,side:expected.side,sourceMint:assets[0].mint,destinationMint:assets.at(-1).mint,source:assets[0].account,destination:assets.at(-1).account,deadlineSlot:String(deadline),networkFeeLamports:String(5000n+(BigInt(cu)*price+999999n)/1000000n),setupAccounts:[...created,...(initialized?[nonce]:[])]};
 }

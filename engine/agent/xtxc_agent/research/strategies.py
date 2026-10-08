@@ -271,6 +271,7 @@ def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: froz
     total = 1.0 - float(Decimal(s["min_cash"]))
     cap = float(Decimal(s["max_weight"]))
     scores: dict[str, float] = {}
+    macro_scale: dict[str, float] = {}
 
     if s["template"] == "momentum":
         L, k = p["lookback"], p["skip"]
@@ -323,6 +324,11 @@ def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: froz
                 for sig in column_signals(p["design"])}
         scores, exposure = design_scores(p["design"], arr, tickers, market, momentum_top_n(s["max_weight"], s["min_cash"]), fund, held)
         total *= exposure
+        from .strategy_lang import macro_columns, macro_scales
+        if macro_columns(p["design"]):
+            # Official-statistics guards read that day's row only: "MACRO::<series>::<change>" and "<T>::in::<scope>".
+            row = {c: hist[c].iloc[-1] for c in hist.columns if isinstance(c, str) and (c.startswith("MACRO::") or "::in::" in c)}
+            macro_scale = macro_scales(p["design"], row, tickers)
 
     else:  # equal_weight
         mh = p["min_history"]
@@ -333,7 +339,10 @@ def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: froz
             if np.all(np.isfinite(col)):
                 scores[t] = 1.0
 
-    return cap_weights(scores, total, cap)
+    weights = cap_weights(scores, total, cap)
+    if macro_scale:   # only ever smaller: caps and the cash floor still hold, the difference stays cash
+        weights = {t: w * macro_scale.get(t, 1.0) for t, w in weights.items() if w * macro_scale.get(t, 1.0) > 0}
+    return weights
 
 
 def rebalance_positions(index: pd.DatetimeIndex, freq: str) -> list[int]:

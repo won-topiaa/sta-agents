@@ -63,6 +63,11 @@ exit       (optional) {"stop_loss": x, "trailing_stop": y}: between rebalances a
            below its entry close, or y below its highest close since entry; it stays out until the next rebalance
 breadth_off  (optional) {"lookback": L, "below": b, "exposure": e}: when fewer than b of the stocks trade above their
            L-day average, the invested budget is multiplied by e (with risk_off, the smaller exposure applies)
+macro_off  (optional) [{"series", "change", "below" | "above", "exposure"}]: official statistics (FRED/ALFRED, as
+           published by the day before). When the series' change over ``change`` observations is below / above the
+           value, the weights of the stocks in its scope are multiplied by ``exposure``: IPG3344S (semiconductor
+           production) -> semiconductor makers, RSAFS (retail sales) -> consumer companies, DCOILWTICO (WTI oil) ->
+           energy, DTWEXBGS (broad dollar) -> every stock. The difference stays cash.
 risk_off   when the market ticker's signal is below ``below``, the invested budget is multiplied by ``exposure``
            (the rest stays cash). The ticker is only read, never bought unless it is also one of the stocks.
 """
@@ -96,6 +101,11 @@ MAX_TOTAL_FILTERS = 9
 HOLD_BUFFER = (1.0, 4.0)
 EXIT_RANGE = (0.02, 0.5)
 BENCHMARK = "QQQ"   # rel_strength compares with it
+# Official statistics a macro guard may watch: (frequency, the stocks it scales). Values come from research/macro.py
+# as "MACRO::<series>::<change>" columns (the change as published by the day before), scopes as "<TICKER>::in::<scope>".
+MACRO_SERIES = {"IPG3344S": ("monthly", "semiconductors"), "RSAFS": ("monthly", "consumer"),
+                "DCOILWTICO": ("daily", "energy"), "DTWEXBGS": ("daily", "market")}
+MACRO_CHANGE = {"monthly": (1, 12), "daily": (5, 252)}
 # raw-value range a filter may compare against; every other signal is a fraction (-1..1)
 FILTER_VALUE = {"rsi": (0.0, 100.0), "zscore": (-5.0, 5.0), "book_to_price": (0.0, 10.0), "roe": (-2.0, 2.0),
                 "debt_to_equity": (0.0, 20.0), "revenue_growth": (-1.0, 5.0), "volume_surge": (-1.0, 5.0),
@@ -162,7 +172,7 @@ def _signal(d, name) -> dict:
 
 def normalize_design(design) -> dict:
     """Validate and canonicalise. Raises DesignError with a message the model can act on."""
-    _keys(design, {"score", "filters", "top_n", "weighting", "risk_off", "hold_buffer", "exit", "breadth_off"}, {"score", "weighting"}, "design")
+    _keys(design, {"score", "filters", "top_n", "weighting", "risk_off", "hold_buffer", "exit", "breadth_off", "macro_off"}, {"score", "weighting"}, "design")
     terms = design["score"]
     if not isinstance(terms, list) or not 1 <= len(terms) <= MAX_TERMS:
         raise DesignError(f"score must be a list of 1 to {MAX_TERMS} terms")
@@ -222,6 +232,28 @@ def normalize_design(design) -> dict:
               "exposure": _num(bo["exposure"], "breadth_off.exposure", 0, 1)}
         if bo["exposure"] < 1:   # full exposure changes nothing
             extra["breadth_off"] = bo
+    mo = design.get("macro_off")
+    if mo is not None:
+        if not isinstance(mo, list) or len(mo) > len(MACRO_SERIES):
+            raise DesignError(f"macro_off must be a list of at most {len(MACRO_SERIES)} guards")
+        guards = []
+        for i, g in enumerate(mo):
+            _keys(g, {"series", "change", "below", "above", "exposure"}, {"series", "change", "exposure"}, f"macro_off[{i}]")
+            if not isinstance(g["series"], str) or g["series"] not in MACRO_SERIES:
+                raise DesignError(f"macro_off[{i}].series must be one of {list(MACRO_SERIES)}")
+            if ("below" in g) == ("above" in g):
+                raise DesignError(f"macro_off[{i}] needs exactly one of below / above")
+            lo, hi = MACRO_CHANGE[MACRO_SERIES[g["series"]][0]]
+            side = "below" if "below" in g else "above"
+            out = {"series": g["series"], "change": _int(g["change"], f"macro_off[{i}].change", lo, hi),
+                   side: _num(g[side], f"macro_off[{i}].{side}", -0.5, 0.5),
+                   "exposure": _num(g["exposure"], f"macro_off[{i}].exposure", 0, 1)}
+            if out["exposure"] < 1:
+                guards.append(out)
+        if len({g["series"] for g in guards}) != len(guards):
+            raise DesignError("macro_off has one guard per series")
+        if guards:
+            extra["macro_off"] = sorted(guards, key=lambda g: g["series"])
     # canonical order: terms and filters sorted so the same idea written differently hashes the same
     score.sort(key=lambda t: json.dumps(t, sort_keys=True))
     filters.sort(key=lambda t: json.dumps(t, sort_keys=True))
@@ -249,6 +281,30 @@ def fundamental_signals(design: dict) -> set[str]:
 def column_signals(design: dict) -> set[str]:
     d = normalize_design(design)
     return {t["signal"] for t in d["score"] + d["filters"] if t["signal"] in COLUMN_SIGNALS}
+
+
+def macro_columns(design: dict) -> list[tuple[str, int]]:
+    """(series, change) pairs the design's macro guards read."""
+    return [(g["series"], g["change"]) for g in normalize_design(design).get("macro_off", [])]
+
+
+def macro_scales(design: dict, last_row, tickers: list[str]) -> dict[str, float]:
+    """Weight multipliers on the decision day from the design's macro guards: a guard whose condition holds scales the
+    stocks in its scope by its exposure (the smallest applies). ``last_row`` maps column names to that day's values;
+    a guard without a published value does nothing."""
+    out: dict[str, float] = {}
+    for g in normalize_design(design).get("macro_off", []):
+        v = last_row.get(f"MACRO::{g['series']}::{g['change']}")
+        if v is None or not math.isfinite(float(v)):
+            continue
+        hit = float(v) < g["below"] if "below" in g else float(v) > g["above"]
+        if not hit:
+            continue
+        scope = MACRO_SERIES[g["series"]][1]
+        for t in tickers:
+            if scope == "market" or last_row.get(f"{t}::in::{scope}") == 1.0:
+                out[t] = min(out.get(t, 1.0), g["exposure"])
+    return out
 
 
 def market_tickers(design: dict) -> list[str]:

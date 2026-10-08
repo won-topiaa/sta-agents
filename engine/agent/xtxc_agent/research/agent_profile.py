@@ -151,7 +151,7 @@ def enforced(profile: dict) -> dict:
     an optional ``top_n_cap``, a minimum ``hold_buffer`` and ``exit`` rules (largest allowed stop distances)."""
     p = normalize_profile(profile)
     cat = catalog()["rules"]
-    out = {"filters": [], "risk_off": None, "breadth_off": None, "top_n_cap": None, "hold_buffer": None, "exit": {}}
+    out = {"filters": [], "risk_off": None, "breadth_off": None, "top_n_cap": None, "hold_buffer": None, "exit": {}, "macro_off": []}
     for r in p["rules"]:
         spec = cat[r["id"]]
         if "filter" in spec:
@@ -163,15 +163,18 @@ def enforced(profile: dict) -> dict:
             out["top_n_cap"] = int(_fill(spec["top_n_cap"], r["params"]))
         if "exit" in spec:
             out["exit"].update(_fill(spec["exit"], r["params"]))
+        if "macro_off" in spec:
+            out["macro_off"].append(_fill(spec["macro_off"], r["params"]))
     # The same checks as any design: a rule can never produce something the strategy language rejects.
     probe = {"score": [{"signal": "trend", "lookback": 20, "weight": 1}], "filters": out["filters"], "weighting": "equal",
-             "risk_off": out["risk_off"], "breadth_off": out["breadth_off"], "hold_buffer": out["hold_buffer"], "exit": out["exit"] or None}
+             "risk_off": out["risk_off"], "breadth_off": out["breadth_off"], "hold_buffer": out["hold_buffer"], "exit": out["exit"] or None,
+             "macro_off": out["macro_off"] or None}
     try:
         d = normalize_design(probe)
     except DesignError as exc:
         raise ProfileError(f"agent rules are inconsistent: {exc}") from exc
     return {"filters": d["filters"], "risk_off": d["risk_off"], "breadth_off": d.get("breadth_off"), "top_n_cap": out["top_n_cap"],
-            "hold_buffer": d.get("hold_buffer"), "exit": d.get("exit")}
+            "hold_buffer": d.get("hold_buffer"), "exit": d.get("exit"), "macro_off": d.get("macro_off", [])}
 
 
 def apply(design: dict, profile: dict) -> dict:
@@ -192,6 +195,10 @@ def apply(design: dict, profile: dict) -> dict:
     out = {**d, "filters": filters, "top_n": top_n, "risk_off": e["risk_off"] or d["risk_off"]}
     if e["breadth_off"]:
         out["breadth_off"] = e["breadth_off"]
+    if e["macro_off"]:
+        # the agent's guard on a series replaces the model's guard on that series; the model's others stay
+        mine = {g["series"] for g in e["macro_off"]}
+        out["macro_off"] = [g for g in d.get("macro_off", []) if g["series"] not in mine] + e["macro_off"]
     if e["hold_buffer"]:
         out["hold_buffer"] = max(e["hold_buffer"], d.get("hold_buffer") or 0)
     if e["exit"]:
@@ -221,6 +228,10 @@ def compliance(design: dict, profile: dict) -> list[dict]:
             ok = d.get("breadth_off") == want
         elif "hold_buffer" in spec:
             ok = (d.get("hold_buffer") or 0) >= _fill(spec["hold_buffer"], r["params"]) - 1e-9
+        elif "macro_off" in spec:
+            want = normalize_design({"score": d["score"], "weighting": "equal",
+                                     "macro_off": [_fill(spec["macro_off"], r["params"])]}).get("macro_off", [])
+            ok = bool(want) and want[0] in d.get("macro_off", [])
         elif "exit" in spec:
             want = _fill(spec["exit"], r["params"])
             ok = all((d.get("exit") or {}).get(k) is not None and d["exit"][k] <= v + 1e-9 for k, v in want.items())

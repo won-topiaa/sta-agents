@@ -38,7 +38,11 @@ export default function BnbChart({product,onObservation,onBinancePrice}:{product
   },[product.contract,product.ticker,retry,onObservation,onBinancePrice]);
   const observation=data?.market;
   const stale=!!observation&&(now-Date.parse(observation.observedAt)>90000||data?.status!=='AVAILABLE');
-  const underlying=!observation?data?.mapping?.underlyingChart?.symbol:null;
+  const listing=!observation?data?.mapping?.underlyingChart?.symbol??null:null;
+  // TradingView's embedded chart serves US listings only; HKEX, LSE, XETR and BME symbols render "This symbol is only
+  // available on TradingView". Those open on TradingView instead.
+  const underlying=listing&&/^(NASDAQ|NYSE|AMEX|BATS):/.test(listing)?listing:null;
+  const offsite=listing&&!underlying?listing:null;
   const reference=!observation&&!underlying&&!!data?.mapping?.coinId;
   // Most tokenized stocks have no BNB pool indexed by GeckoTerminal; Binance Web3 RWA Data still prices the token.
   const binance=!observation?data?.binance:undefined;
@@ -55,6 +59,7 @@ export default function BnbChart({product,onObservation,onBinancePrice}:{product
       {!frameReady&&!referenceFailed&&<div className="bnb-chart-loading">Loading chart…</div>}
       <iframe ref={frame} style={referenceFailed?{display:'none'}:undefined} key={source} src={source} sandbox={reference?'allow-scripts':undefined} title={`${product.ticker} ${reference?'token reference':'BNB pool'} chart by CoinGecko`} loading="eager" allow="fullscreen" allowFullScreen referrerPolicy="no-referrer" onLoad={()=>{if(!reference){chartReady.current=true;setFrameReady(true);}}}/>
     </div>{frameSlow&&!frameReady&&<div className="bnb-chart-recovery"><span>The chart is taking longer than usual.</span><a href={reference?`https://www.coingecko.com/en/coins/${data?.mapping?.coinId}`:`https://www.geckoterminal.com/bsc/pools/${observation!.pool}`} target="_blank" rel="noreferrer">Open chart ↗</a></div>}</>
+    :offsite&&!loading?<div className="bnb-chart-empty" role="status"><span className="bnb-chart-placeholder" aria-hidden="true">↗</span><h3>{offsite.split(':')[0]} charts open on TradingView</h3><p>{product.tokenSymbol} · {offsite} underlying stock</p><a href={`https://www.tradingview.com/symbols/${offsite.replace(':','-')}/`} target="_blank" rel="noreferrer">View {offsite} chart ↗</a></div>
     :<div className="bnb-chart-empty" role="status"><span className="bnb-chart-placeholder" aria-hidden="true">↗</span><h3>{loading?'Opening market data':data?.status==='NO_POOL'?'No indexed BNB chart yet':'Market data is reconnecting'}</h3><p>{product.tokenSymbol} · BNB Chain</p>{!loading&&data?.status!=='NO_POOL'&&<button onClick={()=>{setLoading(true);setRetry(n=>n+1);}}>Try again</button>}</div>}
     {!reference&&<div className="bnb-chart-bottom"><div aria-label="Chart interval">{(['1h','4h','1d'] as const).map(period=><button key={period} aria-pressed={period===resolution} onClick={()=>setResolution(period)}>{period.toUpperCase()}</button>)}</div><span>Line & candles · chart toolbar</span></div>}
     {observation&&<dl className="bnb-pool-stats"><div><dt>Pool liquidity</dt><dd>{money(observation.liquidityUsd)}</dd></div><div><dt>Pool volume · 24h</dt><dd>{money(observation.poolVolume24hUsd)}</dd></div><div><dt>Updated</dt><dd>{new Date(observation.observedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</dd></div></dl>}

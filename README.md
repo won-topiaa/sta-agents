@@ -106,11 +106,29 @@ Value signals come from **SEC EDGAR XBRL company facts** (`engine/agent/xtxc_age
 
 - **Quarters**: taken from 3-month facts, or from differences of year-to-date facts. Cash-flow statements are cumulative.
 - **Market value**: split-adjusted close × shares outstanding on the same split basis (from the price data's split events) ÷ ordinary shares per ADS for depositary listings. Dividend-adjusted prices are not used for valuation. Checked against Binance RWA Data market values: 314 of 328 companies within 25%.
-- **Fresh data**: `engine/scripts/refresh_research_data.py` refreshes the price release and the fundamentals release (only companies with a new filing, plus exchange rates) every weekday after the US close; each release is replaced in one step and a failed refresh keeps the previous one.
+- **Fresh data**: `engine/scripts/refresh_research_data.py` refreshes the price release, the fundamentals release (only companies with a new filing, plus exchange rates) and the official statistics every weekday after the US close; each release is replaced in one step and a failed refresh keeps the previous one. An exchange rate counts only from the business day after its weekly H.10 release.
 - **Backtester input**: the values are attached to the price panel as point-in-time columns, so the same "rows ≤ t" slicing and the same future-data perturbation test cover them.
 
 Trading-activity signals for every stock and fund (`engine/agent/xtxc_agent/research/volume.py`) use the same columns:
 **volume surge** (20-day / 120-day average volume − 1) and **dollar volume** (log10 of 20-day average dollars traded).
+
+## Official statistics as sector guards
+
+An agent can turn on a guard that holds part of a sector in cash while an official statistic weakens
+(`engine/agent/xtxc_agent/research/macro.py`, strategy-language key `macro_off`):
+
+| Guard | Series (FRED ID) | Stocks it scales |
+| --- | --- | --- |
+| Chip cycle | Semiconductor and electronic component production (`IPG3344S`, monthly) | semiconductor makers (SIC 3670–3679, 3559, QCOM, ARM, long chip funds) |
+| Consumer | Advance retail sales (`RSAFS`, monthly) | consumer discretionary and staples companies |
+| Oil | WTI crude oil spot price (`DCOILWTICO`, daily) | energy companies |
+| Dollar | Nominal broad US dollar index (`DTWEXBGS`, daily, published weekly) | every stock |
+
+- **No look-ahead**: a FRED observation is dated by the period it measures, not by its release, and is revised later. The engine reads every ALFRED vintage, so on day *t* a backtest sees only values published by the day before, as they stood then.
+- **Opt-in**: on 2021–2026 data the guards did not reduce the largest drawdown of a chip-momentum agent, so they are rules a user chooses, not defaults.
+- A design with a guard waits for data when the statistics release is missing or more than 14 days old.
+
+This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
 
 ## Research universe
 
@@ -156,7 +174,7 @@ The live app is the hosted way to try it; the `web/` folder is an excerpt and do
 
 - **Coverage of value signals**: none for funds and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
-- **One Agentic Wallet per gateway**: it is bound to the first account that signs in. The CLI stores its session in the OS keychain.
+- **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`); other accounts sign each trade themselves. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
 - **Not audited.** Small amounts only.
 
 ## Built on
@@ -169,6 +187,7 @@ New in this project:
   patterns (range breakout, volatility squeeze, higher highs and lows, double bottom) and exit rules (stop loss,
   trailing stop)
 - point-in-time SEC fundamentals and the value style
+- official statistics (FRED/ALFRED vintages) as opt-in sector guards
 - BNB Smart Chain execution through the Binance Web3 API
 - Binance Agentic Wallet autonomy
 - the BNB gateway

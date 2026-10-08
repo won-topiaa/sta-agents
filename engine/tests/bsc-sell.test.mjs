@@ -6,7 +6,11 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AgentStore,sellLegs} from '../lib/research-agent-core.mjs';
 import {presetBody} from '../lib/research-agent-profile.mjs';
-import {bindAgentic,startAgentic,stopAgentic,agenticTick,agenticRun} from '../lib/research-agentic.mjs';
+import {bindAgentic,startAgentic,stopAgentic,agenticTick as tickOnce,agenticRun} from '../lib/research-agentic.mjs';
+
+// The gateway's Agentic session must be signed in to the bound wallet; these fakes answer as the bound one.
+const boundAddress=s=>s.db.prepare('SELECT address FROM agent_agentic_binding LIMIT 1').get()?.address;
+const agenticTick=(s,gw,...rest)=>tickOnce(s,async(m,p,b)=>p.startsWith('/v1/agentic/address')?{addresses:[{binanceChainId:'56',address:boundAddress(s)}]}:gw(m,p,b),...rest);
 import {createSellPlan,approveProposed,strategyContracts,holdingsFor,exitWatch,exitPositions} from '../lib/research-bsc-sell.mjs';
 import {bscProduct} from '../lib/bsc-research-universe.mjs';
 import {BSC_ROUTER} from '../lib/bsc-execution.mjs';
@@ -29,6 +33,8 @@ function strategyWith(s,{approval='PER_TRADE',weights=[{instrument:'NVDA',weight
   return {strategy,agent:a,run:r};
 }
 let sentSeq=100;
+// What the Agentic Wallet reported filling for each purchase leg of a plan.
+function filled(s,planId,atoms){for(const r of s.db.prepare('SELECT step,document FROM agent_steps WHERE plan_id=?').all(planId))s.db.prepare('UPDATE agent_steps SET document=? WHERE plan_id=? AND step=?').run(JSON.stringify({...JSON.parse(r.document),filledTokenAtoms:atoms}),planId,r.step);}
 function reconcile(s,planId,index,at,{who=owner,minOut=null}={}){
   s.bscPrepared(who,planId,index,'SWAP',{tx:{from:'0x1',to:'0xrouter',data:'0xad43f73d',value:'0',...(minOut?{minReceiveAmount:minOut}:{})}},String(index));
   s.bscSent(who,planId,index,hash(sentSeq++));
@@ -43,7 +49,8 @@ test('sale legs: only this strategy\'s listed contracts, whole holdings, nothing
   assert.throws(()=>sellLegs(s,[{instrument:'NVDA',contract:amd,raw:'1'}]),/not a listed/);                       // another stock's token
   assert.throws(()=>sellLegs(s,[{instrument:'TSLA',contract:nvda,raw:'1'}]),/not part of this strategy/);
   assert.throws(()=>sellLegs(s,[{instrument:'NVDA',contract:nvda,raw:'1'},{instrument:'NVDA',contract:nvda,raw:'2'}]),/once per plan/);
-  assert.deepEqual(holdingsFor(s,{holdings:[{contract:nvda.toUpperCase().replace('0X','0x'),raw:'5'},{contract:amd,raw:'0'}]}).map(h=>[h.instrument,h.raw]),[['NVDA','5']]);
+  assert.deepEqual(holdingsFor(s,{holdings:[{contract:nvda.toUpperCase().replace('0X','0x'),raw:tokens(5)},{contract:amd,raw:'0'}]}).map(h=>[h.instrument,h.raw]),[['NVDA',tokens(5)]]);
+  assert.deepEqual(holdingsFor(s,{holdings:[{contract:nvda,raw:'999999999999999'}]}),[]);   // under a thousandth of a token: dust, not a holding
   assert.ok(strategyContracts(s).some(c=>c.contract===amd));
 });
 
@@ -123,9 +130,10 @@ test('exit watch: an agent that trades on its own sells from the Agentic Wallet 
   const buy=s.approve(owner,run.id,'c1',run.result.reportHash);
   startAgentic(s,owner,buy.id,1000);
   const orders=[];
-  const fill=async(method,path,body)=>{if(method==='POST'){orders.push(body);return {orderId:`o-${orders.length}`};}if(path.startsWith('/v1/agentic/order'))return {status:'FINISHED'};return {quotaLeft:1000};};
+  const fill=async(method,path,body)=>{if(method==='POST'){orders.push(body);return {orderId:`o-${orders.length}`};}if(path.startsWith('/v1/agentic/order'))return {orderId:new URL('http://g'+path).searchParams.get('orderId'),status:'FINISHED'};return {quotaLeft:1000};};
   for(let i=0;i<4;i++)await agenticTick(s,fill);
   assert.equal(s.plan(owner,buy.id).status,'COMPLETE');
+  filled(s,buy.id,tokens(1));   // the tokens each Agentic purchase filled: an exit sells that much on its own
   const quiet=await exitWatch(s,{gw:async()=>({holdings:[{contract:nvda,raw:tokens(1)},{contract:amd,raw:tokens(1)}]}),check:async i=>({asOf:'2026-10-09',positions:i.positions.map(p=>({ticker:p.ticker,triggered:null}))}),release:'r1'});
   assert.equal(quiet.positions,2);assert.equal(quiet.proposals.length,0);
   const fired=await exitWatch(s,{gw:async(m,path)=>{assert.match(path,new RegExp(agenticWallet));return {holdings:[{contract:nvda,raw:tokens(1)},{contract:amd,raw:'0'}]};},
@@ -154,7 +162,7 @@ test('exit watch: a stock without verified history does not block the others',as
 const tx0={from:'0x1',to:'0xrouter',data:'0xad43f73d',value:'0'};
 test('revoking or stopping an Agentic plan ends its remaining trades; the worker never revives it',async t=>{
   const s=setup(t);bindAgentic(s,owner,agenticWallet);
-  const orders=[];const gw=async(m,path,body)=>{if(m==='POST'){orders.push(body);return {orderId:`o-${orders.length}`};}if(path.startsWith('/v1/agentic/order'))return {orderId:'o-1',status:'FINISHED'};return {quotaLeft:1000};};
+  const orders=[];const gw=async(m,path,body)=>{if(m==='POST'){orders.push(body);return {orderId:`o-${orders.length}`};}if(path.startsWith('/v1/agentic/order'))return {orderId:new URL('http://g'+path).searchParams.get('orderId'),status:'FINISHED'};return {quotaLeft:1000};};
   for(const end of ['revoke','stop']){
     orders.length=0;
     const {run}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS'}),plan=s.approve(owner,run.id,'c1',run.result.reportHash);startAgentic(s,owner,plan.id,1000);
@@ -236,9 +244,9 @@ async function call(server,method,path,body){
 test('gateway: a stock -> USDT sale gets an exact token approval, then a checked swap; holdings read balanceOf',async()=>{
   const user='0x1111111111111111111111111111111111111111',stock='0x02fca66c1d1afb4e2a7884261eb00f63598a7436',router=BSC_ROUTER;
   const amount=tokens(2),word=a=>a.toLowerCase().slice(2).padStart(64,'0'),hex=v=>BigInt(v).toString(16).padStart(64,'0');
-  const fake=({allowance=0n})=>{const seen=[];return {seen,client:{get:async path=>{seen.push(path);
-    if(path.endsWith('/rwa/tokens'))return [{tokenContractAddress:stock,tokenSymbol:'NVDAB',decimals:'18',underlyingTicker:'NVDA',tokenToShareRatio:'1',statusInfo:{reasonCode:'TRADING'}}];
-    if(path.endsWith('/aggregator/quote'))return [{quoteId:'q1',vendorName:'LiquidMesh',toTokenAmount:'360000000000000000000',isBest:true}];
+  const fake=({allowance=0n})=>{const seen=[];return {seen,client:{get:async(path,params={})=>{seen.push(path);
+    if(path.endsWith('/rwa/tokens'))return [{tokenContractAddress:stock,tokenSymbol:'NVDAB',decimals:'18',underlyingTicker:'NVDA',tokenToShareRatio:'1',tokenPrice:'180',statusInfo:{reasonCode:'TRADING'}}];
+    if(path.endsWith('/aggregator/quote'))return [{quoteId:'q1',vendorName:'LiquidMesh',toTokenAmount:(BigInt(params.amount)*180n).toString(),isBest:true}];   // $180 a token
     if(path.endsWith('/approve-transaction'))return {0:{data:'0x095ea7b3'+word(router)+hex(amount),dexContractAddress:router,gasLimit:'70000'}};
     // Swap head words: 1 receiver (0 = the sender), 3 input token, 4 amount, 5 output token, 6 minimum received.
     if(path.endsWith('/aggregator/swap'))return {executionMode:'SWAP',tx:{from:user,to:router,data:'0xad43f73d'+hex(0)+hex(0)+hex(0)+word(stock)+hex(amount)+word(BSC_USDT)+hex('356400000000000000000'),value:'0',gas:'450000',minReceiveAmount:'356400000000000000000'}};

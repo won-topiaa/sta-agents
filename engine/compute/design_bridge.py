@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import math
 import pathlib
+import numpy as np
 import pandas as pd
 from evaluate import load_prices, assess
 from xtxc_agent.core.strategy_design import design_messages, validate_candidates, choose, design_checks, describe
@@ -15,7 +16,8 @@ from xtxc_agent.research import sandbox
 from xtxc_agent.research.backtest import report_curve, _resolve_period, HOLDOUT_DAYS
 from xtxc_agent.research.strategy_lang import scaled, design_hash
 from xtxc_agent.research import agent_profile
-from xtxc_agent.research import fundamentals, volume
+from xtxc_agent.research import fundamentals, volume, macro
+from xtxc_agent.research.strategy_lang import macro_columns
 from xtxc_agent.research.strategy_lang import DesignError
 
 
@@ -104,6 +106,41 @@ def with_volume(prices, root, tickers):
     return volume.attach(prices, closes, volumes)
 
 
+def with_macro(prices, snapshot, root, tickers, candidates):
+    """Add the official statistics the designs' macro guards read: "MACRO::<series>::<change>" (the change as published
+    by the day before each session, from ALFRED vintages) and "<TICKER>::in::<scope>" (1 for stocks in the guard's
+    scope). A design that uses a guard needs a current macro release; without one the run waits for data."""
+    pairs = sorted({pc for c in candidates for pc in macro_columns(c['design'])})
+    if not pairs:
+        return prices, snapshot
+    age = macro.release_age_days(root)
+    if age is None or age > macro.MAX_AGE_DAYS:
+        raise ValueError('WAITING_DATA: Official statistics (FRED) are not available or are out of date.')
+    meta = macro.load_release_meta(root)
+    cols = {}
+    for series, change in pairs:
+        rows = macro.load_rows(root, series)
+        if not rows:
+            raise ValueError(f'WAITING_DATA: Official statistics for {series} are not available.')
+        cols[f'MACRO::{series}::{change}'] = macro.change_column(rows, prices.index, change)
+    try:
+        firms = json.loads((pathlib.Path(root) / 'fundamentals' / 'release.json').read_text()).get('tickers', {})
+    except (OSError, ValueError):
+        firms = {}
+    for scope in sorted({macro.SERIES[series][1] for series, _ in pairs} - {'market'}):
+        for t in tickers:
+            f = firms.get(t, {})
+            cols[f'{t}::in::{scope}'] = np.full(len(prices), 1.0 if macro.in_scope(scope, t, f.get('sic'), f.get('sector')) else 0.0)
+    prices = pd.concat([prices, pd.DataFrame(cols, index=prices.index)], axis=1)
+    used = sorted({s for s, _ in pairs})
+    return prices, {**snapshot, 'macro': {'release': meta.get('release_id'), 'fetchedAt': meta.get('fetched_at'), 'series': used,
+                                          'observationEnd': {s: meta['series'][s].get('observation_end') for s in used},
+                                          'notice': macro.NOTICE},
+                    'limitations': [*snapshot.get('limitations', []),
+                                    'Official statistics are FRED/ALFRED vintages: each session uses only values published by the day '
+                                    'before, as they stood then. ' + macro.NOTICE]}
+
+
 def rebalance_of(agent):
     return agent['rebalance'] if agent else 'monthly'
 
@@ -147,6 +184,7 @@ def evaluate_designs(request, root):
     prices, snapshot = load_prices(root, sorted(set(tickers+['QQQ','SPY'])))
     prices, snapshot = with_fundamentals(prices, snapshot, root, tickers)
     prices = with_volume(prices, root, tickers)
+    prices, snapshot = with_macro(prices, snapshot, root, tickers, designs['candidates'])
     horizon = max(5, round(g['horizonDays']*252/365))
     if len(prices) < max(756, 3*horizon+379):
         raise ValueError('WAITING_DATA: Insufficient common sessions for the requested horizon.')
