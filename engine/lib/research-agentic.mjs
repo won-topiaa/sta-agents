@@ -22,6 +22,7 @@ export function bindAgentic(store,address,wallet){
 export function agenticRun(store,planId){return store.db.prepare('SELECT * FROM agent_agentic_runs WHERE plan_id=?').get(planId)??null;}
 // A single purchase leg above this is refused by the gateway (its buy cap); refuse the plan up front instead.
 export const AGENTIC_MAX_BUY_ATOMS=200n*10n**18n;
+export const PAUSE_RETRY_MS=300000;
 const LIVE=['APPROVED','PARTIAL'];
 // The Agentic Wallet reports the daily limit left under one of these keys, depending on the CLI version.
 export const quotaLeftOf=q=>Number(q?.quotaLeft??q?.leftQuota??q?.left??q?.remaining??NaN);
@@ -87,8 +88,9 @@ function claimLeg(store,run,index,doc){
 
 // One pass over Agentic runs. `gw(method,path,body)` calls the BNB gateway.
 export async function agenticTick(store,gw,now=Date.now()){
-  // A run paused by the daily limit or a closed market tries again after an hour; Binance re-checks the limit.
-  store.db.prepare("UPDATE agent_agentic_runs SET status='RUNNING',reason=NULL,updated_at=? WHERE status='PAUSED' AND updated_at<?").run(now,now-3600000);
+  // A run paused by the daily limit, a closed market or the price check tries again after five minutes, well inside its
+  // plan's deadline (a purchase approval lasts an hour); Binance re-checks the limit and the gateway the price.
+  store.db.prepare("UPDATE agent_agentic_runs SET status='RUNNING',reason=NULL,updated_at=? WHERE status='PAUSED' AND updated_at<?").run(now,now-PAUSE_RETRY_MS);
   // Running runs, plus ended runs that still have an order in flight to settle.
   const runs=store.db.prepare(`SELECT r.*,p.document,p.strategy FROM agent_agentic_runs r JOIN agent_plans p ON p.id=r.plan_id
     WHERE r.status='RUNNING' OR EXISTS (SELECT 1 FROM agent_steps s WHERE s.plan_id=r.plan_id AND s.phase IN ('AGENTIC_SUBMITTING','AGENTIC_SUBMITTED'))

@@ -150,6 +150,10 @@ test('gateway: an independent price bound for signed and Agentic legs; Agentic s
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:stock,toToken:BSC_USDT,fromTokenQty:'2'});
   assert.equal(r.status,200);assert.deepEqual(calls.at(-1).slice(0,9),['market-order','swap','--binanceChainId','56','--fromToken',stock,'--toToken',BSC_USDT,'--fromTokenQty']);
   assert.equal(calls.at(-1)[9],'10');
+  // A share amount that does not divide evenly is rounded DOWN: the CLI refuses an amount whose tokens exceed the balance.
+  f=fakeClient({ratio:'0.333333333333333333',price:'80',out:(80n*10n**18n).toString()});
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:stock,toToken:BSC_USDT,fromTokenQty:'1.000000000000000007'});
+  assert.equal(r.status,200);assert.equal(calls.at(-1)[9],'0.333333333333333335');
 });
 
 test('gateway: an unclear wallet answer is AGENTIC_UNKNOWN; fills are reported in token atoms; an order id survives a refusal',async()=>{

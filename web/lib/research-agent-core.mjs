@@ -23,6 +23,7 @@ export function validateGoal(v) {
 export const briefHash = s => hash({name:s.name,objective:s.objective,budget:s.budget,instruments:s.instruments,weights:s.weights,cashBps:s.cashBps,agentId:s.agentId});
 // BNB Smart Chain owners budget in USDT (18 decimals); Solana owners in USDC (6 decimals).
 export const BSC_MIN_LEG_ATOMS = 5n*10n**18n;   // 5 USDT
+export const BSC_MAX_LEG_ATOMS = 200n*10n**18n; // the gateway refuses a larger single purchase
 export const chainOf = address => typeof address==='string'&&address.startsWith('eip155:56:')?'bsc':'solana';
 export const budgetUnit = address => chainOf(address)==='bsc'?{asset:'USDT',decimals:18}:{asset:'USDC',decimals:6};
 export function budgetAtoms(value,decimals=6) {
@@ -270,13 +271,17 @@ export class AgentStore extends ResearchStore {
       // BNB Chain venues refuse tiny orders (Ondo: about 5 USD). Such legs stay in cash instead of failing later.
       if(bsc){const min=BSC_MIN_LEG_ATOMS,small=a.legs.filter(l=>BigInt(l.inputAtoms)<min);
         if(small.length){a={legs:a.legs.filter(l=>BigInt(l.inputAtoms)>=min),cashAtoms:(BigInt(a.cashAtoms)+small.reduce((n,l)=>n+BigInt(l.inputAtoms),0n)).toString(),belowMinimum:small.map(l=>l.instrument)};}
-        if(!a.legs.length)reject('Every purchase in this plan is below the 5 USDT minimum order. Raise the budget or choose fewer stocks.',409);}
+        // A rebalance keeps a stock it already holds for this strategy as it is: buying it again would double the position.
+        if(options.sells){const kept=new Set(options.sells.map(h=>h.instrument).filter(i=>c.weights.some(w=>w.instrument===i&&w.weightBps>0)));
+          if(kept.size)a={...a,legs:a.legs.filter(l=>!kept.has(l.instrument)),kept:[...kept]};}
+        if(!a.legs.length&&!(options.sells??[]).some(h=>!c.weights.some(w=>w.instrument===h.instrument&&w.weightBps>0)))reject(a.kept?.length?'You already hold every stock this strategy keeps; there is nothing to buy or sell.':'Every purchase in this plan is below the 5 USDT minimum order. Raise the budget or choose fewer stocks.',409);
+        if(a.legs.some(l=>BigInt(l.inputAtoms)>BSC_MAX_LEG_ATOMS))reject('A single purchase is capped at 200 USDT on BNB Chain. Lower the budget or the per-stock limit.',409);}
       // Buying-only (entry) filters and the hold buffer keep stocks already held. A run that did not know the account's
       // holdings computed today's target for new money only, so a kept holding would be missing from it and sold.
       if(bsc&&options.sells&&holdsAware(c.design)&&!Array.isArray(result.heldInstruments))reject('This result did not account for your current holdings. Run research again to rebalance.',409);
       const sells=bsc&&options.sells?sellLegs(s,options.sells).filter(l=>!c.weights.some(w=>w.instrument===l.instrument&&w.weightBps>0)):[];
       if(draftId){const draft=this.db.prepare('SELECT * FROM agent_rebalance_drafts WHERE id=? AND owner=?').get(draftId,owner);if(!draft||draft.run_id!==runId||draft.candidate_id!==candidateId||draft.report_hash!==reportHash)reject('Review the matching holdings allocation.',409);rebalance=JSON.parse(draft.document);if(rebalance.expiresAt<Date.now())reject('Refresh the holdings review before approving.',409);a=rebalance;}
-      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:bsc?100:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
+      const document={schema:'xtxc.research-plan/v1',owner:address,strategyId:s.id,briefHash:r.brief_hash,runId,candidateId,reportHash,goal:input.goal,budgetAtoms:total,budgetAsset:unit.asset,...(bsc?{chain:'eip155:56'}:{}),budgetScope:rebalance?'SELECTED_HOLDINGS_PLUS_NEW_CASH':'NEW_CAPITAL',universe:s.instruments,legs:[...sells,...a.legs.map(l=>({side:'BUY',inputDecimals:unit.decimals,...l}))],cashAtoms:a.cashAtoms,...(sells.length?{sells:sells.length,wallet:options.wallet==='AGENTIC'?'AGENTIC':'PERSONAL'}:{}),...(a.belowMinimum?{belowMinimum:a.belowMinimum}:{}),...(a.kept?.length?{keptHoldings:a.kept}:{}),...(rebalance?{rebalanceDraftId:draftId,snapshot:rebalance.snapshot,heldValueAtoms:rebalance.heldValueAtoms,portfolioValueAtoms:rebalance.portfolioValueAtoms,cashFloorAtoms:rebalance.cashFloorAtoms}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:bsc?100:20,createdAt:Date.now(),expiresAt:Date.now()+3600000,nonce:randomUUID()};
       const id=hash(document),plan={...document,id};
       this.db.prepare('INSERT INTO agent_plans VALUES(?,?,?,?,?,?,?)').run(id,owner,s.id,runId,JSON.stringify(plan),'APPROVED',Date.now());this.event(owner,s.id,'APPROVED',{planId:id,runId});return plan;
     });
@@ -409,6 +414,12 @@ export class AgentStore extends ResearchStore {
     const {plan:p,phase,doc}=this.bscStep(address,id,index),s=this.get(this.owner(address),p.strategyId);
     if(!['APPROVED','PARTIAL'].includes(p.status)||briefHash(s)!==p.briefHash||Date.now()>p.expiresAt)reject('This approval is no longer current.',409);
     if(index>0&&this.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=?').get(id,index-1)?.phase!=='RECONCILED')reject('Wait for the previous trade receipt.',409);
+    // The router allowance belongs to the wallet, not to a plan: another live plan's prepared or sent step could spend
+    // this step's approval (or this one spend its), so one trade at a time per wallet.
+    for(const o of this.db.prepare("SELECT p.id,p.document FROM agent_plans p JOIN agent_steps s ON s.plan_id=p.id WHERE p.owner=? AND p.id<>? AND p.status IN ('APPROVED','PARTIAL') AND s.phase IN ('APPROVE_PREPARED','APPROVE_SENT','SWAP_PREPARED','SUBMITTED')").all(this.owner(address),id)){
+      const d=JSON.parse(o.document);
+      if(d.chain==='eip155:56'&&Date.now()<=d.expiresAt&&!this.db.prepare('SELECT 1 FROM agent_agentic_runs WHERE plan_id=?').get(o.id))reject('Another plan has a trade in progress in this wallet. Finish or stop it first.',409);
+    }
     if(['SUBMITTED','RECONCILED','UNKNOWN','APPROVE_SENT'].includes(phase))reject('Check this trade before preparing another. No automatic replay.',409);
     // A prepared swap that was never reported may still have been sent. If the wallet has sent anything since, a second
     // swap is built only when this step's own exact approval shows the first did not run: the quote must then still find
@@ -431,7 +442,9 @@ export class AgentStore extends ResearchStore {
       // This step's exact approval succeeded and no swap of it is recorded, yet the router needs a new approval: the
       // allowance was spent, so a swap of this leg may already have run (a second signature, or a swap reported as failed
       // while an earlier one went through). Never buy or sell the leg again on that evidence.
-      if(kind==='APPROVE'&&approvedHere(doc))reject(`The allowance approved for this trade has been used, so it may already have gone through. If your wallet sent it, report that transaction's hash; otherwise stop this plan.`,409);
+      // The same holds when a swap of this step was prepared at all: its approval may have run unreported (the swap was
+      // built on the allowance it left), and that swap may have been sent.
+      if(kind==='APPROVE'&&(approvedHere(doc)||(doc.preparedAll??[]).some(x=>x.kind==='SWAP')))reject(`The allowance approved for this trade has been used, so it may already have gone through. If your wallet sent it, report that transaction's hash; otherwise stop this plan.`,409);
       if(guard?.allowanceMustRemain&&kind!=='SWAP')reject('Your wallet sent a transaction after this trade was prepared. Report its hash or check it first.',409);
       const entry={kind,tx:prepared.tx,quote:prepared.quote??null,simulation:prepared.simulation??null,nonce:String(nonce),at:Date.now()};
       const next={...doc,leg:p.legs[index],...(prepared.product?.contract?{product:prepared.product}:{}),prepared:entry,preparedAll:[...(doc.preparedAll??[]),{kind,tx:entry.tx,nonce:entry.nonce,at:entry.at}].slice(-12)};

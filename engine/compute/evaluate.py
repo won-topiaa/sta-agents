@@ -84,12 +84,14 @@ def assess(result, goal):
     median=float(np.median(windows)); target=goal['targetReturnBps']/10000
     reasons=[]
     if median<target: reasons.append('TARGET_NOT_SUPPORTED')
-    if abs(dd)>goal['maxDrawdownBps']/10000: reasons.append('DRAWDOWN_LIMIT_EXCEEDED')
+    # The loss limit holds over the whole backtest too (e.g. 2022), not only over the held-out years.
+    full=abs(float(result.get('metrics',{}).get('max_drawdown') or 0.0))
+    if max(abs(dd),full)>goal['maxDrawdownBps']/10000: reasons.append('DRAWDOWN_LIMIT_EXCEEDED')
     if net<=0: reasons.append('NON_POSITIVE_HOLDOUT_RETURN')
     return {'verdict':'DECLINED' if reasons else 'ELIGIBLE','reasons':reasons,
         'horizonMedianBps':round(median*10000),'horizonWorstBps':round(min(windows)*10000),
         'horizonBestBps':round(max(windows)*10000),'holdoutReturnBps':round(net*10000),
-        'holdoutDrawdownBps':round(abs(dd)*10000),'windowCount':len(windows),
+        'holdoutDrawdownBps':round(abs(dd)*10000),'fullDrawdownBps':round(full*10000),'windowCount':len(windows),
         'holdoutStart':result['equity'][start][0],
         'sharpe':None if np.std(r,ddof=1)==0 else round(float(np.mean(r)/np.std(r,ddof=1)*math.sqrt(252)),3)}
 

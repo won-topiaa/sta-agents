@@ -17,6 +17,9 @@ const IN_FLIGHT=['APPROVE_SENT','SUBMITTED','AGENTIC_SUBMITTING','AGENTIC_SUBMIT
 // fails at the router, so they are never offered for sale and never count as a position.
 export const substantial=(raw,decimals=18)=>/^[1-9]\d{0,35}$/.test(String(raw))&&BigInt(raw)>=10n**BigInt(Math.max(0,decimals-3));
 
+// An automatic exit (a stop that fired) keeps trying until the token trades again, over a weekend too; the next daily
+// check finds it still open instead of proposing a second one.
+export const AUTO_EXIT_MS=4*86400000;
 function ensure(store){
   store.db.exec('CREATE TABLE IF NOT EXISTS agent_worker_state(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)');
 }
@@ -62,7 +65,7 @@ export function createSellPlan(store,address,strategyId,{kind,holdings,wallet='P
     const runId=`${kind.toLowerCase()}:${randomUUID()}`;
     const document={schema:'xtxc.research-plan/v1',kind,owner:address,strategyId:s.id,briefHash:briefHash(s),runId,candidateId:kind,reportHash:null,goal:null,
       budgetAtoms:'0',budgetAsset:'USDT',chain:'eip155:56',budgetScope:'SELL_HOLDINGS',wallet,universe:s.instruments,legs,cashAtoms:'0',
-      ...(reason?{reason}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:100,createdAt:now,expiresAt:now+(proposed?86400000:3600000),nonce:randomUUID()};
+      ...(reason?{reason}:{}),...(agent?{agent:agentSnapshot(agent)}:{}),maxSlippageBps:100,createdAt:now,expiresAt:now+(proposed?86400000:kind==='EXIT'?AUTO_EXIT_MS:3600000),nonce:randomUUID()};
     const id=hash(document),status=proposed?'PROPOSED':'APPROVED';
     store.db.prepare('INSERT INTO agent_plans VALUES(?,?,?,?,?,?,?)').run(id,owner,s.id,runId,JSON.stringify({...document,id}),status,now);
     store.event(owner,s.id,proposed?'EXIT_PROPOSED':'SALE_APPROVED',{planId:id,kind,instruments:legs.map(l=>l.instrument)});
@@ -129,6 +132,14 @@ export function exitPositions(store){
 export function heldForRun(store,address,strategy,walletKind,reply){
   const own=new Map(heldPositions(store,store.owner(address)).filter(p=>p.strategyId===strategy.id&&p.wallet===walletKind).map(p=>[p.contract,p.qty]));
   return holdingsFor(strategy,reply).filter(h=>own.has(h.contract)&&(own.get(h.contract)==null||BigInt(h.raw)*20n>=BigInt(own.get(h.contract)))).map(h=>h.instrument);
+}
+// What a rebalance may sell: this strategy's own confirmed purchases still in that wallet, each capped at what they
+// delivered. Tokens bought outside STA or by another strategy in the same wallet are never sold by it; a purchase whose
+// delivered amount is unknown is left alone.
+export function ownHoldings(store,address,strategy,walletKind,reply){
+  const own=new Map(heldPositions(store,store.owner(address)).filter(p=>p.strategyId===strategy.id&&p.wallet===walletKind&&p.qty!=null).map(p=>[p.contract,BigInt(p.qty)]));
+  return holdingsFor(strategy,reply).filter(h=>own.has(h.contract)).map(h=>{const q=own.get(h.contract),r=BigInt(h.raw);return {...h,raw:(r<q?r:q).toString()};})
+    .filter(h=>BigInt(h.raw)>0n);
 }
 
 // The daily exit check, once per new price release. `check` runs the engine's exit_check (same definition as the

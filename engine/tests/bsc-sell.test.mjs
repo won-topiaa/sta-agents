@@ -6,12 +6,12 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AgentStore,sellLegs} from '../lib/research-agent-core.mjs';
 import {presetBody} from '../lib/research-agent-profile.mjs';
-import {bindAgentic,startAgentic,stopAgentic,agenticTick as tickOnce,agenticRun} from '../lib/research-agentic.mjs';
+import {bindAgentic,startAgentic,stopAgentic,agenticTick as tickOnce,agenticRun,PAUSE_RETRY_MS} from '../lib/research-agentic.mjs';
 
 // The gateway's Agentic session must be signed in to the bound wallet; these fakes answer as the bound one.
 const boundAddress=s=>s.db.prepare('SELECT address FROM agent_agentic_binding LIMIT 1').get()?.address;
 const agenticTick=(s,gw,...rest)=>tickOnce(s,async(m,p,b)=>p.startsWith('/v1/agentic/address')?{addresses:[{binanceChainId:'56',address:boundAddress(s)}]}:gw(m,p,b),...rest);
-import {createSellPlan,approveProposed,strategyContracts,holdingsFor,exitWatch,exitPositions} from '../lib/research-bsc-sell.mjs';
+import {createSellPlan,approveProposed,strategyContracts,holdingsFor,exitWatch,exitPositions,ownHoldings,AUTO_EXIT_MS} from '../lib/research-bsc-sell.mjs';
 import {bscProduct} from '../lib/bsc-research-universe.mjs';
 import {BSC_ROUTER} from '../lib/bsc-execution.mjs';
 import {createGateway} from '../bnb-gateway/server.mjs';
@@ -68,8 +68,13 @@ test('closing positions: an approved sale plan whose legs are signed like purcha
 
 test('rebalance: holdings the approved design no longer holds are sold first, then the purchases follow',t=>{
   const s=setup(t),{run}=strategyWith(s,{weights:[{instrument:'NVDA',weightBps:2500}]});
-  const plan=s.approve(owner,run.id,'c1',run.result.reportHash,null,{sells:[{instrument:'NVDA',contract:nvda,raw:tokens(1)},{instrument:'AMD',contract:amd,raw:tokens(4)}],wallet:'PERSONAL'});
-  assert.deepEqual(plan.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD'],['BUY','NVDA']]);   // NVDA stays in the target: not sold
+  const kept=s.approve(owner,run.id,'c1',run.result.reportHash,null,{sells:[{instrument:'NVDA',contract:nvda,raw:tokens(1)},{instrument:'AMD',contract:amd,raw:tokens(4)}],wallet:'PERSONAL'});
+  assert.deepEqual(kept.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD']]);   // NVDA is held and stays in the target: neither sold nor bought again
+  assert.deepEqual(kept.keptHoldings,['NVDA']);
+  s.revoke(owner,kept.id);
+  const r2=strategyWith(s,{weights:[{instrument:'NVDA',weightBps:2500}]}).run;
+  const plan=s.approve(owner,r2.id,'c1',r2.result.reportHash,null,{sells:[{instrument:'AMD',contract:amd,raw:tokens(4)}],wallet:'PERSONAL'});
+  assert.deepEqual(plan.legs.map(l=>[l.side,l.instrument]),[['SELL','AMD'],['BUY','NVDA']]);
   assert.equal(plan.sells,1);assert.equal(plan.wallet,'PERSONAL');
   s.assertBscPreparable(owner,plan.id,0,'1');
   assert.throws(()=>s.assertBscPreparable(owner,plan.id,1,'1'),/previous trade/);   // the sale settles before buying
@@ -201,19 +206,19 @@ test('one transaction hash settles one step only',t=>{
 });
 test('Agentic purchases above the 200 USDT leg cap are refused up front; an owner may sell Agentic holdings whatever the agent setting',t=>{
   const s=setup(t);bindAgentic(s,owner,agenticWallet);
-  const big=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS',budget:'1000'}).run,plan=s.approve(owner,big.id,'c1',big.result.reportHash);
-  assert.throws(()=>startAgentic(s,owner,plan.id,5000),/capped at 200 USDT/);
+  const big=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS',budget:'1000'}).run;
+  assert.throws(()=>s.approve(owner,big.id,'c1',big.result.reportHash),/capped at 200 USDT/);   // refused at approval, whichever wallet
   const {strategy}=strategyWith(s);   // a per-trade agent
   const sale=createSellPlan(s,owner,strategy.id,{kind:'CLOSE',wallet:'AGENTIC',holdings:[{instrument:'NVDA',contract:nvda,raw:tokens(1)}]});
   assert.equal(startAgentic(s,owner,sale.id,0).status,'RUNNING');
 });
-test('a paused Agentic run tries again after an hour; a cancelled order fails the leg instead of hanging',async t=>{
+test('a paused Agentic run tries again after five minutes; a cancelled order fails the leg instead of hanging',async t=>{
   const s=setup(t),{run}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS'});bindAgentic(s,owner,agenticWallet);
   const plan=s.approve(owner,run.id,'c1',run.result.reportHash);startAgentic(s,owner,plan.id,1000);
   let quota=1;const gw=async(m,path)=>{if(m==='POST')return {orderId:'o-9'};if(path.startsWith('/v1/agentic/order'))return {list:[{orderId:'o-8',status:'FINISHED'},{orderId:'o-9',status:'CANCELED'}]};return {leftQuota:quota};};
   await agenticTick(s,gw);assert.equal(agenticRun(s,plan.id).status,'PAUSED');            // 1 USD left: paused, nothing sent
-  quota=1000;await agenticTick(s,gw);assert.equal(agenticRun(s,plan.id).status,'PAUSED');  // not before an hour
-  await agenticTick(s,gw,Date.now()+3700000);                                                // resumes and sends leg 0
+  quota=1000;await agenticTick(s,gw);assert.equal(agenticRun(s,plan.id).status,'PAUSED');  // not straight away
+  await agenticTick(s,gw,Date.now()+PAUSE_RETRY_MS+60000);                                   // resumes after five minutes, well inside the hour
   await agenticTick(s,gw);
   assert.equal(s.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=0').get(plan.id).phase,'FAILED');   // o-9 matched by id
   assert.equal(agenticRun(s,plan.id).status,'ATTENTION');
@@ -266,4 +271,14 @@ test('gateway: a stock -> USDT sale gets an exact token approval, then a checked
   assert.equal(r.body.error.code,'TOKEN');
   r=await call(createGateway({client:f.client,rpc:f.rpc,token:'t0k'}),'GET',`/v1/holdings?address=${user}&tokens=${BSC_USDT}`);
   assert.equal(r.body.error.code,'TOKEN');
+});
+test('rebalance sells only what this strategy bought in that wallet; an automatic exit keeps trying for days',t=>{
+  const s=setup(t),a=strategyWith(s),pa=s.approve(owner,a.run.id,'c1',a.run.result.reportHash);
+  reconcile(s,pa.id,0,Date.parse('2026-10-08T15:00:00Z'),{minOut:tokens(2)});
+  const reply={holdings:[{contract:nvda,raw:tokens(5)},{contract:amd,raw:tokens(3)}]};          // 3 more NVDA from elsewhere; AMD never bought here
+  assert.deepEqual(ownHoldings(s,owner,a.strategy,'PERSONAL',reply).map(h=>[h.instrument,h.raw]),[['NVDA',tokens(2)]]);
+  assert.deepEqual(ownHoldings(s,owner,a.strategy,'AGENTIC',reply),[]);                          // another wallet's purchases only
+  const b=strategyWith(s,{exit:{stop_loss:0.1}});
+  const exit=createSellPlan(s,owner,b.strategy.id,{kind:'EXIT',holdings:[{instrument:'NVDA',contract:nvda,raw:tokens(1)}]});
+  assert.ok(exit.expiresAt-exit.createdAt===AUTO_EXIT_MS&&AUTO_EXIT_MS>=3*86400000);
 });

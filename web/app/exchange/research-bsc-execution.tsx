@@ -154,7 +154,7 @@ export function AgenticConnect({agentic}:{agentic:ReturnType<typeof useAgentic>}
 }
 // Why an Agentic run is not running, in the owner's words. An uncertain order is never retried automatically.
 const runTitle:Record<string,string>={RUNNING:'Agent running',PAUSED:'Agent paused',STOPPED:'Agent stopped',ATTENTION:'Agent needs your attention',COMPLETE:'Agent finished'};
-const until=' It tries again every hour until the plan expires.',none=' Nothing was ordered.';
+const until=' It tries again every five minutes until the plan expires (an automatic exit keeps trying for four days).',none=' Nothing was ordered.';
 const runReason:Record<string,string>={
   OWNER_STOPPED:'You stopped this agent. Orders already placed stay as they are.',
   DAILY_LIMIT:`Paused: the next order is above the daily limit left in your Binance app.${until}`,

@@ -32,4 +32,20 @@ class DataChecks(unittest.TestCase):
         result=assess({'equity':[[str(i),100+i*.1] for i in range(1300)]},{'horizonDays':365,'targetReturnBps':100000,'maxDrawdownBps':2000})
         self.assertEqual(result['verdict'],'DECLINED');self.assertIn('TARGET_NOT_SUPPORTED',result['reasons']);self.assertGreaterEqual(result['windowCount'],3)
 
+    def test_loss_limit_holds_over_the_whole_backtest(self):
+        # a 40% fall early in the backtest (e.g. 2022), then a steady held-out climb with no drawdown
+        eq=[[str(i),100-0.2*i] for i in range(200)]+[[str(200+i),60+0.1*i] for i in range(1100)]
+        goal={'horizonDays':365,'targetReturnBps':100,'maxDrawdownBps':2000}
+        deep=assess({'equity':eq,'metrics':{'max_drawdown':-0.40}},goal)
+        self.assertIn('DRAWDOWN_LIMIT_EXCEEDED',deep['reasons']);self.assertEqual(deep['verdict'],'DECLINED');self.assertEqual(deep['fullDrawdownBps'],4000)
+        self.assertLess(deep['holdoutDrawdownBps'],2000)
+        mild=assess({'equity':eq,'metrics':{'max_drawdown':-0.10}},goal)
+        self.assertNotIn('DRAWDOWN_LIMIT_EXCEEDED',mild['reasons'])
+    def test_leveraged_and_inverse_funds_are_never_held(self):
+        import pandas as pd
+        from xtxc_agent.research.strategies import normalize_spec, target_weights
+        prices=pd.DataFrame({'SOXL':[10.0+i for i in range(30)],'SQQQ':[5.0]*30,'NVDA':[100.0+i for i in range(30)]},index=pd.bdate_range('2026-01-01',periods=30))
+        spec=normalize_spec({'template':'equal_weight','params':{'min_history':5},'universe':['SOXL','SQQQ','NVDA'],'max_weight':'0.5','min_cash':'0','rebalance':'monthly'})
+        self.assertEqual(set(target_weights(spec,prices,29)),{'NVDA'})
+
 if __name__=='__main__':unittest.main()

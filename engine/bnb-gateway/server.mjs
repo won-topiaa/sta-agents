@@ -45,10 +45,10 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
   const atoms18=qty=>{const [i,f='']=String(qty).split('.');return BigInt(i)*10n**18n+BigInt((f+'0'.repeat(18)).slice(0,18));};
   const dec18=a=>{const w=a/10n**18n,f=(a%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
   // Stock tokens: one token is `ratio` shares (tokenToShareRatio). The Agentic Wallet CLI takes and reports stock-token
-  // quantities in shares, so sales convert tokens -> shares (rounded up; the CLI caps at the balance) and fills
-  // convert shares -> tokens (rounded down).
+  // quantities in shares, so sales convert tokens -> shares (rounded down: the CLI refuses an amount whose tokens exceed
+  // the balance) and fills convert shares -> tokens (rounded down).
   const ratioAtoms=stock=>{const r=atoms18(String(stock.ratio??'1'));if(r<=0n)throw new ExecutionCheckError('TOKEN','This token has no share ratio.');return r;};
-  const tokensToShares=(tokenAtoms,stock)=>dec18((tokenAtoms*ratioAtoms(stock)+10n**18n-1n)/10n**18n);
+  const tokensToShares=(tokenAtoms,stock)=>dec18((tokenAtoms*ratioAtoms(stock))/10n**18n);
   const sharesToTokenAtoms=(shares,stock)=>(atoms18(shares)*10n**18n)/ratioAtoms(stock);
   // An independent price check: the route's price may not be worse than the token's listed price (tokenPrice, which is
   // the underlying share price x ratio) by more than MAX_DEVIATION, and the route's own price impact stays small.

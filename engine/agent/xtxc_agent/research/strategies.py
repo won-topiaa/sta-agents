@@ -241,10 +241,18 @@ def cap_weights(scores: dict[str, float], total: float, cap: float) -> dict[str,
     return res
 
 
+# Leveraged and inverse funds that may appear in a venue's stock list without a catalog kind (BNB Chain: SOXL, SOXS,
+# SQQQ, PSQ, KORU, TQQQ). They are never held when exclude_leveraged is on, in backtests and current targets alike.
+LEVERAGED_OR_INVERSE = frozenset({
+    "TQQQ", "SQQQ", "PSQ", "QLD", "QID", "SOXL", "SOXS", "KORU", "SPXL", "SPXS", "SPXU", "UPRO", "SSO", "SDS", "SH",
+    "TNA", "TZA", "LABU", "LABD", "FNGU", "FNGD", "TECL", "TECS", "NVDL", "NVDU", "NVDD", "TSLL", "TSLQ", "TSLS",
+    "MSTU", "MSTX", "CONL", "NUGT", "DUST", "UVXY", "SVXY", "BITX", "ETHU", "YINN", "YANG", "TMF", "TMV"})
+
+
 def _leveraged_tickers() -> frozenset[str]:
     from .universe import load_universe
 
-    return frozenset(i.ticker for i in load_universe() if i.kind == "leveraged_etf")
+    return frozenset(i.ticker for i in load_universe() if i.kind == "leveraged_etf") | LEVERAGED_OR_INVERSE
 
 
 def target_weights(spec: dict, prices: pd.DataFrame, asof_index: int, held: frozenset | set | None = None) -> dict[str, float]:

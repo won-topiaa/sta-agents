@@ -1,7 +1,7 @@
 import { requireRequesterSession, RequesterAuthError } from '@/lib/requester-auth';
 import { researchPrincipal, allowedStocksFor, isBscPrincipal, bscWallet } from '@/lib/research-principal';
 import { gateway, binanceTokenPrice } from '@/lib/bnb-gateway';
-import { createSellPlan, approveProposed, strategyContracts, holdingsFor, heldForRun, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
+import { createSellPlan, approveProposed, strategyContracts, holdingsFor, heldForRun, ownHoldings, readHoldings, saleWallet } from '@/lib/research-bsc-sell.mjs';
 import { agenticBinding } from '@/lib/research-agentic.mjs';
 import { checkSent } from '@/lib/bsc-execution.mjs';
 import { bscProduct } from '@/lib/bsc-research-universe.mjs';
@@ -117,11 +117,12 @@ export async function POST(request:Request){
       return Response.json({draft:s.saveRebalanceDraft(address,runId,candidateId,reportHash,allocation)},{headers});
     }
     if(b.operation==='APPROVE'){
-      // BNB Chain rebalance: holdings of this strategy's stocks that the approved design no longer holds are sold first.
+      // BNB Chain rebalance: this strategy's own holdings that the approved design no longer holds are sold first (never
+      // tokens bought elsewhere or by another strategy); the ones it keeps are not bought again.
       let options={};
       if(bsc&&b.sellOutside===true){
         const {strategy}=s.reviewCandidate(address,str(b.runId),str(b.candidateId),str(b.reportHash)),wallet=saleWallet(s,address,strategy);
-        const held=holdingsFor(strategy,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
+        const held=ownHoldings(s,address,strategy,wallet.kind,await readHoldings(gateway,wallet.address,strategyContracts(strategy).map(c=>c.contract)));
         options={sells:held.map(h=>({instrument:h.instrument,contract:h.contract,raw:h.raw})),wallet:wallet.kind};
       }
       // Independent strategy approvals never wait on another strategy's orders.

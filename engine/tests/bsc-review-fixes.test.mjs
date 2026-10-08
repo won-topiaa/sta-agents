@@ -79,10 +79,16 @@ test('an unreported swap is rebuilt after the wallet moved on only while this st
   const p2=s.bscPrepared(owner,plan.id,0,'SWAP',{tx:swapTx('02')},'7',guard);
   assert.equal(p2.kind,'SWAP');
   assert.deepEqual(s.bscStep(owner,plan.id,0).doc.preparedAll.map(e=>[e.kind,e.tx.data.slice(-2),e.nonce]),[['APPROVE','b3','5'],['SWAP','01','6'],['SWAP','02','7']]);
-  // Without an approval of its own (the router already had allowance), nothing proves the first swap did not run.
+  // The router allowance is the wallet's: while this plan has a trade in flight, another plan cannot prepare one.
   const other=strategyWith(s),plan2=s.approve(owner,other.run.id,'c1',other.run.result.reportHash);
+  assert.throws(()=>s.assertBscPreparable(owner,plan2.id,0,'7'),/Another plan has a trade in progress/);
+  s.revoke(owner,plan.id);
+  // Without an approval of its own (the router already had allowance), nothing proves the first swap did not run.
   s.bscPrepared(owner,plan2.id,0,'SWAP',{tx:swapTx('03')},'6');
   assert.throws(()=>s.assertBscPreparable(owner,plan2.id,0,'7'),/sent a transaction after/);
+  // A step that prepared a swap is never approved again: its approval may have run unreported and the swap been sent.
+  assert.throws(()=>s.bscPrepared(owner,plan2.id,0,'APPROVE',{tx:approveTx},'7'),/may already have gone through/);
+  s.revoke(owner,plan2.id);
   // An unreported approval may always be rebuilt: approving the same amount twice is harmless.
   const third=strategyWith(s),plan3=s.approve(owner,third.run.id,'c1',third.run.result.reportHash);
   s.bscPrepared(owner,plan3.id,0,'APPROVE',{tx:approveTx},'6');
