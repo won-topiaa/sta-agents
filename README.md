@@ -4,7 +4,7 @@
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
-> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
+> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
 
 ---
 
@@ -198,7 +198,7 @@ node engine/bnb-gateway/server.mjs        # listens on 127.0.0.1:4590
 python -m xtxc_agent.research.fundamentals <data-root> AAPL,MSFT,NVDA,…
 ```
 
-The live app is the hosted way to try it; the `web/` folder is an excerpt and does not build on its own.
+The live app is the hosted way to try it; the `web/` folder is an excerpt and does not build on its own. Without a wallet, [the read-only demo](https://xtxc.trade/exchange?view=research&demo=1) shows the two 2026-10-08 runs (agents, research results, approved plans and every trade with its BscScan link) in the same screens.
 
 ## Limitations
 

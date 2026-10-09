@@ -10,6 +10,7 @@ import type { ResearchStrategy } from '@/lib/research-workspace';
 import { assertPreparedReview, wireBytes, saveAttempt, ATTEMPT_EVENT, type PreparedTrade } from '@/lib/stock-trade-review';
 import { sameTransactionMessage } from '@/lib/stock-order-state';
 import { ensureResearchSession, researchPrincipalOf } from './research-session';
+import { useResearchDemo } from './research-demo-context';
 import './research-agent-panel.css';
 
 const endpoint='/api/v1/stocklana/research/agent';
@@ -101,6 +102,7 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
   const bsc=Boolean(agent.data?.owner.startsWith('eip155:56:')),asset=bsc?'USDT':'USDC';
   const [draft,setDraft]=useState<RebalanceDraft|null>(null);
   const [selectedCandidate,setSelectedCandidate]=useState<string|null>(null),[sellOutside,setSellOutside]=useState(false);
+  const demo=useResearchDemo();
   useEffect(()=>{setDraft(null);setSelectedCandidate(null);setSellOutside(false);},[run?.id,agent.data?.owner]);
   if(!run)return <div className="ra-empty"><h3>Set a target. Test the possibilities.</h3><p>Your agent designs up to three strategies and tests each one on past prices, after trading costs. The results appear here.</p></div>;
   if(!run.result)return <div className="ra-empty" aria-live="polite"><h3>{labels[run.status]??run.status}</h3>{active(run)&&<div className="ra-progress" role="progressbar" aria-label="Research in progress"><span/></div>}<p>{run.error??'Designing strategies, then testing each one on past prices after costs. This usually takes about a minute.'}</p><small>Started {new Date(run.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div>;
@@ -120,16 +122,17 @@ export function ResearchResults({agent,onActivity,budget,autoTrade=false}:{agent
       {c.reasons.length>0&&<div className="ra-reasons"><b>{c.verdict==='ELIGIBLE'?'Notes':'Why it does not fit'}</b><ul>{c.reasons.map(x=><li key={x}>{reasonLabels[x]??x}</li>)}</ul>{c.verdict!=='ELIGIBLE'&&<small>Try a lower target, a longer period or different stocks, then run research again.</small>}</div>}
       <details><summary>Method & evidence</summary><p>{r.method}</p><p>{c.windowCount} non-overlapping windows, held out from {c.holdoutStart}. The median is a past observation, not an expected return.</p><p>{r.dataset.limitations.join(' ')}</p><code>Report {r.reportHash}</code><code>Dataset {r.dataset.id}</code></details>
       {c.verdict==='ELIGIBLE'&&used&&<section className="ra-approve" aria-label="Approval">{ended
-        ?<><div><b>This approval has ended</b><p>Approvals last an hour and this run was already approved once. Run research again to approve a fresh plan.</p></div><div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy||agent.running} onClick={()=>void agent.start()}>Run research again</button></div></>
+        ?<><div><b>This approval has ended</b><p>Approvals last an hour and this run was already approved once. Run research again to approve a fresh plan.</p></div>{!demo&&<div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy||agent.running} onClick={()=>void agent.start()}>Run research again</button></div>}</>
         :<><div><b>{used.candidateId===c.id?'Approved':'Another strategy from this run is approved'}</b><p>Its trades are listed under Trades.</p></div><div className="ra-inline-actions"><button className="ra-primary" onClick={onActivity}>Go to trades</button></div></>}</section>}
-      {c.verdict==='ELIGIBLE'&&!used&&<section className="ra-approve" aria-label="Approve this strategy"><div><b>Approve {c.name}</b><p>Approving turns this strategy into a trade plan. Nothing is bought yet: {autoTrade?'your agent then places the orders within the limits you set in Binance, and you can stop it at any time.':'you then confirm each trade in your wallet, one at a time.'}</p></div>{bsc&&((()=>{const d=(c as ResearchCandidate&{design?:{filters?:{entry?:boolean}[];hold_buffer?:number|null}}).design;return Boolean(d?.filters?.some(f=>f?.entry===true)||d?.hold_buffer!=null);})()&&!Array.isArray((r as typeof r&{heldInstruments?:string[]}).heldInstruments)
+      {c.verdict==='ELIGIBLE'&&!used&&!demo&&<section className="ra-approve" aria-label="Approve this strategy"><div><b>Approve {c.name}</b><p>Approving turns this strategy into a trade plan. Nothing is bought yet: {autoTrade?'your agent then places the orders within the limits you set in Binance, and you can stop it at any time.':'you then confirm each trade in your wallet, one at a time.'}</p></div>{bsc&&((()=>{const d=(c as ResearchCandidate&{design?:{filters?:{entry?:boolean}[];hold_buffer?:number|null}}).design;return Boolean(d?.filters?.some(f=>f?.entry===true)||d?.hold_buffer!=null);})()&&!Array.isArray((r as typeof r&{heldInstruments?:string[]}).heldInstruments)
           ?<p className="ra-caption">This result did not account for your current holdings, so it cannot rebalance them. Run research again to rebalance.</p>
           :<label className="ra-check"><input type="checkbox" checked={sellOutside} onChange={e=>setSellOutside(e.target.checked)}/><span><b>Rebalance my holdings</b> Sell this strategy&apos;s other stocks I already hold first, then buy.</span></label>)}
         <div className="ra-inline-actions"><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,...(bsc&&sellOutside?{sellOutside:true}:{})});if(b)onActivity();}}>{agent.busy?'Approving…':sellOutside?'Approve rebalance':'Approve plan'}</button>{!bsc&&<><button disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'AGENT_WALLET',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Use agent holdings</button><button className="ra-text" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'REVIEW_REBALANCE',walletScope:'PERSONAL',runId:run.id,candidateId:c.id,reportHash:r.reportHash});if(b)setDraft(b.draft);}}>Personal wallet holdings</button></>}</div></section>}
       {draft?.candidateId===c.id&&<section className="ra-allocation-review" aria-label="Rebalance review"><h4>Rebalance selected stocks</h4><p>{usd(draft.heldValueAtoms)} already held · {usd(draft.portfolioValueAtoms)} total allocation</p><small>Other stocks stay untouched. Sales run first. {draft.snapshot?.owner&&draft.snapshot.owner!==wallet?'Review the full allocation, then approve your agent wallet.':'Review each transaction in your wallet.'}</small><div className="ra-trade-legs">{draft.legs.map((leg,i)=><div key={i}><span>{leg.side} {leg.instrument}</span><b>{legAmount(leg)}</b></div>)}</div><p>{usd(draft.cashAtoms)} retained as cash</p><button className="ra-primary" disabled={agent.busy} onClick={async()=>{const b=await agent.act({operation:'APPROVE',runId:run.id,candidateId:c.id,reportHash:r.reportHash,draftId:draft.id});if(b){setDraft(null);onActivity();}}}>Approve this allocation</button></section>}
     </article>)}
     {agent.error&&<p className="ra-error" role="alert">{agent.error}</p>}
-    <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.reusedFrom?'Design reused from an earlier run · 0 model tokens':`${r.model.inputTokens+r.model.outputTokens} tokens`} · Data through {r.dataset.asOf}</span></footer>
+    {/* The public demo snapshot carries no token counts; then only the data date is shown. */}
+    <footer className="ra-provenance"><span>{r.model.provider} · {r.model.model}</span><span>{r.model.reusedFrom?'Design reused from an earlier run · 0 model tokens · ':Number.isFinite(r.model.inputTokens+r.model.outputTokens)?`${r.model.inputTokens+r.model.outputTokens} tokens · `:''}Data through {r.dataset.asOf}</span></footer>
   </div>;
 }
 
@@ -142,6 +145,7 @@ function ExitWhy({reason}:{reason:ExitReason}){
 }
 export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:AgentController;wallet:string|null;strategy:ResearchStrategy;onRefresh:()=>void}){
   const [signing,setSigning]=useState(false),[error,setError]=useState<string|null>(null),[boundPlans,setBoundPlans]=useState<Record<string,boolean>>({});
+  const demo=useResearchDemo();
   const live=useRef(true),context=useRef('');context.current=`${wallet}:${strategy.id}`;
   useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
   async function buy(plan:AgentPlan,index:number){
@@ -168,10 +172,10 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
   const pending=plans.filter(p=>(p as AgentPlan&{executionMode?:string}).executionMode!=='AGENT_WALLET'&&!boundPlans[p.id]).flatMap(p=>p.steps.filter(s=>['UNKNOWN','SUBMITTED','FINALIZED'].includes(s.phase)).map(s=>({planId:p.id,index:s.index})));
   const pendingKey=pending.map(p=>`${p.planId}:${p.index}`).join(',');
   useEffect(()=>{
-    if(!pendingKey)return;
+    if(!pendingKey||demo)return;
     const timer=setInterval(()=>{if(!document.hidden&&!signing&&!agent.busy){const p=pending[0];if(p)void agent.act({operation:'CHECK',...p}).then(()=>onRefresh());}},5000);
     return()=>clearInterval(timer);
-  },[pendingKey,signing,agent.busy]);
+  },[pendingKey,signing,agent.busy,demo]);
   // Plans store the candidate id (a hash); show the strategy name the owner approved.
   const nameOf=(p:AgentPlan)=>agent.data?.runs.find(r=>r.id===p.runId)?.result?.candidates.find(c=>c.id===p.candidateId)?.name??'Approved plan';
   const progress=(p:AgentPlan)=>{const done=p.steps.filter(s=>s.phase==='RECONCILED').length;return <div className="ra-plan-progress"><span>{done} of {p.legs.length} trade{p.legs.length===1?'':'s'} done</span><div><i style={{width:`${p.legs.length?done/p.legs.length*100:0}%`}}/></div></div>;};
@@ -193,8 +197,8 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
         {p.belowMinimum?.length?<p className="ra-caption">Below the 5 USDT minimum order, kept in cash: {p.belowMinimum.join(', ')}</p>:null}
         {/* Sales from the owner's own wallet are signed step by step; the Agentic Wallet only sells what it holds. */}
         {p.wallet!=='PERSONAL'&&<AgenticPanel plan={p} wallet={wallet} onRefresh={refresh}/>}
-        {p.wallet!=='AGENTIC'&&<BscPlanExecution plan={p} agent={agent} wallet={wallet} onRefresh={refresh}/>}
-        {['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)&&<button className="ra-text" disabled={agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Revoke remaining trades</button>}</>}
+        {(p.wallet!=='AGENTIC'||demo)&&<BscPlanExecution plan={p} agent={agent} wallet={wallet} onRefresh={refresh}/>}
+        {!demo&&['APPROVED','PARTIAL','UNKNOWN'].includes(p.status)&&<button className="ra-text" disabled={agent.busy} onClick={()=>void agent.act({operation:'REVOKE',planId:p.id})}>Revoke remaining trades</button>}</>}
       </article>;}
       const assigned=boundPlans[p.id]||(p as AgentPlan&{executionMode?:string}).executionMode==='AGENT_WALLET';
       return <article key={p.id} className="ra-plan">
@@ -209,6 +213,6 @@ export function ResearchPlanExecution({agent,wallet,strategy,onRefresh}:{agent:A
       </article>;
     })}
     {(error||(agent.error&&!agent.failure?.quote))&&<p role="alert" className="ra-error">{error??agent.error}</p>}
-    <div className="ra-watch"><div><b>Keep researching</b><p>For the next 7 days, your agent re-evaluates this research as new prices arrive. Any new allocation still needs your approval.</p></div><button disabled={agent.busy} onClick={()=>void agent.act({operation:'MONITOR',strategyId:strategy.id,goal:agent.run?.goal??agent.goal,enabled:!agent.data?.monitor?.enabled})}>{agent.data?.monitor?.enabled?'Stop monitoring':'Enable monitoring'}</button></div>
+    {!demo&&<div className="ra-watch"><div><b>Keep researching</b><p>For the next 7 days, your agent re-evaluates this research as new prices arrive. Any new allocation still needs your approval.</p></div><button disabled={agent.busy} onClick={()=>void agent.act({operation:'MONITOR',strategyId:strategy.id,goal:agent.run?.goal??agent.goal,enabled:!agent.data?.monitor?.enabled})}>{agent.data?.monitor?.enabled?'Stop monitoring':'Enable monitoring'}</button></div>}
   </section>;
 }

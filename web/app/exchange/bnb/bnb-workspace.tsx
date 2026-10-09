@@ -17,6 +17,8 @@ const Chart=dynamic(()=>import('./bnb-chart'),{loading:()=> <div className="bnb-
 // STA research (custom agents, backtests, approvals) on BNB Chain: the same workspace as Solana,
 // with an EVM wallet session, the BSC Ondo/bStock universe and BNB Chain execution.
 const Research=dynamic(()=>import('../research-workspace'),{loading:()=> <div className="bnb-view-loading">Opening research…</div>});
+// Read-only recorded runs for visitors without a wallet (?view=research&demo=1).
+const ResearchDemo=dynamic(()=>import('../research-demo'),{loading:()=> <div className="bnb-view-loading">Opening the demo…</div>});
 type Provider={request:(p:{method:string;params?:unknown[]})=>Promise<unknown>;on?:(e:string,f:(...args:unknown[])=>void)=>void;removeListener?:(e:string,f:(...args:unknown[])=>void)=>void;};
 const provider=()=>(window as unknown as {ethereum?:Provider}).ethereum;
 const WATCH='xtxc.bnb.watchlist.v1';
@@ -28,6 +30,8 @@ export default function BnbWorkspace({initialLocation,initialPage,featured}:{ini
   const [focusId,setFocusId]=useState(initialLocation.instrument??featured.flatMap(p=>p.instruments).find(i=>i.ticker===(initialLocation.stock??'NVDA'))?.id??'');
   const [productId,setProductId]=useState(''),[side,setSide]=useState('Buy'),[amount,setAmount]=useState(''),[researchSeed,setResearchSeed]=useState('');
   const [needsBsc,setNeedsBsc]=useState(false);
+  const [demo,setDemo]=useState<boolean|null>(null);
+  useEffect(()=>{const read=()=>setDemo(new URLSearchParams(window.location.search).get('demo')==='1');read();window.addEventListener('popstate',read);return()=>window.removeEventListener('popstate',read);},[]);
   const [wallet,setWallet]=useState<string|null>(null),[walletNetwork,setWalletNetwork]=useState<string|null>(null),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
   const [balances,setBalances]=useState<Record<string,string>>({}),[balanceOwner,setBalanceOwner]=useState(''),[balanceBusy,setBalanceBusy]=useState(false),[balanceAt,setBalanceAt]=useState('');
   const [observations,setObservations]=useState<Record<string,GeckoMarket>>({});
@@ -55,7 +59,7 @@ export default function BnbWorkspace({initialLocation,initialPage,featured}:{ini
   const onBinancePrice=useCallback((contract:string,price:number)=>setBinancePrices(v=>v[contract]===price?v:{...v,[contract]:price}),[]);
   function navigate(view:ExchangeView,item?:BnbInstrument){
     const next:ExchangeLocation={chain:'bnb',network:'mainnet',view:view==='markets'?'stocks':view,...(item?{stock:item.ticker,instrument:item.id}:{})};
-    setLocation(next);if(item){setFocusId(item.id);setProductId('');setAmount('');}setMobileList(false);setModal(false);window.history.pushState({},'',bnbHref(next));window.scrollTo(0,0);
+    setLocation(next);setDemo(false);if(item){setFocusId(item.id);setProductId('');setAmount('');}setMobileList(false);setModal(false);window.history.pushState({},'',bnbHref(next));window.scrollTo(0,0);
   }
   function select(item:BnbInstrument){setFocusId(item.id);setProductId('');setModal(false);if(location.view!=='research')navigate('stocks',item);}
   function openSearch(){setModal(true);}
@@ -93,7 +97,8 @@ export default function BnbWorkspace({initialLocation,initialPage,featured}:{ini
       <button className="account-button" disabled={connecting} onClick={()=>void connect()}><span className={`account-dot ${wallet?'connected':''}`}/><span>{wallet?`${wallet.slice(0,5)}…${wallet.slice(-4)}`:connecting?'Connecting':'Connect wallet'}</span></button>
     </header>
     {commonNotice}
-    {location.view==='research'?<Research wallet={wallet} directory={researchDirectory} holdingsNote="BNB Chain balances are on the Portfolio page. Trades from this research appear under Trades." portfolio={null} balanceError={null} orders={[]} historyError={null} onConnect={connect} onSelect={(t:string)=>{const item=instruments.find(i=>i.ticker===t);if(item)select(item);}} onRefresh={()=>void refreshBalances()} onHistory={async()=>{}}/>
+    {location.view==='research'&&demo!==false?demo?<ResearchDemo/>:<div className="bnb-view-loading">Opening research…</div>
+    :location.view==='research'?<Research wallet={wallet} directory={researchDirectory} holdingsNote="BNB Chain balances are on the Portfolio page. Trades from this research appear under Trades." portfolio={null} balanceError={null} orders={[]} historyError={null} onConnect={connect} onSelect={(t:string)=>{const item=instruments.find(i=>i.ticker===t);if(item)select(item);}} onRefresh={()=>void refreshBalances()} onHistory={async()=>{}}/>
     :location.view==='home'?<main className="bnb-home"><div className="bnb-home-heading"><div><span className="bnb-eyebrow">YOUR MARKET</span><h1>Home</h1></div><button className="secondary" onClick={()=>research()}>New research <Icon name="plus"/></button></div>
       <div className="bnb-home-layout"><div><section className="bnb-home-feature"><div><span className="bnb-eyebrow">RESEARCH</span><h2>Start with an idea.</h2><p>Your stocks, your budget, your point of view.</p><button onClick={()=>research()}>Open workspace <Icon name="arrow"/></button></div><div className="bnb-logo-orbit" aria-hidden="true">{instruments.slice(0,5).map(item=><Logo key={item.id} ticker={item.ticker} product={tokenFor(item.id)}/>)}</div></section>
         <div className="section-heading bnb-home-section"><h2>Stocks on your radar</h2><button onClick={()=>navigate('stocks')}>Explore markets <Icon name="arrow"/></button></div>
