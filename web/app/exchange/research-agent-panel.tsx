@@ -25,7 +25,7 @@ const drop=(bps:number)=>`−${pct(Math.abs(bps))}`;
 // The loss limit holds over the whole backtest and the held-out test; show the deeper of the two.
 const worstDrop=(c:ResearchCandidate)=>Math.max(c.holdoutDrawdownBps,c.fullDrawdownBps??0);
 export const horizonText=(days:number)=>({30:'1-month',90:'3-month',180:'6-month',365:'1-year'} as Record<number,string>)[days]??`${days}-day`;
-export const planStatusText:Record<string,string>={PROPOSED:'Needs your approval',APPROVED:'Ready to trade',PARTIAL:'In progress',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
+export const planStatusText:Record<string,string>={PROPOSED:'Needs your approval',APPROVED:'Ready to trade',PARTIAL:'Partly done',COMPLETE:'Done',REVOKED:'Stopped',EXPIRED:'Expired',UNKNOWN:'Needs a check'};
 export const runActive=active;
 
 export type RefusalQuote={vendor?:string;fromAmount:string;fromSymbol?:string;toTokenAmount:string;toSymbol?:string;toDecimals?:number;priceImpactPercent?:string|number;quotedAt?:string|number};

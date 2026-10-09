@@ -192,7 +192,7 @@ const runReason:Record<string,string>={
   AGENT_SETTING_CHANGED:'Stopped: this agent no longer trades on its own. Change Trade approval in its settings and approve again.'};
 export function AgenticPanel({plan,wallet}:{plan:AgentPlan;wallet:string;onRefresh?:()=>void}){
   const agentic=useAgentic(wallet,plan.id),run=agentic.state?.run,demo=useResearchDemo();
-  if(plan.agent?.approval!=='AUTO_WITHIN_LIMITS'&&plan.wallet!=='AGENTIC')return !['APPROVED','PARTIAL','UNKNOWN'].includes(plan.status)?null:<p className="ap-note"><b>{plan.agent?`${plan.agent.name}: ${approvalText.PER_TRADE.toLowerCase()}.`:'You confirm every trade.'}</b> Confirm each trade with your wallet below.{plan.agent?' To let the agent trade on its own within Binance limits, change Trade approval in its settings.':''}</p>;
+  if(plan.agent?.approval!=='AUTO_WITHIN_LIMITS'&&plan.wallet!=='AGENTIC')return demo||!['APPROVED','PARTIAL','UNKNOWN'].includes(plan.status)?null:<p className="ap-note"><b>{plan.agent?`${plan.agent.name}: ${approvalText.PER_TRADE.toLowerCase()}.`:'You confirm every trade.'}</b> Confirm each trade with your wallet below.{plan.agent?' To let the agent trade on its own within Binance limits, change Trade approval in its settings.':''}</p>;
   return <section className="ra-autonomy" aria-label="Agentic Wallet">
     <header><div><h4>{run?runTitle[run.status]??`Agent ${run.status.toLowerCase()}`:'Let your agent trade within limits'}</h4><p>Binance Agentic Wallet · Binance enforces the limits you set in its app.</p></div></header>
     <AgenticConnect agentic={agentic}/>
