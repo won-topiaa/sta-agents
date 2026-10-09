@@ -2,7 +2,7 @@ import {requireRequesterSession,RequesterAuthError} from '@/lib/requester-auth';
 import {researchPrincipal,allowedStocksFor,isBscPrincipal} from '@/lib/research-principal';
 import {AgentStore,reject} from '@/lib/research-agent-core.mjs';
 import {ResearchStoreError} from '@/lib/research-store.mjs';
-import {agenticBinding,bindAgentic,startAgentic,stopAgentic,agenticRun,quotaLeftOf} from '@/lib/research-agentic.mjs';
+import {agenticBinding,bindAgentic,startAgentic,stopAgentic,agenticRun,quotaLeftOf,agenticWalletOf,assertAgenticIdle} from '@/lib/research-agentic.mjs';
 import {agenticOperatorGate} from '@/lib/research-agentic-operator.mjs';
 import {gateway} from '@/lib/bnb-gateway';
 import {stocklanaBody} from '@/lib/stocklana-execution';
@@ -39,12 +39,28 @@ export async function POST(request:Request){
     agenticOperatorGate(address,String(b.operation));
     const binding=agenticBinding(s);
     if(binding&&binding.owner!==s.owner(address))reject('This Agentic Wallet is connected to another account.',409);
-    if(b.operation==='SIGNIN')return Response.json({signin:await gateway('POST','/v1/agentic/signin',{})},{headers});
+    const bindSignedIn=async()=>bindAgentic(s,address,agenticWalletOf(await gateway('GET','/v1/agentic/address')));
+    if(b.operation==='SIGNIN'){
+      const signin=await gateway<{qrCodeId?:string;status?:string}>('POST','/v1/agentic/signin',{});
+      if(signin?.qrCodeId)return Response.json({signin},{headers});
+      // The CLI is still signed in, so there is no QR to scan: bind the wallet it is signed in to.
+      if(/ALREADY_CONNECTED/i.test(String(signin?.status??'')))return Response.json({binding:await bindSignedIn()},{headers});
+      reject('Binance did not start a sign-in. Try again.',502);
+    }
+    // Renews the CLI session before it lapses: sign out, then a fresh QR sign-in that VERIFY completes as usual.
+    if(b.operation==='RENEW'){
+      if(binding?.owner!==s.owner(address))reject('Connect the Agentic Wallet first.',409);
+      assertAgenticIdle(s);
+      await gateway('POST','/v1/agentic/signout',{});
+      const signin=await gateway<{qrCodeId?:string}>('POST','/v1/agentic/signin',{});
+      if(!signin?.qrCodeId)reject('Binance did not start a new sign-in. Try again.',502);
+      return Response.json({signin},{headers});
+    }
     if(b.operation==='VERIFY'){
-      await gateway('POST','/v1/agentic/verify',{qrCodeId:String(b.qrCodeId??'')},330000);
-      const a=await gateway<{address?:string;evmAddress?:string;addresses?:{address:string;binanceChainId?:string}[]}>('GET','/v1/agentic/address');
-      const wallet=a?.address??a?.evmAddress??a?.addresses?.find(x=>!x.binanceChainId||x.binanceChainId==='56')?.address;
-      return Response.json({binding:bindAgentic(s,address,wallet)},{headers});
+      const qrCodeId=String(b.qrCodeId??'');
+      if(!qrCodeId)reject('Start the sign-in again to get a new QR code.',409);
+      await gateway('POST','/v1/agentic/verify',{qrCodeId},330000);
+      return Response.json({binding:await bindSignedIn()},{headers});
     }
     if(b.operation==='START'){
       const quota=await gateway<Quota>('GET','/v1/agentic/quota');

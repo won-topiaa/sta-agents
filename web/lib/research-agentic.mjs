@@ -19,6 +19,14 @@ export function bindAgentic(store,address,wallet){
   store.db.prepare("INSERT INTO agent_agentic_binding VALUES('default',?,?,?) ON CONFLICT(slot) DO UPDATE SET address=excluded.address").run(owner,wallet,Date.now());
   return agenticBinding(store);
 }
+// The BNB Chain address in the Agentic Wallet's `wallet address` reply (its shape differs between CLI versions).
+export const agenticWalletOf=a=>a?.address??a?.evmAddress??a?.addresses?.find(x=>!x.binanceChainId||String(x.binanceChainId)==='56')?.address;
+// Signing in again ends the shared session for a moment; never while a run trades or an order still has to settle.
+export function assertAgenticIdle(store){
+  if(store.db.prepare("SELECT 1 FROM agent_agentic_runs WHERE status IN ('RUNNING','PAUSED')").get()
+    ||store.db.prepare("SELECT 1 FROM agent_steps WHERE phase IN ('AGENTIC_SUBMITTING','AGENTIC_SUBMITTED')").get())
+    reject('An Agentic Wallet trade is in progress. Sign in again after it finishes, or stop it first.',409);
+}
 export function agenticRun(store,planId){return store.db.prepare('SELECT * FROM agent_agentic_runs WHERE plan_id=?').get(planId)??null;}
 // A single purchase leg above this is refused by the gateway (its buy cap); refuse the plan up front instead.
 export const AGENTIC_MAX_BUY_ATOMS=200n*10n**18n;

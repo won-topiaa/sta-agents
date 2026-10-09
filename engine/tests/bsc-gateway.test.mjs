@@ -143,6 +143,8 @@ test('gateway: Agentic Wallet runs fixed commands with --json and validated argu
   assert.equal(r.body.error.code,'INPUT');
   r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/verify',{qrCodeId:'--help'});
   assert.equal(r.body.error.code,'INPUT');   // an id can never look like a flag
+  r=await call(createGateway({client:f.client,rpc:f.rpc,baw,token:'t0k'}),'POST','/v1/agentic/signout',{qrCodeId:'--all'});
+  assert.equal(r.status,200);assert.deepEqual(calls.at(-1),['auth','signout']);   // a fixed command; the body is ignored
   assert.equal(swaps().length,1);
   const closed=fakeClient({status:'MARKET_CLOSED'});
   r=await call(createGateway({client:closed.client,rpc:closed.rpc,baw,token:'t0k'}),'POST','/v1/agentic/swap',{fromToken:BSC_USDT,toToken:stock,fromTokenQty:'25'});

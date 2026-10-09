@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AgentStore,sellLegs} from '../lib/research-agent-core.mjs';
 import {presetBody} from '../lib/research-agent-profile.mjs';
-import {bindAgentic,startAgentic,stopAgentic,agenticTick as tickOnce,agenticRun,PAUSE_RETRY_MS} from '../lib/research-agentic.mjs';
+import {bindAgentic,startAgentic,stopAgentic,agenticTick as tickOnce,agenticRun,PAUSE_RETRY_MS,assertAgenticIdle,agenticWalletOf} from '../lib/research-agentic.mjs';
 
 // The gateway's Agentic session must be signed in to the bound wallet; these fakes answer as the bound one.
 const boundAddress=s=>s.db.prepare('SELECT address FROM agent_agentic_binding LIMIT 1').get()?.address;
@@ -171,6 +171,23 @@ test('exit watch: a stock without verified history does not block the others',as
 
 // ---- Review fixes: plan state guards, Agentic runs, exit watch isolation.
 const tx0={from:'0x1',to:'0xrouter',data:'0xad43f73d',value:'0'};
+test('signing the Agentic Wallet in again waits while a run trades or an order is unsettled; the address reply is read in each CLI shape',t=>{
+  const s=setup(t),{run}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS'});
+  assert.doesNotThrow(()=>assertAgenticIdle(s));
+  bindAgentic(s,owner,agenticWallet);
+  const plan=s.approve(owner,run.id,'c1',run.result.reportHash);startAgentic(s,owner,plan.id,1000);
+  assert.throws(()=>assertAgenticIdle(s),/in progress/);                       // a running run
+  s.db.prepare("UPDATE agent_agentic_runs SET status='PAUSED'").run();
+  assert.throws(()=>assertAgenticIdle(s),/in progress/);                       // paused runs resume on their own
+  s.db.prepare("UPDATE agent_agentic_runs SET status='COMPLETE'").run();
+  assert.doesNotThrow(()=>assertAgenticIdle(s));
+  s.db.prepare("INSERT INTO agent_steps VALUES(?,0,'AGENTIC_SUBMITTED','{}')").run(plan.id);
+  assert.throws(()=>assertAgenticIdle(s),/in progress/);                       // an order still to settle
+  assert.equal(agenticWalletOf({addresses:[{binanceChainId:'1',address:'0xa'},{binanceChainId:56,address:agenticWallet}]}),agenticWallet);
+  assert.equal(agenticWalletOf({address:agenticWallet}),agenticWallet);
+  assert.equal(agenticWalletOf(null),undefined);
+});
+
 test('revoking or stopping an Agentic plan ends its remaining trades; the worker never revives it',async t=>{
   const s=setup(t);bindAgentic(s,owner,agenticWallet);
   const orders=[];const gw=async(m,path,body)=>{if(m==='POST'){orders.push(body);return {orderId:`o-${orders.length}`};}if(path.startsWith('/v1/agentic/order'))return {orderId:new URL('http://g'+path).searchParams.get('orderId'),status:'FINISHED'};return {quotaLeft:1000};};

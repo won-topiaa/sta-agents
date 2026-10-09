@@ -167,7 +167,8 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
   const submitted=new Map();   // order id a swap returned -> its tokens (see order below)
   const agentic={
     status:()=>baw(['wallet','status']),address:()=>baw(['wallet','address']),settings:()=>baw(['wallet','settings']),quota:()=>baw(['wallet','left-quota']),
-    signin:()=>baw(['auth','signin']),verify:qrCodeId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{3,79}$/.test(qrCodeId))throw new ExecutionCheckError('INPUT','Invalid QR id.');return baw(['auth','verify','--qrCodeId',qrCodeId],330000);},
+    // Signing out ends the CLI session, so a new QR sign-in can renew it (signin answers ALREADY_CONNECTED otherwise).
+    signin:()=>baw(['auth','signin']),signout:()=>baw(['auth','signout']),verify:qrCodeId=>{if(!/^[A-Za-z0-9][A-Za-z0-9-]{3,79}$/.test(qrCodeId))throw new ExecutionCheckError('INPUT','Invalid QR id.');return baw(['auth','verify','--qrCodeId',qrCodeId],330000);},
     // The same limits as a hand-signed leg: listed pair, purchase cap, trading status, bounded slippage.
     async swap({fromToken,toToken,fromTokenQty,slippagePercent='1'}){
       if(!/^\d{1,12}(\.\d{1,18})?$/.test(String(fromTokenQty))||Number(fromTokenQty)<=0)throw new ExecutionCheckError('INPUT','Check the amount.');
@@ -211,7 +212,7 @@ export function createGateway({client,rpc=rpcCall,baw=bawRun,token,now=Date.now,
     'GET /v1/balances':async(_,q)=>{const a=q.get('address')??'';if(!isAddress(a))throw new ExecutionCheckError('INPUT','Check the address.');return wallet.balances(client,a);},
     'GET /v1/agentic/status':()=>agentic.status(),'GET /v1/agentic/address':()=>agentic.address(),
     'GET /v1/agentic/settings':()=>agentic.settings(),'GET /v1/agentic/quota':()=>agentic.quota(),
-    'POST /v1/agentic/signin':()=>agentic.signin(),'POST /v1/agentic/verify':body=>agentic.verify(String(body?.qrCodeId??'')),
+    'POST /v1/agentic/signin':()=>agentic.signin(),'POST /v1/agentic/signout':()=>agentic.signout(),'POST /v1/agentic/verify':body=>agentic.verify(String(body?.qrCodeId??'')),
     'POST /v1/agentic/swap':body=>agentic.swap(body??{}),'GET /v1/agentic/order':(_,q)=>agentic.order(q.get('orderId')??''),
   };
   return http.createServer(async(req,res)=>{

@@ -24,7 +24,11 @@
 .ap-hint{display:block;color:#8c8c8c;font-size:10.5px;line-height:1.55;margin:7px 0 0}
 .ap-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .ap-card{display:grid;grid-template-columns:auto 1fr;column-gap:9px;row-gap:4px;border:1px solid #383838;border-radius:8px;padding:12px;background:#141414;cursor:pointer;align-items:start}
-.ap-card input{margin:2px 0 0;accent-color:#e9e9e9}
+.ap-card input{appearance:none;-webkit-appearance:none;width:13px;height:13px;border:1px solid #5a5a5a;border-radius:3px;background:#101010;margin:2px 0 0;cursor:pointer;display:grid;place-content:center;transition:border-color .15s,background .15s;flex-shrink:0}
+.ap-card input:checked{background:#e9e9e9;border-color:#e9e9e9}
+.ap-card input:checked::after{content:"";width:3.5px;height:7px;border:solid #121212;border-width:0 1.8px 1.8px 0;transform:rotate(45deg);margin-bottom:1.5px}
+.ap-card input:focus-visible{outline:2px solid #888;outline-offset:1px}
+.ap-card input:disabled{cursor:not-allowed;opacity:.5}
 .ap-card b{font-weight:550;font-size:12px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .ap-card small{grid-column:2;color:#949494;font-size:10.5px;line-height:1.55}
 .ap-card:has(input:checked){border-color:#bdbdbd;background:#1b1b1b}

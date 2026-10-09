@@ -145,17 +145,22 @@ export function useAgentic(wallet:string,planId?:string){
     try{await ensureResearchSession(wallet);const r=await fetch(api,{method:'POST',headers:headers(),body:JSON.stringify(body),signal:AbortSignal.timeout(timeout)}),b=await r.json();if(!r.ok)throw new Error(b.error?.message??'Request failed.');const s=await load();if(live.current&&s)setState(s);return b;}
     catch(e){if(live.current)setError(e instanceof Error?e.message:'Request failed.');return null;}finally{if(live.current)setBusy(false);}
   }
-  async function connect(){const b=await post({operation:'SIGNIN'});if(!b?.signin)return;setSignin(b.signin);const v=await post({operation:'VERIFY',qrCodeId:b.signin.qrCodeId},340000);if(live.current)setSignin(null);return v;}
+  // SIGNIN answers with a binding instead of a QR when the wallet is still signed in; RENEW starts a fresh QR sign-in.
+  async function signIn(operation:'SIGNIN'|'RENEW'){const b=await post({operation});if(!b?.signin)return b;setSignin(b.signin);const v=await post({operation:'VERIFY',qrCodeId:b.signin.qrCodeId},340000);if(live.current)setSignin(null);return v;}
+  const connect=()=>signIn('SIGNIN'),renew=()=>signIn('RENEW');
   const shown=demo?(demo.agentic[planId??'']??demo.agentic['']??null) as AgenticState|null:state;
   const connected=Boolean(shown&&shown.status!=='UNCONNECTED'&&shown.bound?.mine);
-  return{state:shown,signin,busy,error,connected,connect,post};
+  return{state:shown,signin,busy,error,connected,connect,renew,post};
 }
 export function AgenticConnect({agentic}:{agentic:ReturnType<typeof useAgentic>}){
   const {state,signin,busy,error,connected}=agentic,demo=useResearchDemo();
-  if(connected){
+  if(connected&&!signin){
     const left=pick(state?.quota,['quotaLeft','leftQuota','left','remaining']),limit=pick(state?.quota,['dailyLimit','limit','quota'])??pick(state?.settings,['dailyLimit','dailyQuota']);
     // The demo has no live quota (settings and quota are null there), so that part is left out rather than shown as —.
-    return <p className="ap-bar-limits">Binance Agentic Wallet <a href={`https://bscscan.com/address/${state?.bound?.address}`} target="_blank" rel="noreferrer">{state?.bound?.address?.slice(0,6)}…{state?.bound?.address?.slice(-4)}</a>{(left!=null||!demo)&&<> · daily limit left <b>{left??'—'}</b>{limit&&<> of {limit}</>} USD</>} · limits are set in your Binance app</p>;
+    return <><p className="ap-bar-limits">Binance Agentic Wallet <a href={`https://bscscan.com/address/${state?.bound?.address}`} target="_blank" rel="noreferrer">{state?.bound?.address?.slice(0,6)}…{state?.bound?.address?.slice(-4)}</a>{(left!=null||!demo)&&<> · daily limit left <b>{left??'—'}</b>{limit&&<> of {limit}</>} USD</>} · limits are set in your Binance app
+      {/* A Binance sign-in lasts about two days; signing in again renews it with a new QR scan. */}
+      {!demo&&<> · <button type="button" className="rw-link" disabled={busy} onClick={()=>void agentic.renew()}>{busy?'Opening…':'Sign in again'}</button></>}</p>
+      {error&&<p className="ra-error" role="alert">{error}</p>}</>;
   }
   return <div className="ap-agentic">
     {signin?.urlForWeb?<p>Open <a href={signin.urlForWeb} target="_blank" rel="noreferrer">Binance sign-in</a> and scan it with the Binance app{signin.pairingCode&&<>, then confirm code <b>{signin.pairingCode}</b></>}. Waiting…</p>

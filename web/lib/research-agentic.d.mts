@@ -3,6 +3,8 @@ export type AgenticRun={plan_id:string;owner:string;address:string;status:string
 export function decimal18(atoms:string):string;
 export function agenticBinding(store:AgentStore):{owner:string;address:string;bound_at:number}|null;
 export function bindAgentic(store:AgentStore,address:string,wallet:unknown):{owner:string;address:string;bound_at:number}|null;
+export function agenticWalletOf(reply:unknown):string|undefined;
+export function assertAgenticIdle(store:AgentStore):void;
 export function agenticRun(store:AgentStore,planId:string):AgenticRun|null;
 export function startAgentic(store:AgentStore,address:string,planId:string,quotaLeftUsd:number):AgenticRun|null;
 export function stopAgentic(store:AgentStore,address:string,planId:string):AgenticRun|null;

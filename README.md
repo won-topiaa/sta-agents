@@ -1,6 +1,6 @@
 # STA Agents — your own investing agent for tokenized stocks on BNB Chain
 
-**Give an AI agent your investing style. Code holds it to that style, backtests every idea, and trades only what you approve — or what Binance's limits allow.**
+**Give an AI agent your investing style. Code holds it to that style and backtests every idea; once you approve a tested plan, the agent trades it on its own, only within the limits you set in Binance.**
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
@@ -19,7 +19,7 @@ STA Agents makes the style a saved, versioned setting that the system enforces:
 | Investing style | Re-stated in each prompt | Saved profile: **technical** (trend, dip, breakout, sector rotation, chart patterns) or **value** (deep value, quality, growth at a reasonable price), with rules and risk limits |
 | Who enforces the rules | The model, hopefully | **Code** merges the agent's rules into every strategy before testing and checks them on the tested strategy |
 | Evidence before money | The model's reasoning | Deterministic backtests: training/held-out split, doubled costs, future-data perturbation, parameter stability |
-| Autonomy | On/off | Per agent: **approve every trade** (default) or **trade on its own within limits** in a Binance Agentic Wallet, where Binance enforces the daily limit |
+| Autonomy | On/off | Per agent: **research only**, or **trade on its own within limits** in a Binance Agentic Wallet, where Binance enforces the daily limit. You approve each tested plan once, and **Stop trading** ends every remaining order |
 
 ## How it works
 
@@ -37,14 +37,14 @@ Isolated backtests ─ BSC-tradable universe · point-in-time prices and company
       ▼
 Report ─ "3 of 3 agent rules kept" per strategy · eligible or declined, with reasons
       │
-Owner approves an exact plan (legs in USDT; legs under the 5 USDT minimum stay in cash)
+Owner approves an exact plan once (legs in USDT; legs under the 5 USDT minimum stay in cash)
       │
-      ├─ Approve every trade ─ Binance Trading API quote → exact-amount USDT approval → swap
-      │                        → transaction checks → Transaction API dry run → wallet signs → receipt
+Binance Agentic Wallet ─ market orders, one leg at a time, within the daily limit and token scope set in the Binance app
       │
-      └─ Trade within limits ─ Binance Agentic Wallet market orders, one leg at a time,
-                               within the daily limit and token scope set in the Binance app
+Stop trading ─ ends the account's open plans and sets its agents back to research only · Sell positions ─ exits through the same wallet
 ```
+
+The hosted app is AI-only (since 2026-10-09): an agent either researches only or trades within its Agentic Wallet limits, and your own wallet is used to sign in. The code also has a per-trade mode, in which your own wallet signs every leg after the checks under *Safety boundaries*. It ran on mainnet on 2026-10-08 (below) and is turned off in the hosted app.
 
 ## Binance Web3 API and Agentic Wallet usage
 
@@ -62,7 +62,9 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 
 One research request, run by two agents with the same rules: *"25 USDT in NVDA, AVGO, MSFT, GOOGL, META, AMZN, AAPL, TSM for one year, targeting 3% a year, max loss 25%"*. Both designs passed (typical year +25.8% and +21.6%, worst drop −21.5% and −21.3% over the whole five-year test), were approved, bought, and then sold back to USDT.
 
-**You approve every trade**: Phantom wallet `0xf418755edf574Cf8Dc7af11493cE1c9d5c288721`, each leg signed by the owner.
+That day both approval modes ran; the hosted app has since kept only the Agentic Wallet one.
+
+**You approve every trade** (per-trade mode, now off in the hosted app): Phantom wallet `0xf418755edf574Cf8Dc7af11493cE1c9d5c288721`, each leg signed by the owner.
 
 | Side | Stock | Transaction |
 |---|---|---|
@@ -99,7 +101,7 @@ Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ
 - Compliance is checked on the exact design that was backtested, and approval requires every rule to show as kept.
 - Editing the agent invalidates earlier results.
 
-**Per-trade execution**, checked before the wallet is asked to sign:
+**Per-trade execution** (the hand-signed mode in the code; off in the hosted app), checked before the wallet is asked to sign:
 - The approval is for the exact amount only, never unlimited.
 - The swap's target is the documented router, `from` is the owner, `value` is 0, and the selector is known.
 - Calldata contains the approved tokens and exact amount, and the minimum received is within slippage.
@@ -114,6 +116,7 @@ Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ
 - Only plans of agents set to "trade on its own within limits" can start; the server checks the agent's *current* setting.
 - Binance enforces the daily USD limit and token scope.
 - Each leg is marked durably before its order is placed, and is never resubmitted after an interruption: it becomes "needs a check" instead.
+- **Stop trading** revokes the account's open plans, stops its Agentic runs and monitors, and sets its agents back to research only. An order already sent is not cancelled and is still reconciled.
 
 ## Company fundamentals for value agents
 
@@ -204,7 +207,7 @@ The live app is the hosted way to try it; the `web/` folder is an excerpt and do
 
 - **Coverage of value signals**: none for funds and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
-- **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`); other accounts sign each trade themselves. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
+- **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`). Because the hosted app is AI-only, other accounts can sign in, research and open the read-only demo, but not trade. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
 - **Not audited.** Small amounts only.
 
 ## Built on
