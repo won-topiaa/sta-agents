@@ -3,7 +3,8 @@ import {bscProduct} from './bsc-research-universe.mjs';
 
 // Agentic Wallet execution for agents set to "trade on its own within limits".
 // The Binance Agentic Wallet (MPC, Binance app) enforces the owner's daily USD limit and token scope;
-// this module adds STA's own rules: only an approved BSC plan of an AUTO agent, legs in order,
+// this module adds STA's own rules: only an approved BSC plan of an AUTO agent, legs in order (a leg whose token is
+// closed waits while the later ones trade),
 // and a durable "submitting" mark before every order so a restart never sends a leg twice.
 const USDT='0x55d398326f99059fF775485246999027B3197955';
 export const decimal18=atoms=>{const a=BigInt(atoms),w=a/10n**18n,f=(a%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');return f?`${w}.${f}`:`${w}`;};
@@ -103,7 +104,7 @@ export async function agenticTick(store,gw,now=Date.now()){
   const runs=store.db.prepare(`SELECT r.*,p.document,p.strategy FROM agent_agentic_runs r JOIN agent_plans p ON p.id=r.plan_id
     WHERE r.status='RUNNING' OR EXISTS (SELECT 1 FROM agent_steps s WHERE s.plan_id=r.plan_id AND s.phase IN ('AGENTIC_SUBMITTING','AGENTIC_SUBMITTED'))
     ORDER BY r.updated_at LIMIT 50`).all();
-  for(const run of runs){
+  runs: for(const run of runs){
     const plan=JSON.parse(run.document),steps=store.db.prepare('SELECT step,phase,document FROM agent_steps WHERE plan_id=? ORDER BY step').all(run.plan_id);
     const open=steps.find(s=>['AGENTIC_SUBMITTING','AGENTIC_SUBMITTED'].includes(s.phase));
     if(open){   // settle the order in flight first; never submit the next leg before it
@@ -121,45 +122,72 @@ export async function agenticTick(store,gw,now=Date.now()){
     if(run.status!=='RUNNING')continue;
     const done=planStatus(store,run.plan_id,plan.legs.length);
     if(done===plan.legs.length){finishRun(store,run.plan_id,'COMPLETE');store.event(run.owner,run.strategy,'AGENTIC_COMPLETE',{planId:run.plan_id});continue;}
-    // A sale names the exact token held (Ondo or bStock); a purchase buys the listed product.
-    const index=done,leg=plan.legs[index],sell=leg.side==='SELL',product=sell?{contract:leg.productContract,symbol:leg.productSymbol,platform:leg.platform}:bscProduct(leg.instrument);
-    if(!product?.contract){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue;}
-    // Quantities go to the wallet as 18-decimal amounts (USDT and every listed stock token today); anything else stops.
-    if(sell&&(leg.inputDecimals??18)!==18){finishRun(store,run.plan_id,'ATTENTION','UNSUPPORTED_DECIMALS');continue;}
-    let quota;try{quota=await gw('GET','/v1/agentic/quota');}catch{continue;}
-    // A purchase leg's USD value is known; a sale's is not until it fills, so Binance's own limit check covers it.
-    const left=quotaLeftOf(quota);
-    if(!sell&&Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue;}
-    // The gateway's Agentic Wallet session is shared: trade only while it is still signed in to this run's wallet.
-    let self;try{self=await gw('GET','/v1/agentic/address');}catch{continue;}
-    const signedIn=(Array.isArray(self?.addresses)?self.addresses:[]).find(x=>String(x?.binanceChainId)==='56')?.address;
-    if(!signedIn||String(signedIn).toLowerCase()!==String(run.address).toLowerCase()){finishRun(store,run.plan_id,'ATTENTION','WALLET_CHANGED');continue;}
-    const doc={leg,product,mode:'AGENTIC',wallet:run.address,at:Date.now()};
-    const refused=claimLeg(store,run,index,doc);
-    if(refused){if(refused!=='RUN_ENDED')finishRun(store,run.plan_id,refused==='STEP_EXISTS'?'ATTENTION':'STOPPED',refused);continue;}
-    try{
-      const r=await gw('POST','/v1/agentic/swap',sell?{fromToken:product.contract,toToken:USDT,fromTokenQty:decimal18(leg.inputAtoms)}:{fromToken:USDT,toToken:product.contract,fromTokenQty:decimal18(leg.inputAtoms)});
-      const orderId=r?.orderId??r?.id??r?.order?.orderId;
-      if(!orderId){setStep(store,run.plan_id,index,'UNKNOWN',{...doc,reason:'NO_ORDER_ID',reply:r});finishRun(store,run.plan_id,'ATTENTION','NO_ORDER_ID');continue;}
-      setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(orderId)});
-      store.event(run.owner,run.strategy,'TRADE_STATUS',{planId:run.plan_id,index,phase:'AGENTIC_SUBMITTED'});
-    }catch(e){
-      const code=String(e?.code??''),message=String(e?.message??'').slice(0,200);
-      // The wallet named an order: it exists, so settle it like any other.
-      if(e?.orderId){setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(e.orderId),error:message});continue;}
-      // Refused before any order: the gateway's own checks, or the wallet's explicit refusals. Nothing was sent.
-      const gatewayRefusal=['MARKET','PRICE','LIMIT','INPUT','TOKEN','NO_ROUTE','MODE'].includes(code);
-      const walletRefusal=code==='AGENTIC'&&/limit|quota|closed|paused|minimum|invalid|not allowed|insufficient|no route/i.test(message);
-      if(gatewayRefusal||walletRefusal){
-        setStep(store,run.plan_id,index,'READY',{...doc,error:message});
-        // A closed market, a bad price or the daily limit pass: try again in five minutes (the plan deadline still applies).
-        const reason=code==='MARKET'||/closed|paused/i.test(message)?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':null;
-        finishRun(store,run.plan_id,reason?'PAUSED':'ATTENTION',reason??`REFUSED_${code||'WALLET'}`);
-        continue;
+    // Legs whose token was refused in this tick (closed market, route price); the next leg is tried straight away.
+    let quota,self;const waited=new Set();
+    for(;;){
+      const next=nextLeg(store,run.plan_id,plan.legs,now,waited);
+      // Every leg left waits on its token: pause, and try them all again after five minutes (the plan deadline still applies).
+      if(next.index==null){finishRun(store,run.plan_id,'PAUSED',next.reason);continue runs;}
+      // A sale names the exact token held (Ondo or bStock); a purchase buys the listed product.
+      const index=next.index,leg=plan.legs[index],sell=leg.side==='SELL',product=sell?{contract:leg.productContract,symbol:leg.productSymbol,platform:leg.platform}:bscProduct(leg.instrument);
+      if(!product?.contract){finishRun(store,run.plan_id,'ATTENTION','NOT_TRADABLE');continue runs;}
+      // Quantities go to the wallet as 18-decimal amounts (USDT and every listed stock token today); anything else stops.
+      if(sell&&(leg.inputDecimals??18)!==18){finishRun(store,run.plan_id,'ATTENTION','UNSUPPORTED_DECIMALS');continue runs;}
+      if(quota===undefined)try{quota=await gw('GET','/v1/agentic/quota');}catch{continue runs;}
+      // A purchase leg's USD value is known; a sale's is not until it fills, so Binance's own limit check covers it.
+      const left=quotaLeftOf(quota);
+      if(!sell&&Number.isFinite(left)&&left<usd18(leg.inputAtoms)){finishRun(store,run.plan_id,'PAUSED','DAILY_LIMIT');continue runs;}
+      // The gateway's Agentic Wallet session is shared: trade only while it is still signed in to this run's wallet.
+      if(self===undefined){
+        try{self=await gw('GET','/v1/agentic/address');}catch{continue runs;}
+        const signedIn=(Array.isArray(self?.addresses)?self.addresses:[]).find(x=>String(x?.binanceChainId)==='56')?.address;
+        if(!signedIn||String(signedIn).toLowerCase()!==String(run.address).toLowerCase()){finishRun(store,run.plan_id,'ATTENTION','WALLET_CHANGED');continue runs;}
       }
-      // Timed out, unreadable or unreachable (AGENTIC_UNKNOWN, network): an order may exist.
-      setStep(store,run.plan_id,index,'UNKNOWN',{...doc,error:message,code});
-      finishRun(store,run.plan_id,'ATTENTION','GATEWAY_UNCERTAIN');
+      const doc={leg,product,mode:'AGENTIC',wallet:run.address,at:Date.now()};
+      const refused=claimLeg(store,run,index,doc);
+      if(refused){if(refused!=='RUN_ENDED')finishRun(store,run.plan_id,refused==='STEP_EXISTS'?'ATTENTION':'STOPPED',refused);continue runs;}
+      try{
+        const r=await gw('POST','/v1/agentic/swap',sell?{fromToken:product.contract,toToken:USDT,fromTokenQty:decimal18(leg.inputAtoms)}:{fromToken:USDT,toToken:product.contract,fromTokenQty:decimal18(leg.inputAtoms)});
+        const orderId=r?.orderId??r?.id??r?.order?.orderId;
+        if(!orderId){setStep(store,run.plan_id,index,'UNKNOWN',{...doc,reason:'NO_ORDER_ID',reply:r});finishRun(store,run.plan_id,'ATTENTION','NO_ORDER_ID');continue runs;}
+        setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(orderId)});
+        store.event(run.owner,run.strategy,'TRADE_STATUS',{planId:run.plan_id,index,phase:'AGENTIC_SUBMITTED'});
+        continue runs;   // one order at a time: the next leg waits until this one settles
+      }catch(e){
+        const code=String(e?.code??''),message=String(e?.message??'').slice(0,200);
+        // The wallet named an order: it exists, so settle it like any other.
+        if(e?.orderId){setStep(store,run.plan_id,index,'AGENTIC_SUBMITTED',{...doc,orderId:String(e.orderId),error:message});continue runs;}
+        // Refused before any order: the gateway's own checks, or the wallet's explicit refusals. Nothing was sent.
+        const gatewayRefusal=['MARKET','PRICE','LIMIT','INPUT','TOKEN','NO_ROUTE','MODE'].includes(code);
+        const walletRefusal=code==='AGENTIC'&&/limit|quota|closed|paused|minimum|invalid|not allowed|insufficient|no route/i.test(message);
+        if(gatewayRefusal||walletRefusal){
+          const reason=code==='MARKET'||/closed|paused/i.test(message)?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':null;
+          // Only this token can't trade right now (closed market, route price): it waits and the later legs go first.
+          if(reason==='MARKET_CLOSED'||reason==='PRICE_CHECK'){setStep(store,run.plan_id,index,'READY',{...doc,error:message,waitReason:reason,waitSince:Date.now()});waited.add(index);continue;}
+          setStep(store,run.plan_id,index,'READY',{...doc,error:message});
+          // The daily limit passes: try again in five minutes (the plan deadline still applies).
+          finishRun(store,run.plan_id,reason?'PAUSED':'ATTENTION',reason??`REFUSED_${code||'WALLET'}`);
+          continue runs;
+        }
+        // Timed out, unreadable or unreachable (AGENTIC_UNKNOWN, network): an order may exist.
+        setStep(store,run.plan_id,index,'UNKNOWN',{...doc,error:message,code});
+        finishRun(store,run.plan_id,'ATTENTION','GATEWAY_UNCERTAIN');
+        continue runs;
+      }
     }
   }
+}
+// The leg to send next: the first one not done whose token was not refused in the last five minutes (closed market,
+// route price). A purchase never goes ahead of a sale that waits, since it may need that sale's USDT.
+function nextLeg(store,planId,legs,now,waited){
+  const steps=new Map(store.db.prepare('SELECT step,phase,document FROM agent_steps WHERE plan_id=?').all(planId).map(s=>[s.step,s]));
+  let saleWaits=false,reason=null;
+  for(const [i,leg] of legs.entries()){
+    const s=steps.get(i);
+    if(s?.phase==='RECONCILED')continue;
+    const d=s?.phase==='READY'?JSON.parse(s.document):null;
+    if(!waited.has(i)&&!(d?.waitSince&&now-d.waitSince<PAUSE_RETRY_MS)){if(!saleWaits||leg.side==='SELL')return {index:i};continue;}
+    reason??=d?.waitReason??'MARKET_CLOSED';saleWaits||=leg.side==='SELL';
+  }
+  return {index:null,reason};
 }

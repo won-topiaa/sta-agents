@@ -247,6 +247,36 @@ test('a paused Agentic run tries again after five minutes; a cancelled order fai
   assert.equal(s.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=0').get(plan.id).phase,'FAILED');   // o-9 matched by id
   assert.equal(agenticRun(s,plan.id).status,'ATTENTION');
 });
+test('an Agentic leg whose market is closed waits while the later legs trade, and is tried again after the pause; a purchase never goes ahead of a waiting sale',async t=>{
+  const s=setup(t),{run}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS'});bindAgentic(s,owner,agenticWallet);
+  const plan=s.approve(owner,run.id,'c1',run.result.reportHash);startAgentic(s,owner,plan.id,1000);
+  let open=false;const swaps=[];
+  const token=b=>String(b.fromToken).toLowerCase()===BSC_USDT.toLowerCase()?String(b.toToken).toLowerCase():String(b.fromToken).toLowerCase();
+  const gw=async(m,path,b)=>{
+    if(path==='/v1/agentic/quota')return {quotaLeft:'1000'};
+    if(path.startsWith('/v1/agentic/order'))return {list:[{orderId:new URL(path,'http://x').searchParams.get('orderId'),status:'FINISHED'}]};
+    if(path==='/v1/agentic/swap'){swaps.push(token(b));if(token(b)===nvda&&!open)throw Object.assign(new Error('NVDAB is not trading now.'),{code:'MARKET'});return {orderId:`o-${swaps.length}`};}
+    throw new Error('unexpected '+path);};
+  const phase=i=>s.db.prepare('SELECT phase FROM agent_steps WHERE plan_id=? AND step=?').get(plan.id,i)?.phase;
+  await agenticTick(s,gw);                                            // NVDA (leg 0) is closed: AMD (leg 1) goes in the same pass
+  assert.deepEqual(swaps,[nvda,amd]);assert.equal(phase(0),'READY');assert.equal(phase(1),'AGENTIC_SUBMITTED');
+  assert.equal(agenticRun(s,plan.id).status,'RUNNING');
+  await agenticTick(s,gw);                                            // AMD settles; only the closed leg is left: pause
+  assert.equal(phase(1),'RECONCILED');assert.equal(swaps.length,2);
+  assert.equal(agenticRun(s,plan.id).status,'PAUSED');assert.equal(agenticRun(s,plan.id).reason,'MARKET_CLOSED');
+  open=true;await agenticTick(s,gw);assert.equal(swaps.length,2);   // not straight away
+  await agenticTick(s,gw,Date.now()+PAUSE_RETRY_MS+60000);            // five minutes later NVDA trades again
+  assert.deepEqual(swaps,[nvda,amd,nvda]);assert.equal(phase(0),'AGENTIC_SUBMITTED');
+  await agenticTick(s,gw);await agenticTick(s,gw);
+  assert.equal(agenticRun(s,plan.id).status,'COMPLETE');assert.equal(s.plan(owner,plan.id).status,'COMPLETE');
+  // A sale that waits holds back a later purchase (it may need the sale's USDT).
+  const sale=createSellPlan(s,owner,strategyWith(s).strategy.id,{kind:'CLOSE',wallet:'AGENTIC',holdings:[{instrument:'NVDA',contract:nvda,raw:tokens(1)}]});
+  const row=JSON.parse(s.db.prepare('SELECT document FROM agent_plans WHERE id=?').get(sale.id).document);
+  s.db.prepare('UPDATE agent_plans SET document=? WHERE id=?').run(JSON.stringify({...row,legs:[...row.legs,{instrument:'AMD',inputAtoms:tokens(5)}]}),sale.id);
+  startAgentic(s,owner,sale.id,1000);open=false;swaps.length=0;
+  await agenticTick(s,gw);
+  assert.deepEqual(swaps,[nvda]);assert.equal(agenticRun(s,sale.id).status,'PAUSED');assert.equal(agenticRun(s,sale.id).reason,'MARKET_CLOSED');
+});
 test('exit watch: sells only what this strategy bought, keeps going past one unreadable wallet, and never marks an unchecked release done',async t=>{
   const s=setup(t),other='eip155:56:0x2222222222222222222222222222222222222222';
   const a=strategyWith(s,{exit:{stop_loss:0.1,trailing_stop:null}}),pa=s.approve(owner,a.run.id,'c1',a.run.result.reportHash);
