@@ -161,7 +161,10 @@ export async function agenticTick(store,gw,now=Date.now()){
         const gatewayRefusal=['MARKET','PRICE','LIMIT','INPUT','TOKEN','NO_ROUTE','MODE'].includes(code);
         const walletRefusal=code==='AGENTIC'&&/limit|quota|closed|paused|minimum|invalid|not allowed|insufficient|no route/i.test(message);
         if(gatewayRefusal||walletRefusal){
-          const reason=code==='MARKET'||/closed|paused/i.test(message)?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':null;
+          // A closed market is about this token; "paused" (or a closed account or wallet) is the whole wallet, so it
+          // pauses the run instead of moving on to the next leg.
+          const marketClosed=code==='MARKET'||(/closed/i.test(message)&&!/account|wallet/i.test(message));
+          const reason=marketClosed?'MARKET_CLOSED':code==='PRICE'?'PRICE_CHECK':/limit|quota/i.test(message)?'DAILY_LIMIT':/paused/i.test(message)?'WALLET_PAUSED':null;
           // Only this token can't trade right now (closed market, route price): it waits and the later legs go first.
           if(reason==='MARKET_CLOSED'||reason==='PRICE_CHECK'){setStep(store,run.plan_id,index,'READY',{...doc,error:message,waitReason:reason,waitSince:Date.now()});waited.add(index);continue;}
           setStep(store,run.plan_id,index,'READY',{...doc,error:message});

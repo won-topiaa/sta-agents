@@ -176,6 +176,7 @@ const runReason:Record<string,string>={
   OWNER_STOPPED:'You stopped this agent. Orders already placed stay as they are.',
   DAILY_LIMIT:`Paused: the next order is above the daily limit left in your Binance app.${until}`,
   MARKET_CLOSED:`Paused: this stock is not trading right now.${until}`,
+  WALLET_PAUSED:`Paused: your Binance Agentic Wallet is not accepting orders right now.${until}`,
   PRICE_CHECK:`Paused: the route price was too far from the listed token price.${until}`,
   INTERRUPTED:'Stopped: the agent was interrupted while placing an order, so an order may exist. Check Orders in your Binance app before trading this plan again.',
   NO_ORDER_ID:'Stopped: Binance did not return an order id, so an order may exist. Check Orders in your Binance app.',

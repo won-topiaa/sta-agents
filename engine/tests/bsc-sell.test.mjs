@@ -277,6 +277,18 @@ test('an Agentic leg whose market is closed waits while the later legs trade, an
   await agenticTick(s,gw);
   assert.deepEqual(swaps,[nvda]);assert.equal(agenticRun(s,sale.id).status,'PAUSED');assert.equal(agenticRun(s,sale.id).reason,'MARKET_CLOSED');
 });
+test('a wallet-wide refusal ("paused") pauses the whole Agentic run after one try instead of being treated as one closed market',async t=>{
+  const s=setup(t),{run}=strategyWith(s,{approval:'AUTO_WITHIN_LIMITS'});bindAgentic(s,owner,agenticWallet);
+  const plan=s.approve(owner,run.id,'c1',run.result.reportHash);startAgentic(s,owner,plan.id,1000);const swaps=[];
+  const gw=async(m,path,b)=>{
+    if(path==='/v1/agentic/quota')return {quotaLeft:'1000'};
+    if(path==='/v1/agentic/swap'){swaps.push(b);throw Object.assign(new Error('Trading is paused for this account.'),{code:'AGENTIC'});}
+    throw new Error('unexpected '+path);};
+  await agenticTick(s,gw);
+  assert.equal(swaps.length,1);assert.equal(agenticRun(s,plan.id).status,'PAUSED');assert.equal(agenticRun(s,plan.id).reason,'WALLET_PAUSED');
+  const step=s.db.prepare('SELECT phase,document FROM agent_steps WHERE plan_id=? AND step=0').get(plan.id);
+  assert.equal(step.phase,'READY');assert.equal(JSON.parse(step.document).waitReason,undefined);
+});
 test('exit watch: sells only what this strategy bought, keeps going past one unreadable wallet, and never marks an unchecked release done',async t=>{
   const s=setup(t),other='eip155:56:0x2222222222222222222222222222222222222222';
   const a=strategyWith(s,{exit:{stop_loss:0.1,trailing_stop:null}}),pa=s.approve(owner,a.run.id,'c1',a.run.result.reportHash);
