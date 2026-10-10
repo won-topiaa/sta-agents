@@ -4,7 +4,7 @@
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
-> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08)
+> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08), [2 on 2026-10-10](#mainnet-transactions-2026-10-10) · **Judges: [how to try it](#for-judges-how-to-try-it)**
 
 ---
 
@@ -45,6 +45,44 @@ Stop trading ─ ends the account's open plans and sets its agents back to resea
 ```
 
 The hosted app is AI-only (since 2026-10-09): an agent either researches only or trades within its Agentic Wallet limits, and your own wallet is used to sign in. The code also has a per-trade mode, in which your own wallet signs every leg after the checks under *Safety boundaries*. It ran on mainnet on 2026-10-08 (below) and is turned off in the hosted app.
+
+## For judges: how to try it
+
+**1. The hosted app, no setup:** [xtxc.trade/exchange](https://xtxc.trade/exchange)
+
+- **No wallet.** [The read-only demo](https://xtxc.trade/exchange?view=research&demo=1) replays the two 2026-10-08 mainnet runs: the agents, their research reports, the approved plans and every trade with its BscScan link.
+- **With your own BNB Chain wallet.** Connect at the top right; signing in takes one signature, which sends nothing.
+  - *Markets*: Ondo and bStock tokens with live prices, the change since the last close, and market status. A closed token cannot be ordered.
+  - *Research*: describe a goal, for example `Invest $30 in NVDA, MSFT and TSM for one year, targeting 5%, max loss 40%`. In about a minute the agent returns its tested designs: backtest curve, return, worst drop and allocation, each marked *within your goal* or declined with the reason. Your agents and their reports stay listed.
+  - *Portfolio*: your wallet's stock tokens as an allocation chart.
+- **What the hosted app does not let you do: start autonomous trading.** Its gateway drives one Binance Agentic Wallet, the operator's (`XTXC_AGENTIC_OWNER`), and *Approve & start* is refused for every other account, so visitors cannot trade the operator's funds. The demo video shows the operator's live runs, and every trade is listed under the mainnet transactions below.
+
+**2. Run the checks**, on any machine with Node 22:
+
+```bash
+git clone https://github.com/won-topiaa/sta-agents && cd sta-agents/engine
+npm install && npm test    # 269 tests: agent store, BSC execution checks, gateway, Agentic execution, Binance client
+```
+
+The Python suite (`dev/test.sh py`) also needs the token catalog report (`XTXC_CATALOG_REPORT`), which is not in this repository.
+
+**3. Drive your own Agentic Wallet through the gateway.** You need a Binance Web3 API key and the Agentic Wallet CLI (`npm install @binance/agentic-wallet`). Run this from the repository root, where the Binance Web3 API is available:
+
+```bash
+printf 'BINANCE_WEB3_API_KEY=…\nBINANCE_WEB3_SECRET_KEY=…\n' > binance-web3.env
+printf 'GATEWAY_TOKEN=%s\n' "$(openssl rand -hex 24)" > gateway.env
+BINANCE_ENV_FILE=binance-web3.env GATEWAY_ENV_FILE=gateway.env \
+BAW_BIN=node_modules/@binance/agentic-wallet/dist/index.js BAW_DIR=./baw \
+node engine/bnb-gateway/server.mjs &                       # listens on 127.0.0.1:4590
+
+T=$(sed -n 's/^GATEWAY_TOKEN=//p' gateway.env); G=http://127.0.0.1:4590
+curl -s -X POST -H "Authorization: Bearer $T" $G/v1/agentic/signin    # a sign-in link and qrCodeId: confirm in the Binance app
+curl -s -X POST -H "Authorization: Bearer $T" -d '{"qrCodeId":"…"}' $G/v1/agentic/verify
+curl -s -H "Authorization: Bearer $T" $G/v1/agentic/quota             # the daily limit Binance enforces
+curl -s -H "Authorization: Bearer $T" $G/v1/universe                  # Ondo and bStock tokens with their trading status
+```
+
+The app and worker place an approved plan's orders through these same routes (`engine/lib/research-agentic.mjs`). The `web/` folder is an excerpt of the larger app and does not build on its own.
 
 ## Binance Web3 API and Agentic Wallet usage
 
@@ -87,6 +125,17 @@ That day both approval modes ran; the hosted app has since kept only the Agentic
 | Sell | TSM | [`0xdb725691…6874`](https://bscscan.com/tx/0xdb7256917cdf255359ee62a5f2d47bfc28cfcac5ddf117f3fca82d95da186874) |
 
 Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ orders) led to the two execution checks added under *Safety boundaries*.
+
+## Mainnet transactions (2026-10-10)
+
+From the new app, recorded for the demo: *"Invest $25 in NVDA, MSFT and TSM for one year, targeting 3%, max loss 25%"*. Within that loss limit, both eligible designs held MSFT 40% and kept 60% in cash. After one plan approval, the Agentic Wallet bought MSFT; the same position was later sold from the Portfolio screen through the strategy's sale plan.
+
+| Side | Stock | Transaction |
+|---|---|---|
+| Buy | MSFT | [`0xb57f076f…0b2f`](https://bscscan.com/tx/0xb57f076fbf97e89e8df1869bc62cc1d44d0da58dba37308b8f07d5dc6fb60b2f) |
+| Sell | MSFT | [`0xeae6ca76…0aa1`](https://bscscan.com/tx/0xeae6ca76b877701ea6dff783af6e7f8fdcab86c9c47cafa4ad89ff56f3b70aa1) |
+
+Both were sent by the Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`.
 
 ## Safety boundaries
 
@@ -189,8 +238,9 @@ dev/                            test runner, shared-module sync, end-to-end chec
 
 ```bash
 # Tests (Python 3.12 with numpy/pandas; Node 22)
-dev/test.sh py      # strategy language, fundamentals, agent profiles, design bridge
-dev/test.sh js      # agent store, BSC execution checks, gateway, Agentic execution, Binance client
+cd engine && npm install && npm test   # JS: agent store, BSC execution checks, gateway, Agentic execution, Binance client
+dev/test.sh py      # Python: strategy language, fundamentals, agent profiles, design bridge
+                    # (dev/test.sh uses our server's toolchain paths and needs XTXC_CATALOG_REPORT)
 
 # BNB gateway (needs a Binance Web3 API key; run where the Web3 API is available)
 BINANCE_ENV_FILE=…/binance-web3.env GATEWAY_ENV_FILE=…/gateway.env \
