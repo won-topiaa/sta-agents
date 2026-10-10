@@ -4,7 +4,7 @@
 
 STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
 
-> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08), [2 on 2026-10-10](#mainnet-transactions-2026-10-10) · **Judges: [how to try it](#for-judges-how-to-try-it)**
+> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08), [8 on 2026-10-10](#mainnet-transactions-2026-10-10) · **Judges: [how to try it](#for-judges-how-to-try-it)**
 
 ---
 
@@ -128,14 +128,25 @@ Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ
 
 ## Mainnet transactions (2026-10-10)
 
-From the new app, recorded for the demo: *"Invest $25 in NVDA, MSFT and TSM for one year, targeting 3%, max loss 25%"*. Within that loss limit, both eligible designs held MSFT 40% and kept 60% in cash. After one plan approval, the Agentic Wallet bought MSFT; the same position was later sold from the Portfolio screen through the strategy's sale plan.
+Two runs from the new app, both recorded for the demo. All eight transactions were sent by the Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`.
+
+**First run**: *"Invest $25 in NVDA, MSFT and TSM for one year, targeting 3%, max loss 25%"*. Within that loss limit, both eligible designs held MSFT 40% and kept 60% in cash. After one plan approval, the Agentic Wallet bought MSFT; the same position was later sold from the Portfolio screen through the strategy's sale plan.
 
 | Side | Stock | Transaction |
 |---|---|---|
 | Buy | MSFT | [`0xb57f076f…0b2f`](https://bscscan.com/tx/0xb57f076fbf97e89e8df1869bc62cc1d44d0da58dba37308b8f07d5dc6fb60b2f) |
 | Sell | MSFT | [`0xeae6ca76…0aa1`](https://bscscan.com/tx/0xeae6ca76b877701ea6dff783af6e7f8fdcab86c9c47cafa4ad89ff56f3b70aa1) |
 
-Both were sent by the Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`.
+**Second run**, letting the agent choose the stocks: *"Invest $30 for one year in the best 3 of NVDA, AMD, AVGO, TSM, MU, MSFT, GOOGL and META, targeting 5%, max loss 40%. No more than 3 stocks."* One of the two designs tested passed (held-out test: +347.4% return, −25.9% max drawdown); it held AMD, MSFT and MU at 30% each with 10% in cash, and the other design was rejected. After one approval the Agentic Wallet bought all three in under a minute. Each position was then sold from the Portfolio screen.
+
+| Side | Stock | Transaction |
+|---|---|---|
+| Buy | AMD | [`0x8aa91501…344e`](https://bscscan.com/tx/0x8aa91501d50838944e7c30f71d66aca6821253c2629294a7b11beb2818c3344e) |
+| Buy | MSFT | [`0xa638664d…bcf8`](https://bscscan.com/tx/0xa638664d0678559ed82de052daeecc2f6ecc807718db12e029c00af71a7ebcf8) |
+| Buy | MU | [`0x9d220114…5aff`](https://bscscan.com/tx/0x9d220114aa5e5dc6be05184beebeab1ea9a5bb2b298567c508841334df445aff) |
+| Sell | MSFT | [`0x42b16478…6b66`](https://bscscan.com/tx/0x42b1647859071a038a0b44dade19ddd4c004efc7df0f1dd2b72cad498ca76b66) |
+| Sell | MU | [`0x75bc6c33…85f2`](https://bscscan.com/tx/0x75bc6c33bff41bd16e349b2d79780b43ba878c3b8ddf2870b3f25cca7bb685f2) |
+| Sell | AMD | [`0x07abe54c…3cd9`](https://bscscan.com/tx/0x07abe54c04685b7181640f8a4fa68324e88c12619ef8f7d2bce92d4c40703cd9) |
 
 ## Safety boundaries
 
