@@ -383,7 +383,7 @@ Built by members of **Blackstone**, a university blockchain collective.
 | --- | --- | --- |
 | Minseok Cho | Backend | Seoul National University |
 | Juwon Yang | Frontend | Chung-Ang University |
-| Woon Heo | Smart contracts | Chung-Ang University |
+| Un Heo | Smart contracts | Chung-Ang University |
 | Min Jegal | Data analysis | Sungkyul University |
 
 See [NOTICE.md](NOTICE.md) for the source, data and dependency boundaries.
