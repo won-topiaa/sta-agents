@@ -67,12 +67,12 @@ AI trading agents arrived in 2026: you name an agent, fund an account and tell i
 - In about a minute the agent shows its tested designs, each with its held-out backtest return, maximum drawdown and allocation, marked *Within your goal* or *Outside your goal*. Only a design inside your limits gets **Approve & start · $budget**.
 - After approval the agent places each order through the Binance Agentic Wallet. Each leg shows *Queued*, *Order in progress* and then *Purchased* with a BscScan link. **Pause trading** stops it.
 - Each request runs with the agent its words ask for, chosen once the request is complete, and the chat names it before the test (for example *Agent: Value · Dividend value. Rules: …*):
-  - **Style and preset** from the request: technical (trend follower, dip buyer, breakout, sector rotation, chart patterns) or value (deep value, quality at a fair price, growth at a reasonable price, dividend value). "저평가된 배당주" runs the dividend-value agent; "buy the dip" runs the dip buyer.
-  - The newest message counts first: a follow-up such as "이번엔 눌림목으로" changes the agent, while "$100, 1년" keeps the one already asked for. A negated ask picks nothing ("avoid dividend stocks", "배당주 말고", "무배당"). Growth alone is not growth at a reasonable price; that needs a price word too ("저평가 성장주", "growth at a reasonable price"). 돌파 means breakout only next to a high (신고가 돌파, 전고점 돌파) or as a kind of stock (돌파 종목), so "5% 돌파하면 익절" is a take-profit, not a breakout agent.
+  - **Style and preset** from the request: technical (trend follower, dip buyer, breakout, sector rotation, chart patterns) or value (deep value, quality at a fair price, growth at a reasonable price, dividend value). Korean and English requests both work: "undervalued dividend stocks" runs the dividend-value agent; "buy the dip" runs the dip buyer.
+  - The newest message counts first: a follow-up such as "switch to buying the dip" changes the agent, while "$100, one year" keeps the one already asked for. A negated ask picks nothing ("avoid dividend stocks", "no dividend payers", "without dividends"). Growth alone is not growth at a reasonable price; that needs a price word too ("undervalued growth stocks", "growth at a reasonable price"). A take-profit level ("sell when it breaks through +5%") is not a breakout strategy; the breakout agent needs a breakout or a high ("breakout stocks", "new highs", "52-week highs").
   - A value request whose stocks are all ETFs runs the trend follower instead, because funds have no company financials for a value screen; the chat line says so.
   - **Rules the request asks for** are added from the style's part of the 40-rule catalog (29 technical, 25 value rules), each quoting your words, within the limits of 8 rules and 6 stock filters: "3 stocks" adds *Max holdings*, "stop loss 10%" adds *Stop loss*; a number for a rule the preset already has replaces the preset's ("RSI below 25" sets the dip buyer's *Buy the dip* level to 25 instead of 40). Suggestions use the model and share its daily budget, so they are asked for only once the request is complete and only when it names a rule-like condition (a number of stocks, a stop, RSI, a moving average, P/E, debt, a sector, volume and similar). If the combination is refused, the preset alone runs.
   - **Agents are reused.** An agent is saved under a hash of its rules and limits, so the same request maps to the same saved agent instead of adding one each time. A wallet keeps at most 10 agents; at that limit the test runs with the closest saved agent of the same style that may trade on its own (same preset and rules first), and the chat says so.
-  - A request that names no style, or asks for a trend (추세, 모멘텀, momentum, uptrend), runs the trend follower: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average), rebalanced monthly.
+  - A request that names no style, or asks for a trend ("momentum", "uptrend", "trend following"), runs the trend follower: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average), rebalanced monthly.
 
 ### Portfolio
 - Total stock value and an allocation chart, from on-chain balances of your wallet and, for the operator account, the Agentic Wallet.
@@ -381,9 +381,9 @@ Built by members of **Blackstone**, a university blockchain collective.
 
 | Name | Responsibility | University |
 | --- | --- | --- |
-| 조민석 | Backend | Seoul National University |
-| 양주원 | Frontend | Chung-Ang University |
-| 허운 | Smart contracts | Chung-Ang University |
-| 제갈민 | Data analysis | Sungkyul University |
+| Minseok Cho | Backend | Seoul National University |
+| Juwon Yang | Frontend | Chung-Ang University |
+| Woon Heo | Smart contracts | Chung-Ang University |
+| Min Jegal | Data analysis | Sungkyul University |
 
 See [NOTICE.md](NOTICE.md) for the source, data and dependency boundaries.
