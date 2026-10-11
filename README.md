@@ -4,7 +4,7 @@
 
 Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products & Agents* track, *Best Use of Agentic Wallet* prize) is the live site **[xtxc.trade/exchange](https://xtxc.trade/exchange)**. This repository (STA Agents) holds the site's research engine, its Binance gateway and the agent's execution code.
 
-> **Live site:** [xtxc.trade/exchange](https://xtxc.trade/exchange) · **Demo video:** [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · **No wallet?** [Read-only replay](https://xtxc.trade/exchange?view=research&demo=1) · **Proof:** [20 mainnet transactions](#mainnet-transactions-summary) · **Judges:** [how to try it](#for-judges-how-to-try-it)
+> **Live site:** [xtxc.trade/exchange](https://xtxc.trade/exchange) · **Demo video:** [youtu.be/ZLjxy-NE18Q](https://youtu.be/ZLjxy-NE18Q) · **No wallet?** [Read-only replay](https://xtxc.trade/exchange?view=research&demo=1) · **Proof:** [20 mainnet transactions](#mainnet-transactions-summary) · **Judges:** [how to try it](#for-judges-how-to-try-it)
 
 ## At a glance
 
@@ -30,7 +30,7 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | Agentic Wallet | `engine/lib/research-agentic.mjs` (approved plan → orders), gateway routes `/v1/agentic/*`, trades sent by `0xF89F956e3a3766a2835E3381D1F10910868B5aCe` |
 | Public repository | This repository |
 | Deployed link | [xtxc.trade/exchange](https://xtxc.trade/exchange), with [steps for judges](#for-judges-how-to-try-it) |
-| Demo video, 4 minutes or less | [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) |
+| Demo video, 4 minutes or less | [youtu.be/ZLjxy-NE18Q](https://youtu.be/ZLjxy-NE18Q) |
 
 ## Judging criteria: where to look
 
@@ -38,7 +38,7 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | --- | --- |
 | Technical execution | Typed strategy language and backtester (`engine/agent/xtxc_agent/research/strategies.py`, `backtest.py`); agent rules merged and checked by code (`agent_profile.py`, `agent_rules.json`); design bridge with training-only selection, held-out horizons, doubled-cost stress and a future-data check (`engine/compute/design_bridge.py`, `evaluate.py`); point-in-time SEC fundamentals and FRED/ALFRED vintages; a gateway that checks every route before an order (`engine/bnb-gateway/server.mjs`, `engine/lib/bsc-execution.mjs`) |
 | Creativity | The request picks its own agent: a style and preset from your words plus the catalog rules you ask for (`web/lib/mobile-agent-preset.mjs`). An agent that must prove a plan before it may trade: every design is backtested and marked *within your goal* or *outside your goal*, and one approval covers a whole tested plan. Copying another trader's allocation also goes through your own agent (preview) |
-| User experience | On the site: Markets with live status and charts → *Ask your agent* → a goal in plain words → tested plan → **Approve & start** → orders with BscScan links → Portfolio with on-chain holdings and **Sell**; **Pause trading** at any time ([demo video](https://youtu.be/xZxOkPZU9_k)) |
+| User experience | On the site: Markets with live status and charts → *Ask your agent* → a goal in plain words → tested plan → **Approve & start** → orders with BscScan links → Portfolio with on-chain holdings and **Sell**; **Pause trading** at any time ([demo video](https://youtu.be/ZLjxy-NE18Q)) |
 | Developer experience | Our Developer Experience Report goes through the official form; the gateway gives the site a narrow, token-authenticated API over the Binance Web3 API and the Agentic Wallet CLI ([run it yourself](#for-judges-how-to-try-it)) |
 
 ---
@@ -207,7 +207,7 @@ Earlier hand-signed attempts that reverted (one out of gas, three on expired RFQ
 
 ## Mainnet transactions (2026-10-10)
 
-Two runs from the new app, both recorded for the demo. All eight transactions were sent by the Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`.
+Two runs from the new app; the demo video shows the second. All eight transactions were sent by the Agentic Wallet `0xF89F956e3a3766a2835E3381D1F10910868B5aCe`.
 
 **First run**: *"Invest $25 in NVDA, MSFT and TSM for one year, targeting 3%, max loss 25%"*. Within that loss limit, both eligible designs held MSFT 40% and kept 60% in cash. After one plan approval, the Agentic Wallet bought MSFT; the same position was later sold from the Portfolio screen through the strategy's sale plan.
 
