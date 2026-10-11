@@ -12,13 +12,13 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | --- | --- |
 | What it is | A trading site for tokenized US stocks with an AI agent: **Markets**, **Research** (your agent), **Portfolio**, **Community** and **Leaderboard** |
 | Who it is for | Retail investors who want tokenized stocks on BNB Chain, and an agent that has to prove a plan before it trades |
-| Chain and assets | BNB Smart Chain mainnet (chain ID 56), USDT pairs. 448 Ondo and bStock tokens on Markets; 381 with enough verified history form the research universe (293 stocks, 88 funds) |
+| Chain and assets | BNB Smart Chain mainnet (chain ID 56), USDT pairs. 448 tokenized stocks and ETFs on Markets (488 Ondo and bStock tokens); 381 with enough verified history form the research universe (293 stocks, 88 funds) |
 | The agent | Plain-language goal → budget, period, target and loss limit read from your words (each number must appear in them) → an agent chosen from your words: one of 9 presets plus the rules your request asks for, from a 40-rule catalog → 1–3 typed strategy designs → the agent's rules merged in by code → isolated point-in-time backtests → only designs inside your target and loss limit can be approved |
 | Binance Web3 API | RWA Data, Trading (aggregator quote, swap, approve), Transaction (pre-transaction simulate, transaction detail), Wallet (token balances) |
 | Binance Agentic Wallet | `@binance/agentic-wallet`: QR sign-in in the Binance app, limits and quota, market-order swaps. After one approval the agent places each order itself, within the daily limit Binance enforces |
 | AI | A grounded request parser plus Qwen3 32B (Kiln), which reads requests and proposes typed designs; it never sees prices, places orders or writes code |
 | Proof on mainnet | 20 transactions on 2026-10-08 and 2026-10-10, all status 1, [linked below](#mainnet-transactions-summary) |
-| Tests | `cd engine && npm install && npm test`: 269 JS tests (agent store, BSC execution checks, gateway, Agentic execution, Binance client) |
+| Tests | `cd engine && npm install && npm test`: 269 JS tests (agent store, BSC execution checks, gateway, Agentic execution, Binance client); `node --test web/tests/mobile-agent-preset.test.mjs` from the root for the Research screen's agent choice |
 
 ## Hackathon requirements: where to verify
 
@@ -26,7 +26,7 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | --- | --- |
 | BNB Smart Chain mainnet, live trades | [Mainnet transactions](#mainnet-transactions-summary): 20 BscScan links |
 | Tokenized stocks (Ondo, bStocks) | [Binance Web3 API usage](#binance-web3-api-and-agentic-wallet-usage) (RWA Data); bStock tokens such as AMDB, MSFTB and MUB in the 2026-10-10 trades |
-| At least one Binance Web3 API module | Four modules plus the Agentic Wallet, all in `engine/bnb-gateway/server.mjs` |
+| At least one Binance Web3 API module | Four modules plus the Agentic Wallet, served by `engine/bnb-gateway/server.mjs` (API client: `engine/lib/binance-web3.mjs`) |
 | Agentic Wallet | `engine/lib/research-agentic.mjs` (approved plan → orders), gateway routes `/v1/agentic/*`, trades sent by `0xF89F956e3a3766a2835E3381D1F10910868B5aCe` |
 | Public repository | This repository |
 | Deployed link | [xtxc.trade/exchange](https://xtxc.trade/exchange), with [steps for judges](#for-judges-how-to-try-it) |
@@ -57,7 +57,7 @@ AI trading agents arrived in 2026: you name an agent, fund an account and tell i
 ## The site
 
 ### Markets
-- 448 Ondo and bStock tokens, stocks and ETFs, with live token prices, the change since the last close and each token's market status: tradable now, or when its market reopens. Search, and Stocks / ETFs filters.
+- 448 tokenized stocks and ETFs (488 Ondo and bStock tokens), with live token prices, the change since the last close and each token's market status: tradable now, or when its market reopens. Search, and Stocks / ETFs filters.
 - Charts with real 5-minute and hourly candles (1H, 4H, 1W, 1M, 3M, 1Y), as a line or as candles, and token facts (token price, estimated market cap, last-session stock volume).
 - **Buy** and **Sell** directly from your own wallet, each order signed by you. A closed market cannot be ordered.
 - *Ask your agent about NVDA* opens Research with that stock in the prompt.
@@ -66,14 +66,17 @@ AI trading agents arrived in 2026: you name an agent, fund an account and tell i
 - Write a goal: budget, period, target, loss limit, and stocks or a theme. The demo video uses `Invest $30 for one year in the best 3 of NVDA, AMD, AVGO, TSM, MU, MSFT, GOOGL and META, targeting 5%, max loss 40%. No more than 3 stocks.`
 - In about a minute the agent shows its tested designs, each with its held-out backtest return, maximum drawdown and allocation, marked *Within your goal* or *Outside your goal*. Only a design inside your limits gets **Approve & start · $budget**.
 - After approval the agent places each order through the Binance Agentic Wallet. Each leg shows *Queued*, *Order in progress* and then *Purchased* with a BscScan link. **Pause trading** stops it.
-- Each request runs with the agent its words ask for, and the chat names it before the test (for example *Agent: Value · Dividend value. Rules: …*):
+- Each request runs with the agent its words ask for, chosen once the request is complete, and the chat names it before the test (for example *Agent: Value · Dividend value. Rules: …*):
   - **Style and preset** from the request: technical (trend follower, dip buyer, breakout, sector rotation, chart patterns) or value (deep value, quality at a fair price, growth at a reasonable price, dividend value). "저평가된 배당주" runs the dividend-value agent; "buy the dip" runs the dip buyer.
-  - **Rules the request asks for** are added from the style's part of the 40-rule catalog (29 technical, 25 value rules), each quoting your words, up to the limit of 8 rules: "3 stocks" adds *Max holdings*, "stop loss 10%" adds *Stop loss*. If the combination is refused, the preset alone runs.
-  - A request that names no style runs the trend follower: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average), rebalanced monthly.
+  - The newest message counts first: a follow-up such as "이번엔 눌림목으로" changes the agent, while "$100, 1년" keeps the one already asked for. A negated ask picks nothing ("avoid dividend stocks", "배당주 말고", "무배당"). Growth alone is not growth at a reasonable price; that needs a price word too ("저평가 성장주", "growth at a reasonable price"). 돌파 means breakout only next to a high (신고가 돌파, 전고점 돌파) or as a kind of stock (돌파 종목), so "5% 돌파하면 익절" is a take-profit, not a breakout agent.
+  - A value request whose stocks are all ETFs runs the trend follower instead, because funds have no company financials for a value screen; the chat line says so.
+  - **Rules the request asks for** are added from the style's part of the 40-rule catalog (29 technical, 25 value rules), each quoting your words, within the limits of 8 rules and 6 stock filters: "3 stocks" adds *Max holdings*, "stop loss 10%" adds *Stop loss*; a number for a rule the preset already has replaces the preset's ("RSI below 25" sets the dip buyer's *Buy the dip* level to 25 instead of 40). Suggestions use the model and share its daily budget, so they are asked for only once the request is complete and only when it names a rule-like condition (a number of stocks, a stop, RSI, a moving average, P/E, debt, a sector, volume and similar). If the combination is refused, the preset alone runs.
+  - **Agents are reused.** An agent is saved under a hash of its rules and limits, so the same request maps to the same saved agent instead of adding one each time. A wallet keeps at most 10 agents; at that limit the test runs with the closest saved agent of the same style that may trade on its own (same preset and rules first), and the chat says so.
+  - A request that names no style, or asks for a trend (추세, 모멘텀, momentum, uptrend), runs the trend follower: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average), rebalanced monthly.
 
 ### Portfolio
 - Total stock value and an allocation chart, from on-chain balances of your wallet and, for the operator account, the Agentic Wallet.
-- Each Agentic Wallet position has **Sell**: the agent closes it through the same wallet, and the row shows *Selling…* and then *Sold* with its BscScan link.
+- Each Agentic Wallet position has **Sell**: the agent closes it through the same wallet, and the row shows *Selling…* and then *Sold* with its BscScan link. If the sale can't trade yet (closed market, route price check, Binance daily limit), the row shows *Queued* with the reason: the agent retries every five minutes until the sale plan expires, and the page keeps checking (every 30 seconds after the first three minutes, for up to two hours) instead of staying at *Selling…*.
 - *Profile & settings*: name and handle, a public trading profile, the Agentic Wallet connection (QR sign-in in the Binance app) and sharing your allocation.
 
 ### Community and Leaderboard (preview)
@@ -88,13 +91,13 @@ AI trading agents arrived in 2026: you name an agent, fund an account and tell i
 ## How it works
 
 ```text
-Markets ─ 448 tokenized stocks · live status · charts · direct buy and sell ──┐
+Markets ─ 448 stocks and ETFs · live status · charts · direct buy and sell ───┐
                                                                               │ "Ask your agent"
 Research ─ "Invest $30 … the best 3 of 8 AI stocks … target 5%, max loss 40%" ◄┘
       │
 Request ─ grounded parser + Qwen3 32B (Kiln): budget, period, target, loss limit, stocks; every number must appear in your words
       │
-Agent ─ chosen from your words: 1 of 9 presets + catalog rules the request asks for (each quoting it, ≤ 8) · or your own agent
+Agent ─ chosen from your words: 1 of 9 presets + catalog rules the request asks for (each quoting it, ≤ 8 rules, ≤ 6 filters) · same rules and limits → same saved agent · or your own agent
       │
 Designs ─ Qwen3 32B proposes 1–3 typed strategy designs (no code, no prices seen) · code merges the agent's rules
       │
@@ -126,6 +129,7 @@ Portfolio ─ on-chain holdings · Sell through the same wallet · Pause trading
 ```bash
 git clone https://github.com/won-topiaa/sta-agents && cd sta-agents/engine
 npm install && npm test    # 269 tests: agent store, BSC execution checks, gateway, Agentic execution, Binance client
+cd .. && node --test web/tests/mobile-agent-preset.test.mjs   # the agent a Research request runs with
 ```
 
 The Python suite (`dev/test.sh py`) also needs the token catalog report (`XTXC_CATALOG_REPORT`), which is not in this repository.
@@ -150,11 +154,11 @@ The site and its worker place an approved plan's orders through these same route
 
 ## Binance Web3 API and Agentic Wallet usage
 
-All Binance calls go through one small service, the **BNB gateway** (`engine/bnb-gateway/server.mjs`). It holds the API key and the Agentic Wallet session and exposes a narrow, token-authenticated API to the app. It runs in a region where the Web3 API is available; the app servers never call Binance directly.
+All Binance calls go through one small service, the **BNB gateway** (`engine/bnb-gateway/server.mjs`, with its Web3 API client in `engine/lib/binance-web3.mjs`). It holds the API key and the Agentic Wallet session and exposes a narrow, token-authenticated API to the app. It runs in a region where the Web3 API is available; the app servers never call Binance directly.
 
 | Module | Calls | Used for |
 | --- | --- | --- |
-| RWA Data | `GET /api/v1/dex/market/rwa/platforms`, `/rwa/tokens` | Ondo and bStock tokens on BSC, underlying ticker, token-to-share ratio, market status (no order is prepared for a token that is not `TRADING`), token prices where no DEX pool is indexed |
+| RWA Data | `GET /api/v1/dex/market/rwa/tokens` (platforms `bstock`, `ondo`) | Ondo and bStock tokens on BSC, underlying ticker, token-to-share ratio, market status (no order is prepared for a token that is not `TRADING`), token prices where no DEX pool is indexed |
 | Trading | `GET /api/v1/dex/aggregator/quote`, `/aggregator/swap`, `/aggregator/approve-transaction` | Route and price (shown even when the wallet cannot pay yet), unsigned swap transaction, exact-amount approval of the router |
 | Transaction | `POST /api/v1/dex/pre-transaction/simulate`, `GET /post-transaction/transaction-detail-by-txhash` | Dry run before any signature; indexed status after sending |
 | Wallet | `GET /api/v1/dex/balance/all-token-balances-by-address` | Holdings view |
@@ -173,7 +177,7 @@ All 20 succeeded (status 1); each one is linked below.
 
 ## Mainnet transactions (2026-10-08)
 
-One research request, run by two agents with the same rules: *"25 USDT in NVDA, AVGO, MSFT, GOOGL, META, AMZN, AAPL, TSM for one year, targeting 3% a year, max loss 25%"*. Both designs passed (typical year +25.8% and +21.6%, worst drop −21.5% and −21.3% over the whole five-year test), were approved, bought, and then sold back to USDT.
+One research request, run by two agents with the same rules: *"25 USDT in NVDA, AVGO, MSFT, GOOGL, META, AMZN, AAPL, TSM for one year, targeting 3% a year, max loss 25%"*. Each agent's approved design passed (typical year +25.8% and +21.6%, worst drop −21.5% and −21.3% over the whole five-year test); both were bought and then sold back to USDT.
 
 That day both approval modes ran. On the site, agents now trade only through the Agentic Wallet; your own wallet signs the direct buys and sells on Markets.
 
@@ -228,7 +232,7 @@ Two runs from the new app, both recorded for the demo. All eight transactions we
 **The model**
 - It proposes designs only: typed data, size-limited, no code, no tools, no signing.
 - It never sees price history, so it cannot fit a design to the backtest.
-- An agent's free-text philosophy becomes *suggested* rules from a fixed catalog. Each suggestion must quote the owner's words, and the owner decides whether to add it.
+- Free text becomes rules only from a fixed catalog, and each suggested rule must quote the words that ask for it. In the agent editor, a philosophy's suggestions are offered for the owner to add. On the Research screen, the request picks the preset, and the rules it asks for are added automatically and named in the chat before the test; only a complete request that names a rule-like condition is sent for suggestions.
 
 **Agent rules**
 - Rules are merged into every candidate by code.
@@ -251,7 +255,7 @@ Two runs from the new app, both recorded for the demo. All eight transactions we
 **Autonomous execution**
 - Only plans of agents set to "trade on its own within limits" can start; the server checks the agent's *current* setting.
 - Binance enforces the daily USD limit and token scope.
-- Each order is re-quoted first and refused if the route is more than 3% worse than the token's reference price or its price impact is above 2%; slippage is capped at 1% and MEV protection is on.
+- Each order is re-quoted first and refused if the route is more than 3% worse than the token's reference price or its price impact is above 2%; slippage is set to 1% and MEV protection is on.
 - Each leg is marked durably before its order is placed, and is never resubmitted after an interruption: it becomes "needs a check" instead.
 - **Stop trading** (**Pause trading** on the main Research screen) revokes the account's open plans, stops its Agentic runs and monitors, and sets its agents back to research only. An order already sent is not cancelled and is still reconciled.
 
@@ -319,6 +323,8 @@ engine/                         research engine (Python) + execution services (N
   tests/, agent/tests/          JS and Python test suites
 web/                            the app's research workspace, agent editor, BSC execution UI and API routes;
                                 lib/mobile-agent-preset.mjs picks each Research request's agent (preset + requested rules)
+                                lib/mobile-research.mjs starts it: request → agent (saved under a hash of its rules and
+                                limits, reused at the 10-agent limit) → strategy → backtest
                                 (excerpt of the larger XTXC web app; not a standalone Next.js project. The site's
                                 app shell, with the Markets, Portfolio and Community screens, is not included)
 dev/                            test runner, shared-module sync, end-to-end check, diagnostics
@@ -327,8 +333,10 @@ dev/                            test runner, shared-module sync, end-to-end chec
 ## Running it
 
 ```bash
+# Every command runs from the repository root.
 # Tests (Python 3.12 with numpy/pandas; Node 22)
-cd engine && npm install && npm test   # JS: agent store, BSC execution checks, gateway, Agentic execution, Binance client
+(cd engine && npm install && npm test)   # JS: agent store, BSC execution checks, gateway, Agentic execution, Binance client
+node --test web/tests/mobile-agent-preset.test.mjs   # the agent a Research request runs with (preset + requested rules)
 dev/test.sh py      # Python: strategy language, fundamentals, agent profiles, design bridge
                     # (dev/test.sh uses our server's toolchain paths and needs XTXC_CATALOG_REPORT)
 
@@ -338,21 +346,21 @@ BAW_BIN=…/node_modules/@binance/agentic-wallet/dist/index.js BAW_DIR=…/baw \
 node engine/bnb-gateway/server.mjs        # listens on 127.0.0.1:4590
 
 # Fundamentals release (SEC EDGAR, content-addressed)
-python -m xtxc_agent.research.fundamentals <data-root> AAPL,MSFT,NVDA,…
+(cd engine/agent && python -m xtxc_agent.research.fundamentals <data-root> AAPL,MSFT,NVDA,…)
 ```
 
 The live site is the way to try it; the `web/` folder is an excerpt and does not build on its own. Without a wallet, [the read-only replay](https://xtxc.trade/exchange?view=research&demo=1) shows the two 2026-10-08 runs (agents, research results, approved plans and every trade with its BscScan link) in the same screens.
 
 ## Limitations
 
-- **Coverage of value signals**: none for funds and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
+- **Coverage of value signals**: none for funds (a value request for funds only runs the trend follower instead) and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
 - **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`). Other accounts can sign in, research, buy and sell directly from their own wallet, and open the read-only replay, but they cannot start autonomous trading. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
 - **Not audited.** Small amounts only.
 
 ## Built on
 
-STA (Stock Token Agent), our GWDC 2026 Challenge A entry (2nd place, [xtxctrade/sta](https://github.com/xtxctrade/sta)), which researched and executed tokenized-stock allocations on Solana.
+STA (Stock Token Agent), our GWDC 2026 Challenge A entry (2nd place, [skewlabs2/sta](https://github.com/skewlabs2/sta)), which researched and executed tokenized-stock allocations on Solana.
 
 New in this project:
 - user-defined agents with code-enforced rules

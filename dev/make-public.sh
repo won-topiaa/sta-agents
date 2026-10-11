@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the public hackathon snapshot (xtxctrade/sta-agents) from this workspace.
+# Builds the public hackathon snapshot (won-topiaa/sta-agents) from this workspace.
 # Only the listed paths are copied: no secrets, no private notes (dev/dx-log.md), no unrelated XTXC services.
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")/.." && pwd)"; OUT="${1:-$HOME/Desktop/sta-agents-public}"
@@ -10,7 +10,7 @@ rsync -a --delete --exclude .git --exclude node_modules --exclude __pycache__ --
 mkdir -p "$OUT/web/lib" "$OUT/web/app/exchange/bnb" "$OUT/web/app/api/v1/stocklana/research" "$OUT/web/app/api/v1/requester-sessions" "$OUT/web/app/api/bnb/market" "$OUT/dev"
 cd "$SRC/web"
 for f in lib/research-*.mjs lib/research-*.d.mts lib/research-*.ts lib/agent-rules.mjs lib/agent-rules.d.mts lib/bsc-*.mjs lib/bsc-*.d.mts \
-         lib/mobile-agent-preset.mjs lib/mobile-agent-preset.d.mts tests/mobile-agent-preset.test.mjs \
+         lib/mobile-agent-preset.mjs lib/mobile-agent-preset.d.mts tests/mobile-agent-preset.test.mjs lib/mobile-research.mjs lib/mobile-research.d.mts \
          lib/binance-web3.mjs lib/bnb-gateway.ts lib/bnb-gecko.d.mts lib/requester-auth.ts \
          app/exchange/research-*.tsx app/exchange/research-*.css app/exchange/research-session.ts app/exchange/research-demo-context.ts app/exchange/bnb/bnb-workspace.tsx \
          app/exchange/bnb/bnb-chart.tsx app/api/bnb/market/route.ts app/api/v1/requester-sessions/route.ts; do
@@ -26,9 +26,10 @@ printf 'node_modules\n__pycache__\n.pytest_cache\n*.sqlite*\n.env*\nsecrets/\n' 
 for envf in "$HOME/.config/sta-gateway/binance-web3.env" "$HOME/.config/sta-gateway/gateway.env"; do
   [ -f "$envf" ] || continue
   while IFS='=' read -r _ value; do
-    [ -n "$value" ] && grep -rqF -- "$value" "$OUT" && { echo "a local credential value appears in the snapshot; refused" >&2; exit 1; }
+    [ -n "$value" ] && grep -rqF --exclude-dir=node_modules --exclude-dir=.git -- "$value" "$OUT" && { echo "a local credential value appears in the snapshot; refused" >&2; exit 1; }
   done < "$envf"
 done
-if grep -rIlE "BX-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|sk-ant-[A-Za-z0-9_-]{20}|-----BEGIN [A-Z ]*PRIVATE KEY-----" "$OUT" | grep -v "engine/tools/verify-bundle.mjs"; then
+# node_modules (git-ignored, installed locally to run the tests) and .git are never published.
+if grep -rIlE --exclude-dir=node_modules --exclude-dir=.git "BX-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|sk-ant-[A-Za-z0-9_-]{20}|-----BEGIN [A-Z ]*PRIVATE KEY-----" "$OUT" | grep -v "engine/tools/verify-bundle.mjs"; then
   echo "credential-shaped content found; snapshot refused" >&2; exit 1; fi
 echo "snapshot ready: $OUT ($(find "$OUT" -type f | wc -l | tr -d ' ') files)"
