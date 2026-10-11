@@ -10,6 +10,7 @@ rsync -a --delete --exclude .git --exclude node_modules --exclude __pycache__ --
 mkdir -p "$OUT/web/lib" "$OUT/web/app/exchange/bnb" "$OUT/web/app/api/v1/stocklana/research" "$OUT/web/app/api/v1/requester-sessions" "$OUT/web/app/api/bnb/market" "$OUT/dev"
 cd "$SRC/web"
 for f in lib/research-*.mjs lib/research-*.d.mts lib/research-*.ts lib/agent-rules.mjs lib/agent-rules.d.mts lib/bsc-*.mjs lib/bsc-*.d.mts \
+         lib/mobile-agent-preset.mjs lib/mobile-agent-preset.d.mts tests/mobile-agent-preset.test.mjs \
          lib/binance-web3.mjs lib/bnb-gateway.ts lib/bnb-gecko.d.mts lib/requester-auth.ts \
          app/exchange/research-*.tsx app/exchange/research-*.css app/exchange/research-session.ts app/exchange/research-demo-context.ts app/exchange/bnb/bnb-workspace.tsx \
          app/exchange/bnb/bnb-chart.tsx app/api/bnb/market/route.ts app/api/v1/requester-sessions/route.ts; do

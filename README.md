@@ -37,7 +37,7 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | Criterion | Evidence |
 | --- | --- |
 | Technical execution | Typed strategy language and backtester (`engine/agent/xtxc_agent/research/strategies.py`, `backtest.py`); agent rules merged and checked by code (`agent_profile.py`, `agent_rules.json`); design bridge with training-only selection, held-out horizons, doubled-cost stress and a future-data check (`engine/compute/design_bridge.py`, `evaluate.py`); point-in-time SEC fundamentals and FRED/ALFRED vintages; a gateway that checks every route before an order (`engine/bnb-gateway/server.mjs`, `engine/lib/bsc-execution.mjs`) |
-| Creativity | An agent that must prove a plan before it may trade: every design is backtested and marked *within your goal* or *outside your goal*, and one approval covers a whole tested plan. Copying another trader's allocation also goes through your own agent (preview) |
+| Creativity | The request picks its own agent: a style and preset from your words plus the catalog rules you ask for (`web/lib/mobile-agent-preset.mjs`). An agent that must prove a plan before it may trade: every design is backtested and marked *within your goal* or *outside your goal*, and one approval covers a whole tested plan. Copying another trader's allocation also goes through your own agent (preview) |
 | User experience | On the site: Markets with live status and charts → *Ask your agent* → a goal in plain words → tested plan → **Approve & start** → orders with BscScan links → Portfolio with on-chain holdings and **Sell**; **Pause trading** at any time ([demo video](https://youtu.be/xZxOkPZU9_k)) |
 | Developer experience | Our Developer Experience Report goes through the official form; the gateway gives the site a narrow, token-authenticated API over the Binance Web3 API and the Agentic Wallet CLI ([run it yourself](#for-judges-how-to-try-it)) |
 
@@ -317,7 +317,8 @@ engine/                         research engine (Python) + execution services (N
   lib/                          store, BSC execution checks, Agentic execution, Binance client (shared with web/)
   scripts/research-agent-worker.mjs   research queue + Agentic Wallet execution loop
   tests/, agent/tests/          JS and Python test suites
-web/                            the app's research workspace, agent editor, BSC execution UI and API routes
+web/                            the app's research workspace, agent editor, BSC execution UI and API routes;
+                                lib/mobile-agent-preset.mjs picks each Research request's agent (preset + requested rules)
                                 (excerpt of the larger XTXC web app; not a standalone Next.js project. The site's
                                 app shell, with the Markets, Portfolio and Community screens, is not included)
 dev/                            test runner, shared-module sync, end-to-end check, diagnostics
