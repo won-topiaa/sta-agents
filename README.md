@@ -13,7 +13,7 @@ Our entry to **BNB Hack: Tokenized Stocks Edition** (*Tokenized Stocks Products 
 | What it is | A trading site for tokenized US stocks with an AI agent: **Markets**, **Research** (your agent), **Portfolio**, **Community** and **Leaderboard** |
 | Who it is for | Retail investors who want tokenized stocks on BNB Chain, and an agent that has to prove a plan before it trades |
 | Chain and assets | BNB Smart Chain mainnet (chain ID 56), USDT pairs. 448 Ondo and bStock tokens on Markets; 381 with enough verified history form the research universe (293 stocks, 88 funds) |
-| The agent | Plain-language goal → budget, period, target and loss limit read from your words (each number must appear in them) → 1–3 typed strategy designs → the agent's rules merged in by code → isolated point-in-time backtests → only designs inside your target and loss limit can be approved |
+| The agent | Plain-language goal → budget, period, target and loss limit read from your words (each number must appear in them) → an agent chosen from your words: one of 9 presets plus the rules your request asks for, from a 40-rule catalog → 1–3 typed strategy designs → the agent's rules merged in by code → isolated point-in-time backtests → only designs inside your target and loss limit can be approved |
 | Binance Web3 API | RWA Data, Trading (aggregator quote, swap, approve), Transaction (pre-transaction simulate, transaction detail), Wallet (token balances) |
 | Binance Agentic Wallet | `@binance/agentic-wallet`: QR sign-in in the Binance app, limits and quota, market-order swaps. After one approval the agent places each order itself, within the daily limit Binance enforces |
 | AI | A grounded request parser plus Qwen3 32B (Kiln), which reads requests and proposes typed designs; it never sees prices, places orders or writes code |
@@ -66,7 +66,10 @@ AI trading agents arrived in 2026: you name an agent, fund an account and tell i
 - Write a goal: budget, period, target, loss limit, and stocks or a theme. The demo video uses `Invest $30 for one year in the best 3 of NVDA, AMD, AVGO, TSM, MU, MSFT, GOOGL and META, targeting 5%, max loss 40%. No more than 3 stocks.`
 - In about a minute the agent shows its tested designs, each with its held-out backtest return, maximum drawdown and allocation, marked *Within your goal* or *Outside your goal*. Only a design inside your limits gets **Approve & start · $budget**.
 - After approval the agent places each order through the Binance Agentic Wallet. Each leg shows *Queued*, *Order in progress* and then *Purchased* with a BscScan link. **Pause trading** stops it.
-- On this screen each request uses the default agent, a technical trend follower with three rules and monthly rebalancing: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average).
+- Each request runs with the agent its words ask for, and the chat names it before the test (for example *Agent: Value · Dividend value. Rules: …*):
+  - **Style and preset** from the request: technical (trend follower, dip buyer, breakout, sector rotation, chart patterns) or value (deep value, quality at a fair price, growth at a reasonable price, dividend value). "저평가된 배당주" runs the dividend-value agent; "buy the dip" runs the dip buyer.
+  - **Rules the request asks for** are added from the style's part of the 40-rule catalog (29 technical, 25 value rules), each quoting your words, up to the limit of 8 rules: "3 stocks" adds *Max holdings*, "stop loss 10%" adds *Stop loss*. If the combination is refused, the preset alone runs.
+  - A request that names no style runs the trend follower: *Uptrend only* (stocks above their 200-day average), *Strongest momentum* (the top half by six-month return, skipping the last month) and *Market guard* (half exposure while QQQ is below its 200-day average), rebalanced monthly.
 
 ### Portfolio
 - Total stock value and an allocation chart, from on-chain balances of your wallet and, for the operator account, the Agentic Wallet.
@@ -91,7 +94,7 @@ Research ─ "Invest $30 … the best 3 of 8 AI stocks … target 5%, max loss 4
       │
 Request ─ grounded parser + Qwen3 32B (Kiln): budget, period, target, loss limit, stocks; every number must appear in your words
       │
-Agent ─ the default trend follower, or your own agent: style · rules · risk limits (versioned)
+Agent ─ chosen from your words: 1 of 9 presets + catalog rules the request asks for (each quoting it, ≤ 8) · or your own agent
       │
 Designs ─ Qwen3 32B proposes 1–3 typed strategy designs (no code, no prices seen) · code merges the agent's rules
       │
