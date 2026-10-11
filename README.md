@@ -2,9 +2,43 @@
 
 **Give an AI agent your investing style. Code holds it to that style and backtests every idea; once you approve a tested plan, the agent trades it on its own, only within the limits you set in Binance.**
 
-STA Agents is built for the BNB Hack: Tokenized Stocks Edition. It runs on BNB Smart Chain mainnet with Ondo and bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet.
+STA Agents is built for **BNB Hack: Tokenized Stocks Edition**, for the *Tokenized Stocks Products & Agents* track and the *Best Use of Agentic Wallet* prize. It runs on BNB Smart Chain mainnet with Ondo and Binance bStock tokenized stocks, through the Binance Web3 API and the Binance Agentic Wallet. In the app and the demo video it appears as **XTXC Research**.
 
-> Live app: [xtxc.trade/exchange?view=research](https://xtxc.trade/exchange?view=research) · No wallet? [See the recorded runs](https://xtxc.trade/exchange?view=research&demo=1) (read-only) · Demo video (2:50): [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · Mainnet transactions: [12 trades on 2026-10-08](#mainnet-transactions-2026-10-08), [8 on 2026-10-10](#mainnet-transactions-2026-10-10) · **Judges: [how to try it](#for-judges-how-to-try-it)**
+> **Live app:** [xtxc.trade/exchange](https://xtxc.trade/exchange?view=research) · **Demo video:** [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) · **No wallet?** [Read-only replay](https://xtxc.trade/exchange?view=research&demo=1) · **Proof:** [20 mainnet transactions](#mainnet-transactions-summary) · **Judges:** [how to try it](#for-judges-how-to-try-it)
+
+## At a glance
+
+| | |
+| --- | --- |
+| What it is | An AI investing agent that keeps *your* style: you save a style and rules once; every idea is turned into strategy designs, held to those rules by code and backtested before any money moves |
+| Who it is for | Retail investors who want tokenized US stocks managed by an agent they can define, check and stop |
+| Chain and assets | BNB Smart Chain mainnet (chain ID 56), USDT pairs. 448 Ondo and bStock tokens listed in the app; 381 with enough verified history form the research universe (293 stocks, 88 funds) |
+| Binance Web3 API | RWA Data, Trading (aggregator quote, swap, approve), Transaction (pre-transaction simulate, transaction detail), Wallet (token balances) |
+| Binance Agentic Wallet | `@binance/agentic-wallet`: QR sign-in, limits and quota, market-order swaps. One plan approval, then the agent places each order itself, within the daily limit Binance enforces |
+| AI | Qwen3 32B (Kiln) reads the request and proposes typed strategy designs; it never sees prices, places orders or writes code |
+| Proof on mainnet | 20 transactions on 2026-10-08 and 2026-10-10, all status 1, [linked below](#mainnet-transactions-summary) |
+| Tests | `cd engine && npm install && npm test`: 269 JS tests (agent store, BSC execution checks, gateway, Agentic execution, Binance client) |
+
+## Hackathon requirements: where to verify
+
+| Requirement | Where |
+| --- | --- |
+| BNB Smart Chain mainnet, live trades | [Mainnet transactions](#mainnet-transactions-summary): 20 BscScan links |
+| Tokenized stocks (Ondo, bStocks) | [Binance Web3 API usage](#binance-web3-api-and-agentic-wallet-usage) (RWA Data); bStock tokens such as AMDB, MSFTB and MUB in the 2026-10-10 trades |
+| At least one Binance Web3 API module | Four modules plus the Agentic Wallet, all in `engine/bnb-gateway/server.mjs` |
+| Agentic Wallet | `engine/lib/research-agentic.mjs` (plan → orders), gateway routes `/v1/agentic/*`, trades sent by `0xF89F956e3a3766a2835E3381D1F10910868B5aCe` |
+| Public repository | This repository |
+| Deployed link or judge instructions | [xtxc.trade/exchange](https://xtxc.trade/exchange?view=research) and [For judges](#for-judges-how-to-try-it) |
+| Demo video, 4 minutes or less | [youtu.be/xZxOkPZU9_k](https://youtu.be/xZxOkPZU9_k) |
+
+## Judging criteria: where to look
+
+| Criterion | Evidence |
+| --- | --- |
+| Technical execution | Code-enforced agent rules (`engine/agent/xtxc_agent/research/agent_profile.py`, `agent_rules.json`); typed strategy language and backtester (`strategies.py`, `backtest.py`); design bridge with training-only selection, held-out horizons, doubled-cost stress and a future-data check (`engine/compute/design_bridge.py`, `evaluate.py`); point-in-time SEC fundamentals and FRED/ALFRED vintages; a gateway that checks every route before an order (`engine/bnb-gateway/server.mjs`, `engine/lib/bsc-execution.mjs`) |
+| Creativity | The investing *style* is a saved, versioned setting the system enforces, not a prompt that drifts; a plain-language goal becomes tested designs; autonomy is per agent and bounded by limits Binance enforces |
+| User experience | One request → tested plan → one approval; market status per token; holdings read on-chain; **Stop trading** and **Sell** at any time ([demo video](https://youtu.be/xZxOkPZU9_k)) |
+| Developer experience | Our Developer Experience Report goes through the official form; the gateway gives the app a narrow, token-authenticated API over the Binance Web3 API and the Agentic Wallet CLI ([try it yourself](#for-judges-how-to-try-it)) |
 
 ---
 
@@ -44,7 +78,7 @@ Binance Agentic Wallet ─ market orders, one leg at a time, within the daily li
 Stop trading ─ ends the account's open plans and sets its agents back to research only · Sell positions ─ exits through the same wallet
 ```
 
-The hosted app is AI-only (since 2026-10-09): an agent either researches only or trades within its Agentic Wallet limits, and your own wallet is used to sign in. The code also has a per-trade mode, in which your own wallet signs every leg after the checks under *Safety boundaries*. It ran on mainnet on 2026-10-08 (below) and is turned off in the hosted app.
+In the hosted app, an agent either researches only or trades within its Agentic Wallet limits, and your own wallet is used to sign in. The Markets screen also has a direct Buy and Sell from your own wallet, where you sign each order. The code also has a per-trade agent mode, in which your own wallet signs every leg of an agent's plan after the checks under *Safety boundaries*. It ran on mainnet on 2026-10-08 (below) and is turned off for agents in the hosted app.
 
 ## For judges: how to try it
 
@@ -52,9 +86,10 @@ The hosted app is AI-only (since 2026-10-09): an agent either researches only or
 
 - **No wallet.** [The read-only demo](https://xtxc.trade/exchange?view=research&demo=1) replays the two 2026-10-08 mainnet runs: the agents, their research reports, the approved plans and every trade with its BscScan link.
 - **With your own BNB Chain wallet.** Connect at the top right; signing in takes one signature, which sends nothing.
-  - *Markets*: Ondo and bStock tokens with live prices, the change since the last close, and market status. A closed token cannot be ordered.
+  - *Markets*: Ondo and bStock tokens with live prices, the change since the last close, market status and charts. A closed token cannot be ordered. You can buy or sell a token directly from your own wallet (you sign each order; a few USDT and a little BNB for gas are enough).
   - *Research*: describe a goal, for example `Invest $30 in NVDA, MSFT and TSM for one year, targeting 5%, max loss 40%`. In about a minute the agent returns its tested designs: backtest curve, return, worst drop and allocation, each marked *within your goal* or declined with the reason. Your agents and their reports stay listed.
-  - *Portfolio*: your wallet's stock tokens as an allocation chart.
+  - *Portfolio*: holdings read on-chain as an allocation chart; for the operator account this includes the Agentic Wallet, where each position has a **Sell** button.
+  - *Community* and *Leaderboard* (preview): traders share allocations, and "Follow @trader with $100" asks your agent to copy one. Copy plans are saved paused and are not executed in this build. The demo video shows these screens with labelled sample data (`?showcase=1`).
 - **What the hosted app does not let you do: start autonomous trading.** Its gateway drives one Binance Agentic Wallet, the operator's (`XTXC_AGENTIC_OWNER`), and *Approve & start* is refused for every other account, so visitors cannot trade the operator's funds. The demo video shows the operator's live runs, and every trade is listed under the mainnet transactions below.
 
 **2. Run the checks**, on any machine with Node 22:
@@ -95,6 +130,17 @@ All Binance calls go through one small service, the **BNB gateway** (`engine/bnb
 | Transaction | `POST /api/v1/dex/pre-transaction/simulate`, `GET /post-transaction/transaction-detail-by-txhash` | Dry run before any signature; indexed status after sending |
 | Wallet | `GET /api/v1/dex/balance/all-token-balances-by-address` | Holdings view |
 | Agentic Wallet (`@binance/agentic-wallet`) | `auth signin/verify`, `wallet address/settings/left-quota`, `market-order swap/list` | QR sign-in from the agent card; the limits Binance enforces; autonomous legs |
+
+## Mainnet transactions: summary
+
+| Date | Wallet | Mode | Transactions | Stocks |
+| --- | --- | --- | --- | --- |
+| 2026-10-08 | Phantom `0xf418…8721` | Per-trade: the owner signs each leg | 6 | AAPL, MSFT, NVDA bought and sold |
+| 2026-10-08 | Agentic Wallet `0xF89F…5aCe` | On its own within limits | 6 | MSFT, NVDA, TSM bought and sold |
+| 2026-10-10 | Agentic Wallet `0xF89F…5aCe` | On its own within limits | 2 | MSFT bought and sold |
+| 2026-10-10 | Agentic Wallet `0xF89F…5aCe` | On its own within limits; the agent chose 3 of 8 stocks | 6 | AMD, MSFT, MU bought and sold |
+
+All 20 succeeded (status 1); each one is linked below.
 
 ## Mainnet transactions (2026-10-08)
 
@@ -165,6 +211,7 @@ Two runs from the new app, both recorded for the demo. All eight transactions we
 - The approval is for the exact amount only, never unlimited.
 - The swap's target is the documented router, `from` is the owner, `value` is 0, and the selector is known.
 - Calldata contains the approved tokens and exact amount, and the minimum received is within slippage.
+- The route's price may be at most 3% worse than the token's reference price (the underlying share price × the token ratio), and its price impact at most 2%.
 - The dry run succeeds.
 - Routes that fill from a market maker's signed order (RFQ) are skipped: those orders expire seconds after the quote, before a person can confirm in a wallet. With no other route, nothing is offered for signing.
 - The gas limit is the node's own estimate plus 30%, never less than the route's figure (one route asked for 250k on a swap that used ~950k).
@@ -175,6 +222,7 @@ Two runs from the new app, both recorded for the demo. All eight transactions we
 **Autonomous execution**
 - Only plans of agents set to "trade on its own within limits" can start; the server checks the agent's *current* setting.
 - Binance enforces the daily USD limit and token scope.
+- Each order is re-quoted first and refused if the route is more than 3% worse than the token's reference price or its price impact is above 2%; slippage is capped at 1% and MEV protection is on.
 - Each leg is marked durably before its order is placed, and is never resubmitted after an interruption: it becomes "needs a check" instead.
 - **Stop trading** revokes the account's open plans, stops its Agentic runs and monitors, and sets its agents back to research only. An order already sent is not cancelled and is still reconciled.
 
@@ -268,7 +316,7 @@ The live app is the hosted way to try it; the `web/` folder is an excerpt and do
 
 - **Coverage of value signals**: none for funds and for issuers whose share counts SEC publishes only per class (V, BIDU). EBITDA yield needs reported operating income, which most banks and some energy companies do not tag. Sectors come from SIC codes plus a short override list for catch-all codes (Visa and Mastercard file under business services and are grouped with financials); they still differ from GICS in places. The research universe is today's listed stocks, so survivorship bias remains.
 - **Backtests**: they use underlying-stock price history; tokenized-stock liquidity and fees are modelled as assumptions and checked again at quote time. A backtest is not a forecast.
-- **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`). Because the hosted app is AI-only, other accounts can sign in, research and open the read-only demo, but not trade. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
+- **One Agentic Wallet per gateway**: it is reserved for the operator account set on the server (`XTXC_AGENTIC_OWNER`). Other accounts can sign in, research, buy and sell directly from their own wallet, and open the read-only demo, but they cannot start autonomous trading. The CLI keeps its session in the OS keychain, or in a 0600 file where there is none.
 - **Not audited.** Small amounts only.
 
 ## Built on
